@@ -1,0 +1,60 @@
+name: Mobile — EAS Build
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'apps/mobile/**'
+      - 'packages/**'
+  release:
+    types: [published]
+
+jobs:
+  build:
+    name: EAS Build
+    runs-on: ubuntu-latest
+    if: github.event_name == 'push'
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 10
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'pnpm'
+
+      - uses: expo/expo-github-action@v8
+        with:
+          expo-version: latest
+          token: ${{ secrets.EXPO_TOKEN }}
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Build (customer + agent)
+        working-directory: apps/mobile
+        run: |
+          eas build --platform all --profile production --non-interactive
+          eas build --platform all --profile production-agent --non-interactive
+
+  submit:
+    name: Submit to Stores
+    runs-on: ubuntu-latest
+    needs: build
+    if: github.event_name == 'release'
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: expo/expo-github-action@v8
+        with:
+          expo-version: latest
+          token: ${{ secrets.EXPO_TOKEN }}
+
+      - name: Submit to App Store & Play Store
+        working-directory: apps/mobile
+        run: eas submit --platform all --latest --non-interactive

@@ -1,0 +1,380 @@
+// ─── Prisma schema — Jewellery Platform ─────────────────────────────────────
+// DB: PostgreSQL 16 on Supabase
+// ORM: Prisma 5
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider  = "postgresql"
+  url       = env("DATABASE_URL")
+  directUrl = env("DIRECT_URL")
+}
+
+// ─── Enums ───────────────────────────────────────────────────────────────────
+
+enum Role {
+  CUSTOMER
+  ADMIN
+  DELIVERY_AGENT
+}
+
+enum OrderStatus {
+  PENDING
+  CONFIRMED
+  PROCESSING
+  SHIPPED
+  OUT_FOR_DELIVERY
+  DELIVERED
+  CANCELLED
+  RETURN_REQUESTED
+  RETURNED
+  REFUNDED
+}
+
+enum PaymentMethod {
+  UPI
+  CARD
+  NETBANKING
+  WALLET
+  COD
+}
+
+enum PaymentStatus {
+  PENDING
+  SUCCESS
+  FAILED
+  REFUNDED
+  PARTIAL_REFUND
+}
+
+enum DeliveryType {
+  SELF
+  THIRD_PARTY
+}
+
+enum DeliveryStatus {
+  PENDING
+  ASSIGNED
+  PICKED_UP
+  IN_TRANSIT
+  OUT_FOR_DELIVERY
+  DELIVERED
+  FAILED
+}
+
+enum CouponType {
+  PERCENT
+  FLAT
+}
+
+enum NotificationType {
+  ORDER
+  DELIVERY
+  OFFER
+  SYSTEM
+  REVIEW
+}
+
+// ─── 4.1 Users & Auth ────────────────────────────────────────────────────────
+
+model User {
+  id           String   @id @default(uuid())
+  name         String
+  email        String?  @unique
+  phone        String?  @unique
+  passwordHash String?
+  role         Role     @default(CUSTOMER)
+  isVerified   Boolean  @default(false)
+  isBlocked    Boolean  @default(false)
+  avatar       String? // Cloudinary public_id
+  dob          DateTime? // birthday offers
+  expoPushToken String?
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  addresses      Address[]
+  orders         Order[]
+  wishlist       WishlistItem[]
+  reviews        Review[]
+  refreshTokens  RefreshToken[]
+  notifications  Notification[]
+  deliveryAgent  DeliveryAgent?
+
+  @@index([email, phone])
+}
+
+model RefreshToken {
+  id        String   @id @default(uuid())
+  userId    String
+  tokenHash String   @unique // bcrypt hash — never store plain
+  expiresAt DateTime
+  createdAt DateTime @default(now())
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+}
+
+model Address {
+  id        String  @id @default(uuid())
+  userId    String
+  name      String
+  phone     String
+  line1     String
+  line2     String?
+  city      String
+  state     String
+  pincode   String
+  isDefault Boolean @default(false)
+
+  user   User    @relation(fields: [userId], references: [id], onDelete: Cascade)
+  orders Order[]
+}
+
+// ─── 4.2 Catalogue ───────────────────────────────────────────────────────────
+
+model Category {
+  id        String  @id @default(uuid())
+  name      String
+  slug      String  @unique
+  image     String? // Cloudinary public_id
+  parentId  String?
+  isActive  Boolean @default(true)
+  sortOrder Int     @default(0)
+
+  parent   Category?  @relation("tree", fields: [parentId], references: [id])
+  children Category[] @relation("tree")
+  products Product[]
+}
+
+model Product {
+  id          String  @id @default(uuid())
+  name        String
+  slug        String  @unique
+  description String  @db.Text
+  categoryId  String
+  basePrice   Decimal @db.Decimal(10, 2)
+  discountPct Int     @default(0) // 0–100
+  attributes  Json // { material, occasion, color, finish, stone, weight }
+  tags        String[]
+  metaTitle   String?
+  metaDesc    String?
+  isFeatured  Boolean  @default(false)
+  isActive    Boolean  @default(true)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  category Category        @relation(fields: [categoryId], references: [id])
+  images   ProductImage[]
+  variants ProductVariant[]
+  reviews  Review[]
+  wishlist WishlistItem[]
+
+  @@index([slug, categoryId, isActive])
+}
+
+model ProductVariant {
+  id        String  @id @default(uuid())
+  productId String
+  sku       String  @unique
+  size      String?
+  color     String?
+  price     Decimal @db.Decimal(10, 2)
+  stock     Int     @default(0)
+  weight    Float // grams — for shipping rate calc
+
+  product    Product     @relation(fields: [productId], references: [id], onDelete: Cascade)
+  orderItems OrderItem[]
+  cartItems  CartItem[]
+
+  @@index([sku])
+}
+
+model ProductImage {
+  id        String  @id @default(uuid())
+  productId String
+  publicId  String // Cloudinary public_id
+  url       String // Cloudinary secure_url
+  isPrimary Boolean @default(false)
+  sortOrder Int     @default(0)
+
+  product Product @relation(fields: [productId], references: [id], onDelete: Cascade)
+}
+
+// ─── Cart (server-synced) ────────────────────────────────────────────────────
+
+model CartItem {
+  id        String   @id @default(uuid())
+  userId    String
+  variantId String
+  quantity  Int      @default(1)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  variant ProductVariant @relation(fields: [variantId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, variantId])
+}
+
+// ─── Wishlist ────────────────────────────────────────────────────────────────
+
+model WishlistItem {
+  id        String   @id @default(uuid())
+  userId    String
+  productId String
+  createdAt DateTime @default(now())
+
+  user    User    @relation(fields: [userId], references: [id], onDelete: Cascade)
+  product Product @relation(fields: [productId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, productId])
+}
+
+// ─── 4.3 Orders ──────────────────────────────────────────────────────────────
+
+model Order {
+  id             String      @id @default(uuid())
+  orderNumber    String      @unique @default(cuid()) // human-readable
+  userId         String
+  addressId      String
+  status         OrderStatus @default(PENDING)
+  subtotal       Decimal     @db.Decimal(10, 2)
+  discountAmount Decimal     @db.Decimal(10, 2) @default(0)
+  shippingCharge Decimal     @db.Decimal(10, 2) @default(0)
+  total          Decimal     @db.Decimal(10, 2)
+  couponId       String?
+  notes          String?
+  createdAt      DateTime    @default(now())
+  updatedAt      DateTime    @updatedAt
+
+  user     User       @relation(fields: [userId], references: [id])
+  address  Address    @relation(fields: [addressId], references: [id])
+  coupon   Coupon?    @relation(fields: [couponId], references: [id])
+  items    OrderItem[]
+  payment  Payment?
+  delivery Delivery?
+
+  @@index([userId, status, createdAt])
+}
+
+model OrderItem {
+  id        String  @id @default(uuid())
+  orderId   String
+  variantId String
+  name      String // snapshot at order time
+  sku       String // snapshot
+  price     Decimal @db.Decimal(10, 2) // snapshot
+  quantity  Int
+  image     String // snapshot
+
+  order   Order          @relation(fields: [orderId], references: [id])
+  variant ProductVariant @relation(fields: [variantId], references: [id])
+}
+
+// ─── 4.4 Payments ────────────────────────────────────────────────────────────
+
+model Payment {
+  id              String        @id @default(uuid())
+  orderId         String        @unique
+  method          PaymentMethod
+  gateway         String // "razorpay" | "cod"
+  razorpayOrderId String?       @unique
+  razorpayPayId   String?       @unique
+  amount          Decimal       @db.Decimal(10, 2)
+  status          PaymentStatus @default(PENDING)
+  refundId        String?
+  refundAmount    Decimal?      @db.Decimal(10, 2)
+  refundedAt      DateTime?
+  paidAt          DateTime?
+  createdAt       DateTime      @default(now())
+
+  order Order @relation(fields: [orderId], references: [id])
+
+  @@index([razorpayOrderId, razorpayPayId])
+}
+
+// ─── 4.5 Delivery ────────────────────────────────────────────────────────────
+
+model DeliveryAgent {
+  id          String   @id @default(uuid())
+  userId      String   @unique
+  vehicleType String // "bike" | "cycle" | "foot"
+  zones       String[] // serviceable pincodes
+  isOnline    Boolean  @default(false)
+  currentLat  Float?
+  currentLng  Float?
+  rating      Float    @default(5.0)
+
+  user       User       @relation(fields: [userId], references: [id])
+  deliveries Delivery[]
+}
+
+model Delivery {
+  id            String         @id @default(uuid())
+  orderId       String         @unique
+  type          DeliveryType
+  agentId       String?
+  provider      String? // "shiprocket" | "delhivery"
+  awbCode       String?
+  trackingUrl   String?
+  otpHash       String? // bcrypt hash of 6-digit OTP
+  otpVerified   Boolean        @default(false)
+  status        DeliveryStatus @default(PENDING)
+  estimatedAt   DateTime?
+  deliveredAt   DateTime?
+  failureReason String?
+  locationLog   Json[] // [{ lat, lng, timestamp }] last 50 points
+
+  order Order          @relation(fields: [orderId], references: [id])
+  agent DeliveryAgent? @relation(fields: [agentId], references: [id])
+}
+
+// ─── 4.6 Marketing ───────────────────────────────────────────────────────────
+
+model Coupon {
+  id             String     @id @default(uuid())
+  code           String     @unique @db.VarChar(32)
+  type           CouponType // PERCENT | FLAT
+  value          Decimal    @db.Decimal(10, 2)
+  minOrderAmount Decimal?   @db.Decimal(10, 2)
+  maxDiscount    Decimal?   @db.Decimal(10, 2)
+  usageLimit     Int? // null = unlimited
+  usedCount      Int        @default(0)
+  expiresAt      DateTime?
+  isActive       Boolean    @default(true)
+
+  orders Order[]
+}
+
+// ─── 4.7 Reviews & Notifications ─────────────────────────────────────────────
+
+model Review {
+  id        String   @id @default(uuid())
+  productId String
+  userId    String
+  orderId   String
+  rating    Int // 1–5
+  title     String?
+  body      String?  @db.Text
+  images    String[] // Cloudinary public_ids
+  isVisible Boolean  @default(true)
+  createdAt DateTime @default(now())
+
+  product Product @relation(fields: [productId], references: [id])
+  user    User    @relation(fields: [userId], references: [id])
+
+  @@unique([userId, orderId, productId])
+}
+
+model Notification {
+  id        String           @id @default(uuid())
+  userId    String
+  type      NotificationType
+  title     String
+  body      String
+  data      Json? // { orderId, productId, ... }
+  isRead    Boolean          @default(false)
+  createdAt DateTime         @default(now())
+
+  user User @relation(fields: [userId], references: [id])
+}

@@ -1,0 +1,62 @@
+export enum Role {
+  CUSTOMER = 'CUSTOMER',
+  ADMIN = 'ADMIN',
+  DELIVERY_AGENT = 'DELIVERY_AGENT',
+}
+
+export enum OrderStatus {
+  PENDING = 'PENDING',
+  CONFIRMED = 'CONFIRMED',
+  PROCESSING = 'PROCESSING',
+  SHIPPED = 'SHIPPED',
+  OUT_FOR_DELIVERY = 'OUT_FOR_DELIVERY',
+  DELIVERED = 'DELIVERED',
+  CANCELLED = 'CANCELLED',
+  RETURN_REQUESTED = 'RETURN_REQUESTED',
+  RETURNED = 'RETURNED',
+  REFUNDED = 'REFUNDED',
+}
+
+export enum PaymentMethod {
+  UPI = 'UPI',
+  CARD = 'CARD',
+  NETBANKING = 'NETBANKING',
+  WALLET = 'WALLET',
+  COD = 'COD',
+}
+
+export enum PaymentStatus {
+  PENDING = 'PENDING',
+  SUCCESS = 'SUCCESS',
+  FAILED = 'FAILED',
+  REFUNDED = 'REFUNDED',
+  PARTIAL_REFUND = 'PARTIAL_REFUND',
+}
+
+export enum DeliveryType {
+  SELF = 'SELF',
+  THIRD_PARTY = 'THIRD_PARTY',
+}
+
+export enum DeliveryStatus {
+  PENDING = 'PENDING',
+  ASSIGNED = 'ASSIGNED',
+  PICKED_UP = 'PICKED_UP',
+  IN_TRANSIT = 'IN_TRANSIT',
+  OUT_FOR_DELIVERY = 'OUT_FOR_DELIVERY',
+  DELIVERED = 'DELIVERED',
+  FAILED = 'FAILED',
+}
+
+export enum CouponType {
+  PERCENT = 'PERCENT',
+  FLAT = 'FLAT',
+}
+
+export enum NotificationType {
+  ORDER = 'ORDER',
+  DELIVERY = 'DELIVERY',
+  OFFER = 'OFFER',
+  SYSTEM = 'SYSTEM',
+  REVIEW = 'REVIEW',
+}

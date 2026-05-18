@@ -1,0 +1,44 @@
+name: Web CI
+
+on:
+  push:
+    branches: [main, develop]
+    paths:
+      - 'apps/web/**'
+      - 'packages/**'
+  pull_request:
+    branches: [main]
+
+jobs:
+  check:
+    name: Lint, Type Check & Build
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 10
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'pnpm'
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Type check
+        run: pnpm --filter @jewellery/web typecheck
+
+      - name: Lint
+        run: pnpm --filter @jewellery/web lint
+
+      - name: Build
+        run: pnpm --filter @jewellery/web build
+        env:
+          NEXT_PUBLIC_API_URL: https://api.yourdomain.in/api/v1
+          NEXT_PUBLIC_WEB_URL: https://yourdomain.in
+          NEXT_PUBLIC_RAZORPAY_KEY_ID: ${{ secrets.RAZORPAY_KEY_ID_STAGING }}
+          NEXT_PUBLIC_CLOUDINARY_CLOUD_NAME: ${{ secrets.CLOUDINARY_CLOUD_NAME }}

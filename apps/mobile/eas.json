@@ -1,0 +1,49 @@
+{
+  "cli": {
+    "version": ">= 10.0.0"
+  },
+  "build": {
+    "development": {
+      "developmentClient": true,
+      "distribution": "internal",
+      "env": {
+        "APP_VARIANT": "customer"
+      }
+    },
+    "preview": {
+      "distribution": "internal",
+      "env": {
+        "APP_VARIANT": "customer"
+      }
+    },
+    "preview-agent": {
+      "distribution": "internal",
+      "env": {
+        "APP_VARIANT": "agent"
+      }
+    },
+    "production": {
+      "autoIncrement": true,
+      "env": {
+        "APP_VARIANT": "customer"
+      }
+    },
+    "production-agent": {
+      "autoIncrement": true,
+      "env": {
+        "APP_VARIANT": "agent"
+      }
+    }
+  },
+  "submit": {
+    "production": {
+      "android": {
+        "serviceAccountKeyPath": "./google-service-account.json"
+      },
+      "ios": {
+        "appleId": "your@apple.id",
+        "ascAppId": "1234567890"
+      }
+    }
+  }
+}

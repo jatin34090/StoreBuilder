@@ -1,0 +1,77 @@
+{
+  "expo": {
+    "name": "YourBrand Jewellery",
+    "slug": "yourbrand-jewellery",
+    "version": "1.0.0",
+    "orientation": "portrait",
+    "icon": "./assets/icon.png",
+    "scheme": "yourbrand",
+    "userInterfaceStyle": "automatic",
+    "splash": {
+      "image": "./assets/splash.png",
+      "resizeMode": "contain",
+      "backgroundColor": "#4A0E8F"
+    },
+    "ios": {
+      "supportsTablet": false,
+      "bundleIdentifier": "in.yourdomain.jewellery",
+      "infoPlist": {
+        "NSLocationWhenInUseUsageDescription": "We use your location to track deliveries.",
+        "NSLocationAlwaysAndWhenInUseUsageDescription": "We use your location in the background to update delivery position.",
+        "UIBackgroundModes": ["location", "fetch"]
+      }
+    },
+    "android": {
+      "adaptiveIcon": {
+        "foregroundImage": "./assets/adaptive-icon.png",
+        "backgroundColor": "#4A0E8F"
+      },
+      "package": "in.yourdomain.jewellery",
+      "permissions": [
+        "ACCESS_FINE_LOCATION",
+        "ACCESS_COARSE_LOCATION",
+        "ACCESS_BACKGROUND_LOCATION",
+        "FOREGROUND_SERVICE",
+        "RECEIVE_BOOT_COMPLETED"
+      ],
+      "googleServicesFile": "./google-services.json"
+    },
+    "web": {
+      "bundler": "metro",
+      "output": "static",
+      "favicon": "./assets/favicon.png"
+    },
+    "plugins": [
+      "expo-router",
+      [
+        "expo-location",
+        {
+          "locationAlwaysAndWhenInUsePermission": "Allow YourBrand to use your location for delivery tracking."
+        }
+      ],
+      [
+        "expo-notifications",
+        {
+          "icon": "./assets/notification-icon.png",
+          "color": "#4A0E8F",
+          "sounds": ["./assets/notification-sound.wav"]
+        }
+      ]
+    ],
+    "experiments": {
+      "typedRoutes": true
+    },
+    "extra": {
+      "eas": {
+        "projectId": "your-eas-project-id"
+      },
+      "APP_VARIANT": "customer"
+    },
+    "runtimeVersion": {
+      "policy": "appVersion"
+    },
+    "updates": {
+      "url": "https://u.expo.dev/your-eas-project-id"
+    }
+  }
+}

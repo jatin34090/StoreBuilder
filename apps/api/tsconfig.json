@@ -1,0 +1,28 @@
+{
+  "compilerOptions": {
+    "module": "CommonJS",
+    "moduleResolution": "Node",
+    "target": "ES2022",
+    "lib": ["ES2022"],
+    "outDir": "./dist",
+    "baseUrl": ".",
+    "paths": {
+      "@jewellery/types": ["../../packages/types/src/index.ts"],
+      "@jewellery/utils": ["../../packages/utils/src/index.ts"]
+    },
+    "emitDecoratorMetadata": true,
+    "experimentalDecorators": true,
+    "strict": true,
+    "strictPropertyInitialization": false,
+    "noImplicitAny": true,
+    "esModuleInterop": true,
+    "forceConsistentCasingInFileNames": true,
+    "skipLibCheck": true,
+    "declaration": true,
+    "sourceMap": true,
+    "incremental": true,
+    "composite": false
+  },
+  "include": ["src/**/*", "../../packages/types/src/**/*", "../../packages/utils/src/**/*"],
+  "exclude": ["node_modules", "dist", "test"]
+}

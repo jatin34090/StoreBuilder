@@ -1,0 +1,125 @@
+name: API CI/CD
+
+on:
+  push:
+    branches: [main, develop]
+    paths:
+      - 'apps/api/**'
+      - 'prisma/**'
+      - 'packages/**'
+  pull_request:
+    branches: [main]
+
+jobs:
+  test:
+    name: Test & Lint
+    runs-on: ubuntu-latest
+
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_DB: jewellery_test
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+
+      redis:
+        image: redis:7-alpine
+        ports:
+          - 6379:6379
+        options: >-
+          --health-cmd "redis-cli ping"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+
+    env:
+      DATABASE_URL: postgresql://postgres:postgres@localhost:5432/jewellery_test?schema=public
+      DIRECT_URL: postgresql://postgres:postgres@localhost:5432/jewellery_test?schema=public
+      REDIS_URL: redis://localhost:6379
+      NODE_ENV: test
+      PORT: 3001
+      API_URL: http://localhost:3001
+      WEB_URL: http://localhost:3000
+      CORS_ORIGINS: http://localhost:3000
+      JWT_PRIVATE_KEY: ${{ secrets.JWT_PRIVATE_KEY_TEST }}
+      JWT_PUBLIC_KEY: ${{ secrets.JWT_PUBLIC_KEY_TEST }}
+      JWT_ACCESS_EXPIRES_IN: 15m
+      JWT_REFRESH_EXPIRES_IN: 30d
+      RAZORPAY_KEY_ID: rzp_test_dummy
+      RAZORPAY_KEY_SECRET: dummy_secret
+      RAZORPAY_WEBHOOK_SECRET: dummy_webhook
+      CLOUDINARY_CLOUD_NAME: test
+      CLOUDINARY_API_KEY: test
+      CLOUDINARY_API_SECRET: test
+      MSG91_AUTH_KEY: test
+      MSG91_TEMPLATE_ID_OTP: test
+      MSG91_SENDER_ID: TEST
+      RESEND_API_KEY: re_test
+      RESEND_FROM_EMAIL: test@test.com
+      RESEND_FROM_NAME: Test
+      GOOGLE_CLIENT_ID: test.apps.googleusercontent.com
+      GOOGLE_CLIENT_SECRET: test
+      GOOGLE_CALLBACK_URL: http://localhost:3001/api/v1/auth/google/callback
+      TYPESENSE_HOST: localhost
+      TYPESENSE_PORT: "8108"
+      TYPESENSE_PROTOCOL: http
+      TYPESENSE_API_KEY: test
+      SHIPROCKET_EMAIL: test@test.com
+      SHIPROCKET_PASSWORD: test
+      SHIPROCKET_PICKUP_PINCODE: "110001"
+      DELHIVERY_API_TOKEN: test
+      DELHIVERY_CLIENT_NAME: Test
+      DELHIVERY_PICKUP_PINCODE: "110001"
+      VAPID_PUBLIC_KEY: test
+      VAPID_PRIVATE_KEY: test
+      VAPID_SUBJECT: mailto:test@test.com
+      ADMIN_EMAIL: admin@test.com
+      ADMIN_PASSWORD: test_admin_password_16
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 10
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'pnpm'
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Generate Prisma client
+        run: pnpm --filter @jewellery/api prisma:generate
+
+      - name: Apply migrations
+        run: pnpm --filter @jewellery/api exec prisma migrate deploy --schema=../../prisma/schema.prisma
+
+      - name: Type check
+        run: pnpm --filter @jewellery/api typecheck
+
+      - name: Lint
+        run: pnpm --filter @jewellery/api lint
+
+      - name: Run e2e tests
+        run: pnpm --filter @jewellery/api test:e2e
+
+  deploy:
+    name: Deploy to Render
+    needs: test
+    runs-on: ubuntu-latest
+    if: github.ref == 'refs/heads/main' && github.event_name == 'push'
+
+    steps:
+      - name: Trigger Render deploy hook
+        run: curl -X POST "${{ secrets.RENDER_DEPLOY_HOOK }}"

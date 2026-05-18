@@ -1,0 +1,25 @@
+{
+  "permissions": {
+    "allow": [
+      "Skill(anthropic-skills:docx)",
+      "Skill(anthropic-skills:docx:*)",
+      "Bash(pandoc \"C:\\\\Users\\\\hp\\\\Downloads\\\\Jewellery_Platform_Dev_Guide_v2.docx\" -t markdown)",
+      "Bash(npm --version)",
+      "Bash(npx pnpm *)",
+      "Bash(where node *)",
+      "Bash(npm install *)",
+      "Bash(ls \"C:\\\\Users\\\\hp\\\\AppData\\\\Roaming\\\\npm\" 2>&1)",
+      "Bash(/c/Users/hp/AppData/Roaming/npm/pnpm.cmd install *)",
+      "Bash(/c/Users/hp/AppData/Roaming/npm/pnpm.cmd --filter @jewellery/api exec node -e \"require\\('@nestjs/common'\\); console.log\\('NestJS OK'\\)\")",
+      "Bash(/c/Users/hp/AppData/Roaming/npm/pnpm.cmd approve-builds *)",
+      "Bash(/c/Users/hp/AppData/Roaming/npm/pnpm.cmd --filter @jewellery/api exec npx prisma generate --schema=../../prisma/schema.prisma)",
+      "Bash(/c/Users/hp/AppData/Roaming/npm/pnpm.cmd exec *)",
+      "Bash(node_modules/.bin/prisma generate *)",
+      "Bash(/c/Users/hp/AppData/Roaming/npm/pnpm.cmd list *)",
+      "Bash(PRISMA_GENERATE_SKIP_AUTOINSTALL=1 node \"apps/api/node_modules/prisma/build/index.js\" generate --schema=prisma/schema.prisma)",
+      "Bash(PRISMA_GENERATE_SKIP_AUTOINSTALL=1 node \"node_modules/prisma/build/index.js\" generate --schema=../../prisma/schema.prisma)",
+      "Bash(/c/Users/hp/AppData/Roaming/npm/pnpm.cmd add *)",
+      "Bash(DEBUG=\"prisma:*\" /c/Users/hp/AppData/Roaming/npm/pnpm.cmd exec prisma generate --schema=../../prisma/schema.prisma)"
+    ]
+  }
+}

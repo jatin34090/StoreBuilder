@@ -1,4 +1,4 @@
-import { IsBoolean, IsEnum, IsInt, IsOptional, IsUUID, Max, Min } from 'class-validator';
+import { IsBoolean, IsEnum, IsInt, IsOptional, IsString, Max, Min } from 'class-validator';
 import { Type, Transform } from 'class-transformer';
 import { ApiPropertyOptional } from '@nestjs/swagger';
 
@@ -42,12 +42,12 @@ export class QueryReviewsDto {
 export class AdminQueryReviewsDto extends QueryReviewsDto {
   @ApiPropertyOptional({ description: 'Filter by product UUID', format: 'uuid' })
   @IsOptional()
-  @IsUUID()
+  @IsString()
   productId?: string;
 
   @ApiPropertyOptional({ description: 'Filter by user UUID', format: 'uuid' })
   @IsOptional()
-  @IsUUID()
+  @IsString()
   userId?: string;
 
   @ApiPropertyOptional({ description: 'Filter by visibility status' })

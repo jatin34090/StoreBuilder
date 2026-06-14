@@ -28,7 +28,7 @@ import { ModerateReviewDto } from './dto/moderate-review.dto';
 import { CurrentUser } from '../../common/decorators/current-user.decorator';
 import { Roles } from '../../common/decorators/roles.decorator';
 import { Public } from '../../common/decorators/public.decorator';
-import type { JwtPayload } from '@jewellery/types';
+import { type AuthUser } from '../../common/decorators/current-user.decorator';
 
 @ApiTags('Reviews')
 @ApiBearerAuth()
@@ -63,7 +63,7 @@ export class ReviewsController {
     },
   })
   getProductReviews(
-    @Param('productId', ParseUUIDPipe) productId: string,
+    @Param('productId') productId: string,
     @Query() query: QueryReviewsDto,
   ) {
     return this.reviewsService.getProductReviews(productId, query);
@@ -81,7 +81,7 @@ export class ReviewsController {
       'One review per (user, order, product) combination — returns 409 on duplicate.',
   })
   @ApiCreatedResponse({ description: 'Review created' })
-  createReview(@CurrentUser() user: JwtPayload, @Body() dto: CreateReviewDto) {
+  createReview(@CurrentUser() user: AuthUser, @Body() dto: CreateReviewDto) {
     return this.reviewsService.createReview(user.id, dto);
   }
 
@@ -90,7 +90,7 @@ export class ReviewsController {
   @Get('reviews/me')
   @Roles(Role.CUSTOMER)
   @ApiOperation({ summary: 'List all reviews written by the authenticated customer' })
-  getMyReviews(@CurrentUser() user: JwtPayload, @Query() query: QueryReviewsDto) {
+  getMyReviews(@CurrentUser() user: AuthUser, @Query() query: QueryReviewsDto) {
     return this.reviewsService.getMyReviews(user.id, query);
   }
 
@@ -105,8 +105,8 @@ export class ReviewsController {
   })
   @ApiParam({ name: 'id', description: 'Review UUID', format: 'uuid' })
   updateReview(
-    @CurrentUser() user: JwtPayload,
-    @Param('id', ParseUUIDPipe) id: string,
+    @CurrentUser() user: AuthUser,
+    @Param('id') id: string,
     @Body() dto: UpdateReviewDto,
   ) {
     return this.reviewsService.updateReview(user.id, id, dto);
@@ -119,7 +119,7 @@ export class ReviewsController {
   @HttpCode(HttpStatus.OK)
   @ApiOperation({ summary: 'Delete own review' })
   @ApiParam({ name: 'id', description: 'Review UUID', format: 'uuid' })
-  deleteReview(@CurrentUser() user: JwtPayload, @Param('id', ParseUUIDPipe) id: string) {
+  deleteReview(@CurrentUser() user: AuthUser, @Param('id') id: string) {
     return this.reviewsService.deleteReview(user.id, id);
   }
 
@@ -148,7 +148,7 @@ export class ReviewsController {
   })
   @ApiParam({ name: 'id', description: 'Review UUID', format: 'uuid' })
   moderateReview(
-    @Param('id', ParseUUIDPipe) id: string,
+    @Param('id') id: string,
     @Body() dto: ModerateReviewDto,
   ) {
     return this.reviewsService.moderateReview(id, dto);
@@ -164,7 +164,7 @@ export class ReviewsController {
     description: 'Hard delete — cannot be undone. Prefer /visibility for reversible moderation.',
   })
   @ApiParam({ name: 'id', description: 'Review UUID', format: 'uuid' })
-  adminDeleteReview(@Param('id', ParseUUIDPipe) id: string) {
+  adminDeleteReview(@Param('id') id: string) {
     return this.reviewsService.adminDeleteReview(id);
   }
 }

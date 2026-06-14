@@ -29,7 +29,7 @@ import { QueryDeliveriesDto } from './dto/query-deliveries.dto';
 import { UpdateDeliveryStatusDto } from '../orders/dto/update-delivery-status.dto';
 import { CurrentUser } from '../../common/decorators/current-user.decorator';
 import { Roles } from '../../common/decorators/roles.decorator';
-import type { JwtPayload } from '@jewellery/types';
+import { type AuthUser } from '../../common/decorators/current-user.decorator';
 
 @ApiTags('Delivery')
 @ApiBearerAuth()
@@ -66,7 +66,7 @@ export class DeliveryController {
   @ApiOperation({ summary: 'Admin: get a single delivery agent with recent deliveries' })
   @ApiParam({ name: 'id', description: 'DeliveryAgent UUID', format: 'uuid' })
   @ApiOkResponse({ description: 'Delivery agent details' })
-  getAgent(@Param('id', ParseUUIDPipe) id: string) {
+  getAgent(@Param('id') id: string) {
     return this.deliveryService.adminGetAgent(id);
   }
 
@@ -75,7 +75,7 @@ export class DeliveryController {
   @ApiOperation({ summary: 'Admin: update delivery agent vehicle type or zones' })
   @ApiParam({ name: 'id', description: 'DeliveryAgent UUID', format: 'uuid' })
   updateAgent(
-    @Param('id', ParseUUIDPipe) id: string,
+    @Param('id') id: string,
     @Body() dto: UpdateAgentDto,
   ) {
     return this.deliveryService.adminUpdateAgent(id, dto);
@@ -89,7 +89,7 @@ export class DeliveryController {
     description: 'Deletes the agent profile and resets the user role to CUSTOMER. Blocked if the agent has active deliveries.',
   })
   @ApiParam({ name: 'id', description: 'DeliveryAgent UUID', format: 'uuid' })
-  deleteAgent(@Param('id', ParseUUIDPipe) id: string) {
+  deleteAgent(@Param('id') id: string) {
     return this.deliveryService.adminDeleteAgent(id);
   }
 
@@ -113,7 +113,7 @@ export class DeliveryController {
   @ApiOperation({ summary: 'Admin: get full delivery details for an order' })
   @ApiParam({ name: 'orderId', description: 'Order UUID', format: 'uuid' })
   @ApiOkResponse({ description: 'Full delivery record including location log and agent info' })
-  adminGetDelivery(@Param('orderId', ParseUUIDPipe) orderId: string) {
+  adminGetDelivery(@Param('orderId') orderId: string) {
     return this.deliveryService.adminGetDelivery(orderId);
   }
 
@@ -128,7 +128,7 @@ export class DeliveryController {
       'Only valid for SELF deliveries that have not yet been delivered.',
   })
   @ApiParam({ name: 'orderId', description: 'Order UUID', format: 'uuid' })
-  adminRegenerateOtp(@Param('orderId', ParseUUIDPipe) orderId: string) {
+  adminRegenerateOtp(@Param('orderId') orderId: string) {
     return this.deliveryService.adminRegenerateOtp(orderId);
   }
 
@@ -138,14 +138,14 @@ export class DeliveryController {
   @Roles(Role.DELIVERY_AGENT)
   @ApiOperation({ summary: 'Agent: view own delivery agent profile' })
   @ApiOkResponse({ description: 'DeliveryAgent profile with delivery count' })
-  getMyProfile(@CurrentUser() user: JwtPayload) {
+  getMyProfile(@CurrentUser() user: AuthUser) {
     return this.deliveryService.getMyProfile(user.id);
   }
 
   @Patch('agent/profile')
   @Roles(Role.DELIVERY_AGENT)
   @ApiOperation({ summary: 'Agent: update own vehicle type or serviceable zones' })
-  updateMyProfile(@CurrentUser() user: JwtPayload, @Body() dto: UpdateAgentDto) {
+  updateMyProfile(@CurrentUser() user: AuthUser, @Body() dto: UpdateAgentDto) {
     return this.deliveryService.updateMyProfile(user.id, dto);
   }
 
@@ -158,7 +158,7 @@ export class DeliveryController {
       'Sets isOnline flag on the DeliveryAgent. Only online agents can be assigned new deliveries.',
   })
   toggleOnline(
-    @CurrentUser() user: JwtPayload,
+    @CurrentUser() user: AuthUser,
     @Body('isOnline') isOnline: boolean,
   ) {
     return this.deliveryService.toggleOnline(user.id, isOnline);
@@ -174,7 +174,7 @@ export class DeliveryController {
       'If an active delivery exists, the point is appended to Delivery.locationLog (last 50 kept). ' +
       'Phase 2: also emits a "delivery:location" Socket.IO event to the customer.',
   })
-  updateLocation(@CurrentUser() user: JwtPayload, @Body() dto: UpdateLocationDto) {
+  updateLocation(@CurrentUser() user: AuthUser, @Body() dto: UpdateLocationDto) {
     return this.deliveryService.updateLocation(user.id, dto);
   }
 
@@ -187,7 +187,7 @@ export class DeliveryController {
     description: 'Returns paginated deliveries assigned to this agent with full order and address details.',
   })
   @ApiOkResponse({ description: 'Paginated delivery list for the agent' })
-  agentListDeliveries(@CurrentUser() user: JwtPayload, @Query() query: QueryDeliveriesDto) {
+  agentListDeliveries(@CurrentUser() user: AuthUser, @Query() query: QueryDeliveriesDto) {
     return this.deliveryService.agentListDeliveries(user.id, query);
   }
 
@@ -203,8 +203,8 @@ export class DeliveryController {
   })
   @ApiParam({ name: 'orderId', description: 'Order UUID', format: 'uuid' })
   agentUpdateStatus(
-    @CurrentUser() user: JwtPayload,
-    @Param('orderId', ParseUUIDPipe) orderId: string,
+    @CurrentUser() user: AuthUser,
+    @Param('orderId') orderId: string,
     @Body() dto: UpdateDeliveryStatusDto,
   ) {
     return this.deliveryService.agentUpdateStatus(user.id, orderId, dto.status, dto.failureReason);
@@ -222,8 +222,8 @@ export class DeliveryController {
   })
   @ApiParam({ name: 'orderId', description: 'Order UUID', format: 'uuid' })
   agentVerifyOtp(
-    @CurrentUser() user: JwtPayload,
-    @Param('orderId', ParseUUIDPipe) orderId: string,
+    @CurrentUser() user: AuthUser,
+    @Param('orderId') orderId: string,
     @Body() dto: VerifyOtpDto,
   ) {
     return this.deliveryService.agentVerifyOtp(user.id, orderId, dto);
@@ -242,8 +242,8 @@ export class DeliveryController {
   @ApiParam({ name: 'orderId', description: 'Order UUID', format: 'uuid' })
   @ApiOkResponse({ description: 'Delivery tracking info with agent location' })
   trackDelivery(
-    @CurrentUser() user: JwtPayload,
-    @Param('orderId', ParseUUIDPipe) orderId: string,
+    @CurrentUser() user: AuthUser,
+    @Param('orderId') orderId: string,
   ) {
     return this.deliveryService.trackDelivery(user.id, orderId);
   }

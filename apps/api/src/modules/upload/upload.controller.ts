@@ -27,10 +27,9 @@ import { CloudinaryService } from './cloudinary.service';
 import { ProductsService } from '../products/products.service';
 import { UsersService } from '../users/users.service';
 import { CategoriesService } from '../categories/categories.service';
-import { CurrentUser } from '../../common/decorators/current-user.decorator';
+import { CurrentUser, type AuthUser } from '../../common/decorators/current-user.decorator';
 import { Roles } from '../../common/decorators/roles.decorator';
-import { Role } from '@prisma/client';
-import type { JwtPayload } from '@jewellery/types';
+import { Role } from '@jewellery/types';
 
 const multerOptions = {
   storage: undefined, // Use memory storage (buffer) — no temp files
@@ -65,7 +64,7 @@ export class UploadController {
     },
   })
   async uploadProductImage(
-    @Param('productId', ParseUUIDPipe) productId: string,
+    @Param('productId') productId: string,
     @UploadedFile() file: Express.Multer.File,
     @Query('primary', new DefaultValuePipe(false), ParseBoolPipe) primary: boolean,
   ) {
@@ -81,8 +80,8 @@ export class UploadController {
   @ApiParam({ name: 'productId', type: String, format: 'uuid' })
   @ApiParam({ name: 'imageId', type: String, format: 'uuid' })
   async deleteProductImage(
-    @Param('productId', ParseUUIDPipe) productId: string,
-    @Param('imageId', ParseUUIDPipe) imageId: string,
+    @Param('productId') productId: string,
+    @Param('imageId') imageId: string,
   ) {
     // Fetch image record first to get publicId for Cloudinary deletion
     const image = await this.products.getImageOrThrow(productId, imageId);
@@ -107,7 +106,7 @@ export class UploadController {
     },
   })
   async uploadAvatar(
-    @CurrentUser() user: JwtPayload,
+    @CurrentUser() user: AuthUser,
     @UploadedFile() file: Express.Multer.File,
   ) {
     const result = await this.cloudinary.uploadAvatar(file, user.id);
@@ -131,7 +130,7 @@ export class UploadController {
     },
   })
   async uploadCategoryImage(
-    @Param('categoryId', ParseUUIDPipe) categoryId: string,
+    @Param('categoryId') categoryId: string,
     @UploadedFile() file: Express.Multer.File,
   ) {
     const category = await this.categories.findById(categoryId);

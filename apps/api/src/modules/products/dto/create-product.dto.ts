@@ -3,7 +3,6 @@ import {
   IsOptional,
   IsBoolean,
   IsInt,
-  IsUUID,
   IsArray,
   ValidateNested,
   ArrayMinSize,
@@ -30,7 +29,7 @@ export class CreateProductDto {
   description: string;
 
   @ApiProperty({ description: 'Category UUID' })
-  @IsUUID()
+  @IsString()
   categoryId: string;
 
   @ApiProperty({ example: 999.00, description: 'Base price before discount (INR)' })

@@ -3,7 +3,6 @@ import {
   ArrayMinSize,
   IsEnum,
   IsString,
-  IsUUID,
   MaxLength,
 } from 'class-validator';
 import { ApiProperty } from '@nestjs/swagger';
@@ -19,7 +18,7 @@ export class CreateAgentDto {
     description: 'UUID of the User to register as a delivery agent. The user must already exist.',
     format: 'uuid',
   })
-  @IsUUID()
+  @IsString()
   userId: string;
 
   @ApiProperty({

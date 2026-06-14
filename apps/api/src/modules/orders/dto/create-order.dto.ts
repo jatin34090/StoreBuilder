@@ -4,7 +4,6 @@ import {
   IsInt,
   IsOptional,
   IsString,
-  IsUUID,
   MaxLength,
   Min,
   ValidateNested,
@@ -17,7 +16,7 @@ import { PaymentMethod, DeliveryType } from '@prisma/client';
 
 export class OrderItemInputDto {
   @ApiProperty({ description: 'ProductVariant UUID', format: 'uuid' })
-  @IsUUID()
+  @IsString()
   variantId: string;
 
   @ApiProperty({ description: 'Quantity to order', minimum: 1, example: 2 })
@@ -36,7 +35,7 @@ export class CreateOrderDto {
   items: OrderItemInputDto[];
 
   @ApiProperty({ description: 'Delivery address UUID', format: 'uuid' })
-  @IsUUID()
+  @IsString()
   addressId: string;
 
   @ApiProperty({ enum: PaymentMethod, description: 'Payment method', example: PaymentMethod.UPI })

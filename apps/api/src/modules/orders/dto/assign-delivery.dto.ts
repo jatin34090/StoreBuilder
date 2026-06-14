@@ -3,7 +3,6 @@ import {
   IsISO8601,
   IsOptional,
   IsString,
-  IsUUID,
   MaxLength,
 } from 'class-validator';
 import { ApiPropertyOptional } from '@nestjs/swagger';
@@ -17,7 +16,7 @@ export class AssignDeliveryDto {
 
   @ApiPropertyOptional({ description: 'DeliveryAgent UUID (for SELF delivery)', format: 'uuid' })
   @IsOptional()
-  @IsUUID()
+  @IsString()
   agentId?: string;
 
   @ApiPropertyOptional({ description: 'Third-party logistics provider name (e.g., shiprocket)', example: 'shiprocket' })

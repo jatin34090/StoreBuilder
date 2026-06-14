@@ -74,7 +74,7 @@ export class UsersController {
   @ApiParam({ name: 'id', description: 'Address UUID' })
   updateAddress(
     @CurrentUser() user: AuthUser,
-    @Param('id', ParseUUIDPipe) id: string,
+    @Param('id') id: string,
     @Body() dto: UpdateAddressDto,
   ) {
     return this.usersService.updateAddress(user.id, id, dto);
@@ -86,38 +86,9 @@ export class UsersController {
   @ApiParam({ name: 'id', description: 'Address UUID' })
   deleteAddress(
     @CurrentUser() user: AuthUser,
-    @Param('id', ParseUUIDPipe) id: string,
+    @Param('id') id: string,
   ) {
     return this.usersService.deleteAddress(user.id, id);
-  }
-
-  // ─── Customer — Wishlist ─────────────────────────────────────────────────
-
-  @Get('wishlist')
-  @ApiOperation({ summary: 'Get product wishlist' })
-  getWishlist(@CurrentUser() user: AuthUser) {
-    return this.usersService.getWishlist(user.id);
-  }
-
-  @Post('wishlist/:productId')
-  @ApiOperation({ summary: 'Add product to wishlist' })
-  @ApiParam({ name: 'productId', description: 'Product UUID' })
-  addToWishlist(
-    @CurrentUser() user: AuthUser,
-    @Param('productId', ParseUUIDPipe) productId: string,
-  ) {
-    return this.usersService.addToWishlist(user.id, productId);
-  }
-
-  @Delete('wishlist/:productId')
-  @HttpCode(HttpStatus.NO_CONTENT)
-  @ApiOperation({ summary: 'Remove product from wishlist' })
-  @ApiParam({ name: 'productId', description: 'Product UUID' })
-  removeFromWishlist(
-    @CurrentUser() user: AuthUser,
-    @Param('productId', ParseUUIDPipe) productId: string,
-  ) {
-    return this.usersService.removeFromWishlist(user.id, productId);
   }
 
   // ─── Admin — User Management ─────────────────────────────────────────────
@@ -135,7 +106,7 @@ export class UsersController {
   @ApiParam({ name: 'id', description: 'User UUID' })
   adminBlockUser(
     @CurrentUser() admin: AuthUser,
-    @Param('id', ParseUUIDPipe) targetId: string,
+    @Param('id') targetId: string,
     @Body('block') block: boolean,
   ) {
     return this.usersService.adminBlockUser(admin.id, targetId, block);

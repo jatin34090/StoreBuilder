@@ -25,7 +25,7 @@ import { BroadcastNotificationDto } from './dto/broadcast-notification.dto';
 import { QueryNotificationsDto } from './dto/query-notifications.dto';
 import { CurrentUser } from '../../common/decorators/current-user.decorator';
 import { Roles } from '../../common/decorators/roles.decorator';
-import type { JwtPayload } from '@jewellery/types';
+import { type AuthUser } from '../../common/decorators/current-user.decorator';
 
 @ApiTags('Notifications')
 @ApiBearerAuth()
@@ -54,21 +54,21 @@ export class NotificationsController {
       },
     },
   })
-  getNotifications(@CurrentUser() user: JwtPayload, @Query() query: QueryNotificationsDto) {
+  getNotifications(@CurrentUser() user: AuthUser, @Query() query: QueryNotificationsDto) {
     return this.notificationsService.getUserNotifications(user.id, query);
   }
 
   @Get('notifications/unread-count')
   @ApiOperation({ summary: 'Get unread notification count (for badge)' })
   @ApiOkResponse({ schema: { type: 'object', properties: { count: { type: 'number' } } } })
-  getUnreadCount(@CurrentUser() user: JwtPayload) {
+  getUnreadCount(@CurrentUser() user: AuthUser) {
     return this.notificationsService.getUnreadCount(user.id);
   }
 
   @Patch('notifications/read-all')
   @HttpCode(HttpStatus.OK)
   @ApiOperation({ summary: 'Mark all notifications as read' })
-  markAllAsRead(@CurrentUser() user: JwtPayload) {
+  markAllAsRead(@CurrentUser() user: AuthUser) {
     return this.notificationsService.markAllAsRead(user.id);
   }
 
@@ -77,8 +77,8 @@ export class NotificationsController {
   @ApiOperation({ summary: 'Mark a single notification as read' })
   @ApiParam({ name: 'id', description: 'Notification UUID', format: 'uuid' })
   markAsRead(
-    @CurrentUser() user: JwtPayload,
-    @Param('id', ParseUUIDPipe) id: string,
+    @CurrentUser() user: AuthUser,
+    @Param('id') id: string,
   ) {
     return this.notificationsService.markAsRead(user.id, id);
   }

@@ -5,7 +5,6 @@ import {
   IsNumber,
   IsOptional,
   IsString,
-  IsUUID,
   Max,
   MaxLength,
   Min,
@@ -45,7 +44,7 @@ export class SearchProductsDto {
 
   @ApiPropertyOptional({ description: 'Filter by category UUID', format: 'uuid' })
   @IsOptional()
-  @IsUUID()
+  @IsString()
   categoryId?: string;
 
   @ApiPropertyOptional({ description: 'Minimum effective price (rupees)', minimum: 0 })

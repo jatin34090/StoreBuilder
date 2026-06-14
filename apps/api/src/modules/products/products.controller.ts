@@ -60,7 +60,7 @@ export class ProductsController {
   @ApiBody({ schema: { properties: { variantId: { type: 'string' }, quantity: { type: 'integer', minimum: 1 } } } })
   addToCart(
     @CurrentUser() user: AuthUser,
-    @Body('variantId', ParseUUIDPipe) variantId: string,
+    @Body('variantId') variantId: string,
     @Body('quantity') quantity = 1,
   ) {
     return this.productsService.addToCart(user.id, variantId, quantity);
@@ -71,7 +71,7 @@ export class ProductsController {
   @ApiOperation({ summary: 'Update cart item quantity (0 = remove)' })
   updateCartItem(
     @CurrentUser() user: AuthUser,
-    @Param('variantId', ParseUUIDPipe) variantId: string,
+    @Param('variantId') variantId: string,
     @Body('quantity') quantity: number,
   ) {
     return this.productsService.updateCartItem(user.id, variantId, quantity);
@@ -83,7 +83,7 @@ export class ProductsController {
   @ApiOperation({ summary: 'Remove item from cart' })
   removeCartItem(
     @CurrentUser() user: AuthUser,
-    @Param('variantId', ParseUUIDPipe) variantId: string,
+    @Param('variantId') variantId: string,
   ) {
     return this.productsService.removeCartItem(user.id, variantId);
   }
@@ -112,7 +112,7 @@ export class ProductsController {
   @ApiOperation({ summary: '[Admin] Update product fields' })
   @ApiParam({ name: 'id', description: 'Product UUID' })
   update(
-    @Param('id', ParseUUIDPipe) id: string,
+    @Param('id') id: string,
     @Body() dto: UpdateProductDto,
   ) {
     return this.productsService.update(id, dto);
@@ -124,7 +124,7 @@ export class ProductsController {
   @HttpCode(HttpStatus.OK)
   @ApiOperation({ summary: '[Admin] Soft-delete product (deactivates it)' })
   @ApiParam({ name: 'id', description: 'Product UUID' })
-  softDelete(@Param('id', ParseUUIDPipe) id: string) {
+  softDelete(@Param('id') id: string) {
     return this.productsService.softDelete(id);
   }
 
@@ -136,7 +136,7 @@ export class ProductsController {
   @ApiOperation({ summary: '[Admin] Add a new variant to an existing product' })
   @ApiParam({ name: 'id', description: 'Product UUID' })
   addVariant(
-    @Param('id', ParseUUIDPipe) id: string,
+    @Param('id') id: string,
     @Body() dto: CreateVariantDto,
   ) {
     return this.productsService.addVariant(id, dto);
@@ -149,8 +149,8 @@ export class ProductsController {
   @ApiParam({ name: 'id', description: 'Product UUID' })
   @ApiParam({ name: 'variantId', description: 'Variant UUID' })
   updateVariant(
-    @Param('id', ParseUUIDPipe) id: string,
-    @Param('variantId', ParseUUIDPipe) variantId: string,
+    @Param('id') id: string,
+    @Param('variantId') variantId: string,
     @Body() dto: CreateVariantDto,
   ) {
     return this.productsService.updateVariant(id, variantId, dto);
@@ -164,8 +164,8 @@ export class ProductsController {
   @ApiParam({ name: 'id', description: 'Product UUID' })
   @ApiParam({ name: 'variantId', description: 'Variant UUID' })
   deleteVariant(
-    @Param('id', ParseUUIDPipe) id: string,
-    @Param('variantId', ParseUUIDPipe) variantId: string,
+    @Param('id') id: string,
+    @Param('variantId') variantId: string,
   ) {
     return this.productsService.deleteVariant(id, variantId);
   }
@@ -180,8 +180,8 @@ export class ProductsController {
   @ApiParam({ name: 'id', description: 'Product UUID' })
   @ApiParam({ name: 'imgId', description: 'Image UUID' })
   removeImage(
-    @Param('id', ParseUUIDPipe) id: string,
-    @Param('imgId', ParseUUIDPipe) imgId: string,
+    @Param('id') id: string,
+    @Param('imgId') imgId: string,
   ) {
     return this.productsService.removeImage(id, imgId);
   }
@@ -192,7 +192,7 @@ export class ProductsController {
   @ApiOperation({ summary: '[Admin] Reorder product images (first ID becomes primary)' })
   @ApiParam({ name: 'id', description: 'Product UUID' })
   reorderImages(
-    @Param('id', ParseUUIDPipe) id: string,
+    @Param('id') id: string,
     @Body() dto: ReorderImagesDto,
   ) {
     return this.productsService.reorderImages(id, dto);

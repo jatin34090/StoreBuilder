@@ -12,13 +12,12 @@ import {
   ApiBearerAuth,
   ApiOkResponse,
 } from '@nestjs/swagger';
-import { Role } from '@prisma/client';
+import { Role } from '@jewellery/types';
 import { SearchService } from './search.service';
 import { SearchProductsDto } from './dto/search-products.dto';
 import { Public } from '../../common/decorators/public.decorator';
 import { Roles } from '../../common/decorators/roles.decorator';
-import { CurrentUser } from '../../common/decorators/current-user.decorator';
-import type { JwtPayload } from '@jewellery/types';
+import { CurrentUser, type AuthUser } from '../../common/decorators/current-user.decorator';
 
 @ApiTags('Search')
 @Controller()

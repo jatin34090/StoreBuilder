@@ -44,7 +44,6 @@ const DELIVERY_DETAIL_SELECT = {
   trackingUrl:   true,
   otpVerified:   true,
   estimatedAt:   true,
-  assignedAt:    true,
   deliveredAt:   true,
   failureReason: true,
   locationLog:   true,
@@ -162,7 +161,7 @@ export class DeliveryService {
       include: {
         user: { select: { id: true, name: true, email: true, phone: true, avatar: true, createdAt: true } },
         deliveries: {
-          select: { id: true, status: true, orderId: true, deliveredAt: true, createdAt: true },
+          select: { id: true, status: true, orderId: true, deliveredAt: true },
           orderBy: { order: { createdAt: 'desc' } },
           take: 10,
         },
@@ -238,7 +237,6 @@ export class DeliveryService {
           awbCode:       true,
           trackingUrl:   true,
           estimatedAt:   true,
-          assignedAt:    true,
           deliveredAt:   true,
           failureReason: true,
           otpVerified:   true,
@@ -382,7 +380,7 @@ export class DeliveryService {
       const updated  = [...existing, point].slice(-MAX_LOCATION_LOG_POINTS);
       await this.prisma.delivery.update({
         where: { orderId: activeDelivery.orderId },
-        data:  { locationLog: updated },
+        data:  { locationLog: updated as any },
       });
 
       // Phase 2: emit real-time GPS event via Socket.IO gateway
@@ -418,7 +416,6 @@ export class DeliveryService {
           status:        true,
           otpVerified:   true,
           estimatedAt:   true,
-          assignedAt:    true,
           deliveredAt:   true,
           failureReason: true,
           order: {
@@ -606,7 +603,6 @@ export class DeliveryService {
         awbCode:       true,
         trackingUrl:   true,
         estimatedAt:   true,
-        assignedAt:    true,
         deliveredAt:   true,
         failureReason: true,
         // Return only last 10 location points to customer

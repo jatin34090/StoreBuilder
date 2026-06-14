@@ -23,7 +23,7 @@ import { UpsertCartItemDto } from './dto/upsert-cart-item.dto';
 import { MergeCartDto } from './dto/merge-cart.dto';
 import { Roles } from '../../common/decorators/roles.decorator';
 import { CurrentUser } from '../../common/decorators/current-user.decorator';
-import type { JwtPayload } from '@jewellery/types';
+import { type AuthUser } from '../../common/decorators/current-user.decorator';
 
 @ApiTags('Cart')
 @ApiBearerAuth()
@@ -42,7 +42,7 @@ export class CartController {
       'plus a computed summary (subtotal, shipping charge, total).',
   })
   @ApiOkResponse({ description: 'Cart with items and summary' })
-  getCart(@CurrentUser() user: JwtPayload) {
+  getCart(@CurrentUser() user: AuthUser) {
     return this.cartService.getCart(user.id);
   }
 
@@ -57,7 +57,7 @@ export class CartController {
       'Validates stock availability before inserting. Max quantity: 99.',
   })
   @ApiOkResponse({ description: 'Updated cart item' })
-  upsertItem(@CurrentUser() user: JwtPayload, @Body() dto: UpsertCartItemDto) {
+  upsertItem(@CurrentUser() user: AuthUser, @Body() dto: UpsertCartItemDto) {
     return this.cartService.upsertItem(user.id, dto);
   }
 
@@ -69,8 +69,8 @@ export class CartController {
   @ApiParam({ name: 'variantId', description: 'Product variant UUID', format: 'uuid' })
   @ApiOkResponse({ description: 'Item removed' })
   removeItem(
-    @CurrentUser() user: JwtPayload,
-    @Param('variantId', ParseUUIDPipe) variantId: string,
+    @CurrentUser() user: AuthUser,
+    @Param('variantId') variantId: string,
   ) {
     return this.cartService.removeItem(user.id, variantId);
   }
@@ -81,7 +81,7 @@ export class CartController {
   @HttpCode(HttpStatus.OK)
   @ApiOperation({ summary: 'Clear entire cart' })
   @ApiOkResponse({ description: 'Cart cleared' })
-  clearCart(@CurrentUser() user: JwtPayload) {
+  clearCart(@CurrentUser() user: AuthUser) {
     return this.cartService.clearCart(user.id);
   }
 
@@ -98,7 +98,7 @@ export class CartController {
       'Returns merged cart with summary.',
   })
   @ApiCreatedResponse({ description: 'Merged cart with summary' })
-  mergeGuestCart(@CurrentUser() user: JwtPayload, @Body() dto: MergeCartDto) {
+  mergeGuestCart(@CurrentUser() user: AuthUser, @Body() dto: MergeCartDto) {
     return this.cartService.mergeGuestCart(user.id, dto);
   }
 }

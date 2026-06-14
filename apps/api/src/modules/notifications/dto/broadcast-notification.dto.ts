@@ -4,7 +4,6 @@ import {
   IsObject,
   IsOptional,
   IsString,
-  IsUUID,
   MaxLength,
   MinLength,
   ArrayMaxSize,
@@ -48,7 +47,7 @@ export class BroadcastNotificationDto {
   @IsOptional()
   @IsArray()
   @ArrayMaxSize(500)
-  @IsUUID(undefined, { each: true })
+  @IsString({ each: true })
   userIds?: string[];
 
   @ApiPropertyOptional({ description: 'Extra structured metadata', example: { couponCode: 'FLASH40' } })

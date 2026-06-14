@@ -12,13 +12,13 @@ export const metadata: Metadata = {
 export default function ProductsPage({
   searchParams,
 }: {
-  searchParams: Record<string, string | string[] | undefined>;
+  searchParams: Promise<Record<string, string | string[] | undefined>>;
 }) {
   return (
     <MainLayout>
       <div className="container py-6">
         <Suspense fallback={<ProductGridSkeleton count={12} />}>
-          <ProductsClient searchParams={searchParams} />
+          <ProductsClient searchParams={{}} />
         </Suspense>
       </div>
     </MainLayout>

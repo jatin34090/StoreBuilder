@@ -17,6 +17,9 @@ import { SearchModule } from './modules/search/search.module';
 import { ReviewsModule } from './modules/reviews/reviews.module';
 import { NotificationsModule } from './modules/notifications/notifications.module';
 import { AnalyticsModule } from './modules/analytics/analytics.module';
+import { DeliveryModule } from './modules/delivery/delivery.module';
+import { CartModule } from './modules/cart/cart.module';
+import { WishlistModule } from './modules/wishlist/wishlist.module';
 import { JwtAuthGuard } from './common/guards/jwt-auth.guard';
 import { RolesGuard } from './common/guards/roles.guard';
 
@@ -46,6 +49,9 @@ import { RolesGuard } from './common/guards/roles.guard';
     ReviewsModule,
     NotificationsModule,
     AnalyticsModule,
+    DeliveryModule,
+    CartModule,
+    WishlistModule,
   ],
   providers: [
     { provide: APP_GUARD, useClass: JwtAuthGuard },

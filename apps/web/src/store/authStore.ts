@@ -1,31 +1,32 @@
 import { create } from 'zustand';
+import { persist } from 'zustand/middleware';
 
-interface User {
+export type UserRole = 'CUSTOMER' | 'ADMIN' | 'DELIVERY_AGENT';
+
+export interface AuthUser {
   id: string;
   name: string;
   email?: string;
   phone?: string;
-  role: string;
   avatar?: string;
+  role: UserRole;
 }
 
 interface AuthState {
-  accessToken: string | null;
-  user: User | null;
+  user: AuthUser | null;
   isAuthenticated: boolean;
-  setAccessToken: (token: string) => void;
-  setUser: (user: User) => void;
-  login: (token: string, user: User) => void;
-  logout: () => void;
+  setUser: (user: AuthUser) => void;
+  clearUser: () => void;
 }
 
-export const useAuthStore = create<AuthState>((set) => ({
-  accessToken: null,
-  user: null,
-  isAuthenticated: false,
-
-  setAccessToken: (token) => set({ accessToken: token }),
-  setUser: (user) => set({ user }),
-  login: (token, user) => set({ accessToken: token, user, isAuthenticated: true }),
-  logout: () => set({ accessToken: null, user: null, isAuthenticated: false }),
-}));
+export const useAuthStore = create<AuthState>()(
+  persist(
+    (set) => ({
+      user: null,
+      isAuthenticated: false,
+      setUser: (user) => set({ user, isAuthenticated: true }),
+      clearUser: () => set({ user: null, isAuthenticated: false }),
+    }),
+    { name: 'jewellery-auth' },
+  ),
+);

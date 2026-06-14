@@ -19,7 +19,9 @@
       "Bash(PRISMA_GENERATE_SKIP_AUTOINSTALL=1 node \"apps/api/node_modules/prisma/build/index.js\" generate --schema=prisma/schema.prisma)",
       "Bash(PRISMA_GENERATE_SKIP_AUTOINSTALL=1 node \"node_modules/prisma/build/index.js\" generate --schema=../../prisma/schema.prisma)",
       "Bash(/c/Users/hp/AppData/Roaming/npm/pnpm.cmd add *)",
-      "Bash(DEBUG=\"prisma:*\" /c/Users/hp/AppData/Roaming/npm/pnpm.cmd exec prisma generate --schema=../../prisma/schema.prisma)"
+      "Bash(pnpm --filter @jewellery/web add @radix-ui/react-accordion @radix-ui/react-alert-dialog @radix-ui/react-checkbox @radix-ui/react-collapsible @radix-ui/react-popover @radix-ui/react-progress @radix-ui/react-radio-group @radix-ui/react-scroll-area @radix-ui/react-slider @radix-ui/react-switch @radix-ui/react-tooltip next-themes cmdk vaul sonner)",
+      "Bash(pnpm add *)",
+      "Bash(where pnpm *)"
     ]
   }
 }

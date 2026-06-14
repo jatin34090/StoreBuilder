@@ -53,7 +53,7 @@ api.interceptors.response.use(
 export const authApi = {
   sendOtp: (phone: string) => api.post('/auth/send-otp', { phone }),
   verifyOtp: (phone: string, otp: string) => api.post('/auth/verify-otp', { phone, otp }),
-  login: (identifier: string, password: string) => api.post('/auth/login', { identifier, password }),
+  login: (email: string, password: string) => api.post('/auth/login', { email, password }),
   logout: () => api.post('/auth/logout'),
   refresh: () => api.post('/auth/refresh'),
 };

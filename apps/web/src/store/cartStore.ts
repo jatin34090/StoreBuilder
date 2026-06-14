@@ -5,20 +5,21 @@ export interface CartItem {
   variantId: string;
   productId: string;
   name: string;
+  slug: string;
   sku: string;
-  price: number;
-  quantity: number;
-  image: string;
   size?: string;
   color?: string;
-  maxStock: number;
+  price: number;
+  image: string;
+  quantity: number;
+  stock: number;
 }
 
 interface CartState {
   items: CartItem[];
   addItem: (item: CartItem) => void;
-  removeItem: (variantId: string) => void;
   updateQuantity: (variantId: string, quantity: number) => void;
+  removeItem: (variantId: string) => void;
   clearCart: () => void;
   totalItems: () => number;
   subtotal: () => number;
@@ -29,47 +30,39 @@ export const useCartStore = create<CartState>()(
     (set, get) => ({
       items: [],
 
-      addItem: (newItem) =>
+      addItem: (item) =>
         set((state) => {
-          const existing = state.items.find((i) => i.variantId === newItem.variantId);
+          const existing = state.items.find((i) => i.variantId === item.variantId);
           if (existing) {
             return {
               items: state.items.map((i) =>
-                i.variantId === newItem.variantId
-                  ? { ...i, quantity: Math.min(i.quantity + newItem.quantity, i.maxStock) }
+                i.variantId === item.variantId
+                  ? { ...i, quantity: Math.min(i.quantity + item.quantity, i.stock) }
                   : i,
               ),
             };
           }
-          return { items: [...state.items, newItem] };
+          return { items: [...state.items, item] };
         }),
+
+      updateQuantity: (variantId, quantity) =>
+        set((state) => ({
+          items: quantity <= 0
+            ? state.items.filter((i) => i.variantId !== variantId)
+            : state.items.map((i) =>
+                i.variantId === variantId ? { ...i, quantity: Math.min(quantity, i.stock) } : i,
+              ),
+        })),
 
       removeItem: (variantId) =>
         set((state) => ({ items: state.items.filter((i) => i.variantId !== variantId) })),
 
-      updateQuantity: (variantId, quantity) =>
-        set((state) => ({
-          items:
-            quantity <= 0
-              ? state.items.filter((i) => i.variantId !== variantId)
-              : state.items.map((i) =>
-                  i.variantId === variantId
-                    ? { ...i, quantity: Math.min(quantity, i.maxStock) }
-                    : i,
-                ),
-        })),
-
       clearCart: () => set({ items: [] }),
 
-      totalItems: () => get().items.reduce((acc, i) => acc + i.quantity, 0),
+      totalItems: () => get().items.reduce((sum, i) => sum + i.quantity, 0),
 
-      subtotal: () =>
-        get().items.reduce((acc, i) => acc + i.price * i.quantity, 0),
+      subtotal: () => get().items.reduce((sum, i) => sum + i.price * i.quantity, 0),
     }),
-    {
-      name: 'jewellery-cart',
-      // Only persist cart items — clear on logout handled separately
-      partialize: (state) => ({ items: state.items }),
-    },
+    { name: 'jewellery-cart' },
   ),
 );

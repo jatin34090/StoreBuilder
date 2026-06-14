@@ -16,8 +16,8 @@ import type { ReturnOrderDto } from './dto/return-order.dto';
 import type { UpdateOrderStatusDto } from './dto/update-order-status.dto';
 import type { AssignDeliveryDto } from './dto/assign-delivery.dto';
 import type { UpdateDeliveryStatusDto } from './dto/update-delivery-status.dto';
-import type { CouponsService } from '../coupons/coupons.service';
-import type { PaymentsService } from '../payments/payments.service';
+import { CouponsService } from '../coupons/coupons.service';
+import { PaymentsService } from '../payments/payments.service';
 
 // ─── Constants ────────────────────────────────────────────────────────────────
 
@@ -497,7 +497,6 @@ export class OrdersService {
         ...(dto.awbCode !== undefined && { awbCode: dto.awbCode }),
         ...(dto.trackingUrl !== undefined && { trackingUrl: dto.trackingUrl }),
         ...(dto.estimatedAt && { estimatedAt: new Date(dto.estimatedAt) }),
-        assignedAt: new Date(),
         status: DeliveryStatus.ASSIGNED,
       },
     });

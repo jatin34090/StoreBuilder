@@ -64,7 +64,7 @@ export class CategoriesController {
   @ApiOperation({ summary: '[Admin] Update category name, image, parent, or sort order' })
   @ApiParam({ name: 'id', description: 'Category UUID' })
   update(
-    @Param('id', ParseUUIDPipe) id: string,
+    @Param('id') id: string,
     @Body() dto: UpdateCategoryDto,
   ) {
     return this.categoriesService.update(id, dto);
@@ -76,7 +76,7 @@ export class CategoriesController {
   @HttpCode(HttpStatus.OK)
   @ApiOperation({ summary: '[Admin] Soft-delete category (deactivates it and all children)' })
   @ApiParam({ name: 'id', description: 'Category UUID' })
-  softDelete(@Param('id', ParseUUIDPipe) id: string) {
+  softDelete(@Param('id') id: string) {
     return this.categoriesService.softDelete(id);
   }
 }

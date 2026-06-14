@@ -3,7 +3,6 @@ import {
   IsOptional,
   IsBoolean,
   IsInt,
-  IsUUID,
   IsArray,
   ValidateNested,
   Min,
@@ -31,7 +30,7 @@ export class UpdateProductDto {
 
   @ApiPropertyOptional()
   @IsOptional()
-  @IsUUID()
+  @IsString()
   categoryId?: string;
 
   @ApiPropertyOptional()

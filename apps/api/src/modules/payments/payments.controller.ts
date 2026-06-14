@@ -26,7 +26,7 @@ import { RefundDto } from './dto/refund.dto';
 import { CurrentUser } from '../../common/decorators/current-user.decorator';
 import { Roles } from '../../common/decorators/roles.decorator';
 import { Public } from '../../common/decorators/public.decorator';
-import type { JwtPayload } from '@jewellery/types';
+import { type AuthUser } from '../../common/decorators/current-user.decorator';
 
 @ApiTags('Payments')
 @ApiBearerAuth()
@@ -48,7 +48,7 @@ export class PaymentsController {
   })
   @ApiOkResponse({ description: 'Payment verified and order confirmed' })
   async verifyPayment(
-    @CurrentUser() user: JwtPayload,
+    @CurrentUser() user: AuthUser,
     @Body() dto: VerifyPaymentDto,
   ) {
     await this.paymentsService.verifyPayment(user.id, dto);
@@ -93,8 +93,8 @@ export class PaymentsController {
   })
   @ApiParam({ name: 'orderId', description: 'Order UUID', format: 'uuid' })
   getPaymentStatus(
-    @CurrentUser() user: JwtPayload,
-    @Param('orderId', ParseUUIDPipe) orderId: string,
+    @CurrentUser() user: AuthUser,
+    @Param('orderId') orderId: string,
   ) {
     const isAdmin = user.role === Role.ADMIN;
     return this.paymentsService.getPaymentByOrder(orderId, user.id, isAdmin);
@@ -114,7 +114,7 @@ export class PaymentsController {
   })
   @ApiParam({ name: 'orderId', description: 'Order UUID', format: 'uuid' })
   async initiateRefund(
-    @Param('orderId', ParseUUIDPipe) orderId: string,
+    @Param('orderId') orderId: string,
     @Body() dto: RefundDto,
   ) {
     await this.paymentsService.initiateRefund(orderId, dto);

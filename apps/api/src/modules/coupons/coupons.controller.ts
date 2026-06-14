@@ -55,7 +55,7 @@ export class CouponsController {
   @ApiOperation({ summary: '[Admin] Update coupon (value, expiry, status, etc.)' })
   @ApiParam({ name: 'id', description: 'Coupon UUID' })
   update(
-    @Param('id', ParseUUIDPipe) id: string,
+    @Param('id') id: string,
     @Body() dto: Partial<CreateCouponDto>,
   ) {
     return this.couponsService.update(id, dto);

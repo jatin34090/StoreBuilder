@@ -1,9 +1,9 @@
-import { IsString, IsUUID, Matches, MinLength } from 'class-validator';
+import { IsString,Matches, MinLength } from 'class-validator';
 import { ApiProperty } from '@nestjs/swagger';
 
 export class VerifyPaymentDto {
   @ApiProperty({ description: 'Internal order UUID', format: 'uuid' })
-  @IsUUID()
+  @IsString()
   orderId: string;
 
   @ApiProperty({ description: 'Razorpay order ID returned at order placement', example: 'order_OFldlMzXiKXzc3' })

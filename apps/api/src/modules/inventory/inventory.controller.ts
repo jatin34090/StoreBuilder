@@ -38,7 +38,7 @@ export class InventoryController {
   @Get(':variantId')
   @ApiOperation({ summary: '[Admin] Get single variant details with product info' })
   @ApiParam({ name: 'variantId', description: 'Variant UUID' })
-  getVariant(@Param('variantId', ParseUUIDPipe) variantId: string) {
+  getVariant(@Param('variantId') variantId: string) {
     return this.inventoryService.getVariantById(variantId);
   }
 
@@ -46,7 +46,7 @@ export class InventoryController {
   @ApiOperation({ summary: '[Admin] Adjust variant stock (add or subtract units with reason + note)' })
   @ApiParam({ name: 'variantId', description: 'Variant UUID' })
   adjustStock(
-    @Param('variantId', ParseUUIDPipe) variantId: string,
+    @Param('variantId') variantId: string,
     @Body() dto: AdjustStockDto,
     @CurrentUser() admin: AuthUser,
   ) {

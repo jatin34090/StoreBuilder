@@ -248,7 +248,8 @@ export class PaymentsService {
     }
 
     // Call Razorpay refund API
-    let refund: { id: string; amount: number };
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    let refund: any;
     try {
       refund = await this.razorpay.payments.refund(payment.razorpayPayId, {
         amount: Math.round(refundAmount * 100), // paise

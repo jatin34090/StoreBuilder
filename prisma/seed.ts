@@ -534,7 +534,6 @@ async function seedOrders() {
       otpHash:     await bcrypt.hash('111111', BCRYPT_ROUNDS),
       otpVerified: true,
       estimatedAt: new Date('2026-05-11T14:00:00Z'),
-      assignedAt:  new Date('2026-05-10T12:00:00Z'),
       deliveredAt: new Date('2026-05-11T13:45:00Z'),
       locationLog: [
         { lat: 19.0720, lng: 72.8750, timestamp: '2026-05-11T13:00:00Z' },
@@ -603,7 +602,6 @@ async function seedOrders() {
       otpHash,
       otpVerified: false,
       estimatedAt: new Date('2026-05-21T15:00:00Z'),
-      assignedAt:  new Date('2026-05-21T09:00:00Z'),
       locationLog: [
         { lat: 19.0740, lng: 72.8765, timestamp: '2026-05-21T13:00:00Z' },
         { lat: 19.0755, lng: 72.8772, timestamp: '2026-05-21T13:30:00Z' },
@@ -668,7 +666,6 @@ async function seedOrders() {
       agentId:    ID.agentProfile,
       status:     DeliveryStatus.ASSIGNED,
       estimatedAt: new Date('2026-05-22T14:00:00Z'),
-      assignedAt:  new Date('2026-05-20T11:00:00Z'),
       locationLog: [],
     },
   });
@@ -734,7 +731,6 @@ async function seedOrders() {
       trackingUrl:'https://shiprocket.co/tracking/SR1234567890',
       status:     DeliveryStatus.DELIVERED,
       estimatedAt:new Date('2026-05-10T18:00:00Z'),
-      assignedAt: new Date('2026-05-08T16:00:00Z'),
       deliveredAt:new Date('2026-05-10T14:30:00Z'),
       locationLog: [],
     },

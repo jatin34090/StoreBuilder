@@ -219,9 +219,12 @@ export class ReviewsService {
     let totalRatingSum = 0;
     let totalRatingCount = 0;
     for (const group of ratingAgg) {
-      distribution[group.rating] = group._count._all;
-      totalRatingSum  += group.rating * group._count._all;
-      totalRatingCount += group._count._all;
+      const cnt = typeof group._count === 'object' && group._count !== null
+        ? ((group._count as Record<string, number>)['_all'] ?? 0)
+        : 0;
+      distribution[group.rating] = cnt;
+      totalRatingSum  += group.rating * cnt;
+      totalRatingCount += cnt;
     }
     const averageRating = totalRatingCount > 0
       ? Math.round((totalRatingSum / totalRatingCount) * 10) / 10

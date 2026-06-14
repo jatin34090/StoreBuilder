@@ -16,12 +16,11 @@ import {
   ApiParam,
   ApiOkResponse,
 } from '@nestjs/swagger';
-import { Role } from '@prisma/client';
+import { Role } from '@jewellery/types';
 import { WishlistService } from './wishlist.service';
 import { ToggleWishlistDto } from './dto/toggle-wishlist.dto';
 import { Roles } from '../../common/decorators/roles.decorator';
-import { CurrentUser } from '../../common/decorators/current-user.decorator';
-import type { JwtPayload } from '@jewellery/types';
+import { CurrentUser, type AuthUser } from '../../common/decorators/current-user.decorator';
 
 @ApiTags('Wishlist')
 @ApiBearerAuth()
@@ -38,7 +37,7 @@ export class WishlistController {
     description: 'Returns all wishlisted products with variant pricing and primary image.',
   })
   @ApiOkResponse({ description: 'Wishlist items with total count' })
-  getWishlist(@CurrentUser() user: JwtPayload) {
+  getWishlist(@CurrentUser() user: AuthUser) {
     return this.wishlistService.getWishlist(user.id);
   }
 
@@ -52,7 +51,7 @@ export class WishlistController {
       'Useful for frontend to mark product cards as wishlisted without fetching full details.',
   })
   @ApiOkResponse({ description: 'Array of product UUIDs' })
-  getWishlistIds(@CurrentUser() user: JwtPayload) {
+  getWishlistIds(@CurrentUser() user: AuthUser) {
     return this.wishlistService.getWishlistIds(user.id);
   }
 
@@ -66,7 +65,7 @@ export class WishlistController {
       'Idempotent toggle. Returns { action: "added" | "removed", wishlisted: boolean }.',
   })
   @ApiOkResponse({ description: 'Toggle result with action and new state' })
-  toggle(@CurrentUser() user: JwtPayload, @Body() dto: ToggleWishlistDto) {
+  toggle(@CurrentUser() user: AuthUser, @Body() dto: ToggleWishlistDto) {
     return this.wishlistService.toggle(user.id, dto);
   }
 
@@ -80,8 +79,8 @@ export class WishlistController {
   @ApiParam({ name: 'productId', description: 'Product UUID', format: 'uuid' })
   @ApiOkResponse({ description: 'Wishlist status for the product' })
   check(
-    @CurrentUser() user: JwtPayload,
-    @Param('productId', ParseUUIDPipe) productId: string,
+    @CurrentUser() user: AuthUser,
+    @Param('productId') productId: string,
   ) {
     return this.wishlistService.check(user.id, productId);
   }
@@ -94,8 +93,8 @@ export class WishlistController {
   @ApiParam({ name: 'productId', description: 'Product UUID', format: 'uuid' })
   @ApiOkResponse({ description: 'Item removed from wishlist' })
   remove(
-    @CurrentUser() user: JwtPayload,
-    @Param('productId', ParseUUIDPipe) productId: string,
+    @CurrentUser() user: AuthUser,
+    @Param('productId') productId: string,
   ) {
     return this.wishlistService.remove(user.id, productId);
   }

@@ -3,7 +3,6 @@ import {
   IsInt,
   IsOptional,
   IsString,
-  IsUUID,
   Max,
   MaxLength,
   Min,
@@ -14,14 +13,14 @@ import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 
 export class CreateReviewDto {
   @ApiProperty({ description: 'Product UUID being reviewed', format: 'uuid' })
-  @IsUUID()
+  @IsString()
   productId: string;
 
   @ApiProperty({
     description: 'Order UUID that contains this product. Validates delivery eligibility.',
     format: 'uuid',
   })
-  @IsUUID()
+  @IsString()
   orderId: string;
 
   @ApiProperty({ description: 'Star rating from 1 (worst) to 5 (best)', minimum: 1, maximum: 5, example: 4 })

@@ -1,10 +1,10 @@
-import { IsEnum, IsObject, IsOptional, IsString, IsUUID, MaxLength, MinLength } from 'class-validator';
+import { IsEnum, IsObject, IsOptional, IsString,MaxLength, MinLength } from 'class-validator';
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 import { NotificationType } from '@prisma/client';
 
 export class CreateNotificationDto {
   @ApiProperty({ description: 'Target user UUID', format: 'uuid' })
-  @IsUUID()
+  @IsString()
   userId: string;
 
   @ApiProperty({ enum: NotificationType, description: 'Notification category' })

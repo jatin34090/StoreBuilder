@@ -29,7 +29,7 @@ import { AssignDeliveryDto } from './dto/assign-delivery.dto';
 import { UpdateDeliveryStatusDto } from './dto/update-delivery-status.dto';
 import { CurrentUser } from '../../common/decorators/current-user.decorator';
 import { Roles } from '../../common/decorators/roles.decorator';
-import type { JwtPayload } from '@jewellery/types';
+import { type AuthUser } from '../../common/decorators/current-user.decorator';
 
 @ApiTags('Orders')
 @ApiBearerAuth()
@@ -49,7 +49,7 @@ export class OrdersController {
       'Returns razorpayOrderId and razorpayKeyId for frontend checkout integration.',
   })
   @ApiCreatedResponse({ description: 'Order placed successfully with payment initialization data' })
-  placeOrder(@CurrentUser() user: JwtPayload, @Body() dto: CreateOrderDto) {
+  placeOrder(@CurrentUser() user: AuthUser, @Body() dto: CreateOrderDto) {
     return this.ordersService.placeOrder(user.id, dto);
   }
 
@@ -57,7 +57,7 @@ export class OrdersController {
   @Roles(Role.CUSTOMER)
   @ApiOperation({ summary: 'List authenticated customer orders with pagination' })
   @ApiOkResponse({ description: 'Paginated order list' })
-  findMyOrders(@CurrentUser() user: JwtPayload, @Query() query: QueryOrdersDto) {
+  findMyOrders(@CurrentUser() user: AuthUser, @Query() query: QueryOrdersDto) {
     return this.ordersService.findMyOrders(user.id, query);
   }
 
@@ -65,7 +65,7 @@ export class OrdersController {
   @Roles(Role.CUSTOMER)
   @ApiOperation({ summary: 'Get order details (customer can only access own orders)' })
   @ApiParam({ name: 'id', description: 'Order UUID', format: 'uuid' })
-  findMyOrder(@CurrentUser() user: JwtPayload, @Param('id', ParseUUIDPipe) id: string) {
+  findMyOrder(@CurrentUser() user: AuthUser, @Param('id') id: string) {
     return this.ordersService.findMyOrderById(user.id, id);
   }
 
@@ -78,8 +78,8 @@ export class OrdersController {
   })
   @ApiParam({ name: 'id', description: 'Order UUID', format: 'uuid' })
   cancelOrder(
-    @CurrentUser() user: JwtPayload,
-    @Param('id', ParseUUIDPipe) id: string,
+    @CurrentUser() user: AuthUser,
+    @Param('id') id: string,
     @Body() dto: CancelOrderDto,
   ) {
     return this.ordersService.cancelOrder(user.id, id, dto);
@@ -94,8 +94,8 @@ export class OrdersController {
   })
   @ApiParam({ name: 'id', description: 'Order UUID', format: 'uuid' })
   requestReturn(
-    @CurrentUser() user: JwtPayload,
-    @Param('id', ParseUUIDPipe) id: string,
+    @CurrentUser() user: AuthUser,
+    @Param('id') id: string,
     @Body() dto: ReturnOrderDto,
   ) {
     return this.ordersService.requestReturn(user.id, id, dto);
@@ -116,7 +116,7 @@ export class OrdersController {
   @Roles(Role.ADMIN)
   @ApiOperation({ summary: 'Admin: get full order details including user info' })
   @ApiParam({ name: 'id', description: 'Order UUID', format: 'uuid' })
-  adminGetOrder(@Param('id', ParseUUIDPipe) id: string) {
+  adminGetOrder(@Param('id') id: string) {
     return this.ordersService.adminGetOrder(id);
   }
 
@@ -131,7 +131,7 @@ export class OrdersController {
   })
   @ApiParam({ name: 'id', description: 'Order UUID', format: 'uuid' })
   adminUpdateStatus(
-    @Param('id', ParseUUIDPipe) id: string,
+    @Param('id') id: string,
     @Body() dto: UpdateOrderStatusDto,
   ) {
     return this.ordersService.adminUpdateStatus(id, dto);
@@ -148,7 +148,7 @@ export class OrdersController {
   })
   @ApiParam({ name: 'id', description: 'Order UUID', format: 'uuid' })
   adminAssignDelivery(
-    @Param('id', ParseUUIDPipe) id: string,
+    @Param('id') id: string,
     @Body() dto: AssignDeliveryDto,
   ) {
     return this.ordersService.adminAssignDelivery(id, dto);
@@ -159,7 +159,7 @@ export class OrdersController {
   @Get('delivery/orders')
   @Roles(Role.DELIVERY_AGENT)
   @ApiOperation({ summary: 'Delivery agent: list orders assigned to me' })
-  agentListOrders(@CurrentUser() user: JwtPayload, @Query() query: QueryOrdersDto) {
+  agentListOrders(@CurrentUser() user: AuthUser, @Query() query: QueryOrdersDto) {
     return this.ordersService.agentListOrders(user.id, query);
   }
 
@@ -174,8 +174,8 @@ export class OrdersController {
   })
   @ApiParam({ name: 'orderId', description: 'Order UUID', format: 'uuid' })
   agentUpdateDeliveryStatus(
-    @CurrentUser() user: JwtPayload,
-    @Param('orderId', ParseUUIDPipe) orderId: string,
+    @CurrentUser() user: AuthUser,
+    @Param('orderId') orderId: string,
     @Body() dto: UpdateDeliveryStatusDto,
   ) {
     return this.ordersService.agentUpdateDeliveryStatus(user.id, orderId, dto);

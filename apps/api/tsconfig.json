@@ -6,10 +6,6 @@
     "lib": ["ES2022"],
     "outDir": "./dist",
     "baseUrl": ".",
-    "paths": {
-      "@jewellery/types": ["../../packages/types/src/index.ts"],
-      "@jewellery/utils": ["../../packages/utils/src/index.ts"]
-    },
     "emitDecoratorMetadata": true,
     "experimentalDecorators": true,
     "strict": true,
@@ -23,6 +19,6 @@
     "incremental": true,
     "composite": false
   },
-  "include": ["src/**/*", "../../packages/types/src/**/*", "../../packages/utils/src/**/*"],
+  "include": ["src/**/*"],
   "exclude": ["node_modules", "dist", "test"]
 }

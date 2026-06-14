@@ -1,0 +1,1140 @@
+{
+  "info": {
+    "_postman_id": "jewellery-platform-v1",
+    "name": "Jewellery Platform API",
+    "description": "Complete API collection for the Jewellery Platform backend. Covers all Phase 1 + Phase 2 (DeliveryModule) endpoints.\n\nSetup:\n1. Import the companion environment file.\n2. Run '00 Setup / Admin Login' first — it auto-saves {{adminToken}}.\n3. Run 'Customer Login' and 'Agent Login' to populate the other tokens.\n4. All subsequent requests inherit the correct token from the folder default.",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "variable": [
+    { "key": "baseUrl", "value": "http://localhost:3000" }
+  ],
+  "item": [
+    {
+      "name": "00 · Setup — Auth",
+      "item": [
+        {
+          "name": "Admin Login",
+          "event": [{ "listen": "test", "script": { "type": "text/javascript", "exec": [
+            "const r = pm.response.json();",
+            "if (r.success && r.data.accessToken) {",
+            "  pm.environment.set('adminToken', r.data.accessToken);",
+            "  pm.environment.set('adminUserId', r.data.user.id);",
+            "  console.log('✅ adminToken saved');",
+            "}"
+          ]}}],
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": { "mode": "raw", "raw": "{\n  \"email\": \"admin@jewellery.test\",\n  \"password\": \"Admin@123456\"\n}" },
+            "url": { "raw": "{{baseUrl}}/auth/login", "host": ["{{baseUrl}}"], "path": ["auth", "login"] }
+          }
+        },
+        {
+          "name": "Customer Login",
+          "event": [{ "listen": "test", "script": { "type": "text/javascript", "exec": [
+            "const r = pm.response.json();",
+            "if (r.success && r.data.accessToken) {",
+            "  pm.environment.set('customerToken', r.data.accessToken);",
+            "  pm.environment.set('customerUserId', r.data.user.id);",
+            "  console.log('✅ customerToken saved');",
+            "}"
+          ]}}],
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": { "mode": "raw", "raw": "{\n  \"phone\": \"9000000001\",\n  \"password\": \"Customer@123456\"\n}" },
+            "url": { "raw": "{{baseUrl}}/auth/login", "host": ["{{baseUrl}}"], "path": ["auth", "login"] }
+          }
+        },
+        {
+          "name": "Agent Login",
+          "event": [{ "listen": "test", "script": { "type": "text/javascript", "exec": [
+            "const r = pm.response.json();",
+            "if (r.success && r.data.accessToken) {",
+            "  pm.environment.set('agentToken', r.data.accessToken);",
+            "  pm.environment.set('agentUserId', r.data.user.id);",
+            "  console.log('✅ agentToken saved');",
+            "}"
+          ]}}],
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": { "mode": "raw", "raw": "{\n  \"phone\": \"9000000002\",\n  \"password\": \"Agent@123456\"\n}" },
+            "url": { "raw": "{{baseUrl}}/auth/login", "host": ["{{baseUrl}}"], "path": ["auth", "login"] }
+          }
+        },
+        {
+          "name": "Send OTP (phone login step 1)",
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": { "mode": "raw", "raw": "{\n  \"phone\": \"9000000001\"\n}" },
+            "url": { "raw": "{{baseUrl}}/auth/send-otp", "host": ["{{baseUrl}}"], "path": ["auth", "send-otp"] }
+          }
+        },
+        {
+          "name": "Refresh Token",
+          "event": [{ "listen": "test", "script": { "type": "text/javascript", "exec": [
+            "const r = pm.response.json();",
+            "if (r.success && r.data.accessToken) { pm.environment.set('customerToken', r.data.accessToken); }"
+          ]}}],
+          "request": {
+            "method": "POST",
+            "header": [],
+            "url": { "raw": "{{baseUrl}}/auth/refresh", "host": ["{{baseUrl}}"], "path": ["auth", "refresh"] }
+          }
+        },
+        {
+          "name": "Logout",
+          "request": {
+            "auth": { "type": "bearer", "bearer": [{ "key": "token", "value": "{{customerToken}}", "type": "string" }] },
+            "method": "POST",
+            "header": [],
+            "url": { "raw": "{{baseUrl}}/auth/logout", "host": ["{{baseUrl}}"], "path": ["auth", "logout"] }
+          }
+        },
+        {
+          "name": "❌ Login — wrong password",
+          "event": [{ "listen": "test", "script": { "type": "text/javascript", "exec": [
+            "pm.test('Returns 401', () => pm.response.to.have.status(401));"
+          ]}}],
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": { "mode": "raw", "raw": "{\n  \"email\": \"admin@jewellery.test\",\n  \"password\": \"WrongPassword\"\n}" },
+            "url": { "raw": "{{baseUrl}}/auth/login", "host": ["{{baseUrl}}"], "path": ["auth", "login"] }
+          }
+        }
+      ]
+    },
+    {
+      "name": "01 · Users",
+      "item": [
+        {
+          "name": "Get My Profile (customer)",
+          "request": {
+            "auth": { "type": "bearer", "bearer": [{ "key": "token", "value": "{{customerToken}}", "type": "string" }] },
+            "method": "GET",
+            "url": { "raw": "{{baseUrl}}/users/me", "host": ["{{baseUrl}}"], "path": ["users", "me"] }
+          }
+        },
+        {
+          "name": "Update My Profile",
+          "request": {
+            "auth": { "type": "bearer", "bearer": [{ "key": "token", "value": "{{customerToken}}", "type": "string" }] },
+            "method": "PATCH",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": { "mode": "raw", "raw": "{\n  \"name\": \"Priya Sharma Updated\",\n  \"dob\": \"1995-06-15\"\n}" },
+            "url": { "raw": "{{baseUrl}}/users/me", "host": ["{{baseUrl}}"], "path": ["users", "me"] }
+          }
+        },
+        {
+          "name": "Add Address",
+          "event": [{ "listen": "test", "script": { "type": "text/javascript", "exec": [
+            "const r = pm.response.json();",
+            "if (r.success && r.data.id) { pm.environment.set('addressId', r.data.id); }"
+          ]}}],
+          "request": {
+            "auth": { "type": "bearer", "bearer": [{ "key": "token", "value": "{{customerToken}}", "type": "string" }] },
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": { "mode": "raw", "raw": "{\n  \"name\": \"Office Address\",\n  \"phone\": \"9000000001\",\n  \"line1\": \"5th Floor, Tech Park\",\n  \"city\": \"Mumbai\",\n  \"state\": \"Maharashtra\",\n  \"pincode\": \"400002\",\n  \"isDefault\": false\n}" },
+            "url": { "raw": "{{baseUrl}}/users/me/addresses", "host": ["{{baseUrl}}"], "path": ["users", "me", "addresses"] }
+          }
+        },
+        {
+          "name": "Get My Addresses",
+          "request": {
+            "auth": { "type": "bearer", "bearer": [{ "key": "token", "value": "{{customerToken}}", "type": "string" }] },
+            "method": "GET",
+            "url": { "raw": "{{baseUrl}}/users/me/addresses", "host": ["{{baseUrl}}"], "path": ["users", "me", "addresses"] }
+          }
+        },
+        {
+          "name": "Admin — List Users",
+          "request": {
+            "auth": { "type": "bearer", "bearer": [{ "key": "token", "value": "{{adminToken}}", "type": "string" }] },
+            "method": "GET",
+            "url": { "raw": "{{baseUrl}}/admin/users?page=1&limit=10", "host": ["{{baseUrl}}"], "path": ["admin", "users"], "query": [{ "key": "page", "value": "1" }, { "key": "limit", "value": "10" }] }
+          }
+        },
+        {
+          "name": "Admin — Block User",
+          "request": {
+            "auth": { "type": "bearer", "bearer": [{ "key": "token", "value": "{{adminToken}}", "type": "string" }] },
+            "method": "PATCH",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": { "mode": "raw", "raw": "{\n  \"isBlocked\": true\n}" },
+            "url": { "raw": "{{baseUrl}}/admin/users/{{customerUserId}}/block", "host": ["{{baseUrl}}"], "path": ["admin", "users", "{{customerUserId}}", "block"] }
+          }
+        }
+      ]
+    },
+    {
+      "name": "02 · Categories",
+      "item": [
+        {
+          "name": "List All Categories",
+          "request": {
+            "method": "GET",
+            "url": { "raw": "{{baseUrl}}/categories", "host": ["{{baseUrl}}"], "path": ["categories"] }
+          }
+        },
+        {
+          "name": "Get Category by Slug",
+          "request": {
+            "method": "GET",
+            "url": { "raw": "{{baseUrl}}/categories/rings", "host": ["{{baseUrl}}"], "path": ["categories", "rings"] }
+          }
+        },
+        {
+          "name": "Admin — Create Category",
+          "event": [{ "listen": "test", "script": { "type": "text/javascript", "exec": [
+            "const r = pm.response.json();",
+            "if (r.success && r.data.id) { pm.environment.set('categoryId', r.data.id); }"
+          ]}}],
+          "request": {
+            "auth": { "type": "bearer", "bearer": [{ "key": "token", "value": "{{adminToken}}", "type": "string" }] },
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": { "mode": "raw", "raw": "{\n  \"name\": \"Anklets\",\n  \"slug\": \"anklets\",\n  \"sortOrder\": 5\n}" },
+            "url": { "raw": "{{baseUrl}}/admin/categories", "host": ["{{baseUrl}}"], "path": ["admin", "categories"] }
+          }
+        },
+        {
+          "name": "Admin — Update Category",
+          "request": {
+            "auth": { "type": "bearer", "bearer": [{ "key": "token", "value": "{{adminToken}}", "type": "string" }] },
+            "method": "PATCH",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": { "mode": "raw", "raw": "{\n  \"name\": \"Anklets & Payal\",\n  \"sortOrder\": 5\n}" },
+            "url": { "raw": "{{baseUrl}}/admin/categories/{{categoryId}}", "host": ["{{baseUrl}}"], "path": ["admin", "categories", "{{categoryId}}"] }
+          }
+        }
+      ]
+    },
+    {
+      "name": "03 · Products",
+      "item": [
+        {
+          "name": "List Products (public)",
+          "request": {
+            "method": "GET",
+            "url": { "raw": "{{baseUrl}}/products?page=1&limit=12", "host": ["{{baseUrl}}"], "path": ["products"], "query": [{ "key": "page", "value": "1" }, { "key": "limit", "value": "12" }] }
+          }
+        },
+        {
+          "name": "List Featured Products",
+          "request": {
+            "method": "GET",
+            "url": { "raw": "{{baseUrl}}/products?isFeatured=true", "host": ["{{baseUrl}}"], "path": ["products"], "query": [{ "key": "isFeatured", "value": "true" }] }
+          }
+        },
+        {
+          "name": "Get Product by Slug",
+          "request": {
+            "method": "GET",
+            "url": { "raw": "{{baseUrl}}/products/royal-gold-zirconia-ring", "host": ["{{baseUrl}}"], "path": ["products", "royal-gold-zirconia-ring"] }
+          }
+        },
+        {
+          "name": "Admin — Create Product",
+          "event": [{ "listen": "test", "script": { "type": "text/javascript", "exec": [
+            "const r = pm.response.json();",
+            "if (r.success && r.data.id) { pm.environment.set('newProductId', r.data.id); }"
+          ]}}],
+          "request": {
+            "auth": { "type": "bearer", "bearer": [{ "key": "token", "value": "{{adminToken}}", "type": "string" }] },
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": { "mode": "raw", "raw": "{\n  \"name\": \"Rose Gold Tennis Bracelet\",\n  \"slug\": \"rose-gold-tennis-bracelet\",\n  \"description\": \"Elegant rose-gold plated tennis bracelet with AAA cubic zirconia stones.\",\n  \"categoryId\": \"{{catBanglesId}}\",\n  \"basePrice\": 1299,\n  \"discountPct\": 15,\n  \"attributes\": {\n    \"material\": \"Rose Gold Plated Brass\",\n    \"occasion\": \"Party\",\n    \"color\": \"Rose Gold\",\n    \"finish\": \"Polished\",\n    \"stone\": \"Cubic Zirconia\",\n    \"weight\": \"12g\"\n  },\n  \"tags\": [\"bracelet\", \"rose-gold\", \"tennis\", \"zirconia\"],\n  \"isFeatured\": false\n}" },
+            "url": { "raw": "{{baseUrl}}/admin/products", "host": ["{{baseUrl}}"], "path": ["admin", "products"] }
+          }
+        },
+        {
+          "name": "Admin — Add Variant to Product",
+          "event": [{ "listen": "test", "script": { "type": "text/javascript", "exec": [
+            "const r = pm.response.json();",
+            "if (r.success && r.data.id) { pm.environment.set('newVariantId', r.data.id); }"
+          ]}}],
+          "request": {
+            "auth": { "type": "bearer", "bearer": [{ "key": "token", "value": "{{adminToken}}", "type": "string" }] },
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": { "mode": "raw", "raw": "{\n  \"sku\": \"BRC-RG-TEN-7\",\n  \"size\": \"7 inch\",\n  \"color\": \"Rose Gold\",\n  \"price\": 1099,\n  \"stock\": 20,\n  \"weight\": 12\n}" },
+            "url": { "raw": "{{baseUrl}}/admin/products/{{newProductId}}/variants", "host": ["{{baseUrl}}"], "path": ["admin", "products", "{{newProductId}}", "variants"] }
+          }
+        },
+        {
+          "name": "Admin — Update Product",
+          "request": {
+            "auth": { "type": "bearer", "bearer": [{ "key": "token", "value": "{{adminToken}}", "type": "string" }] },
+            "method": "PATCH",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": { "mode": "raw", "raw": "{\n  \"isFeatured\": true,\n  \"discountPct\": 20\n}" },
+            "url": { "raw": "{{baseUrl}}/admin/products/{{newProductId}}", "host": ["{{baseUrl}}"], "path": ["admin", "products", "{{newProductId}}"] }
+          }
+        },
+        {
+          "name": "Admin — Soft Delete Product",
+          "request": {
+            "auth": { "type": "bearer", "bearer": [{ "key": "token", "value": "{{adminToken}}", "type": "string" }] },
+            "method": "DELETE",
+            "url": { "raw": "{{baseUrl}}/admin/products/{{newProductId}}", "host": ["{{baseUrl}}"], "path": ["admin", "products", "{{newProductId}}"] }
+          }
+        }
+      ]
+    },
+    {
+      "name": "04 · Inventory",
+      "item": [
+        {
+          "name": "Admin — Adjust Stock (add)",
+          "request": {
+            "auth": { "type": "bearer", "bearer": [{ "key": "token", "value": "{{adminToken}}", "type": "string" }] },
+            "method": "PATCH",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": { "mode": "raw", "raw": "{\n  \"variantId\": \"{{variantRingS6Id}}\",\n  \"adjustment\": 10,\n  \"reason\": \"Restock from supplier\"\n}" },
+            "url": { "raw": "{{baseUrl}}/admin/inventory/adjust", "host": ["{{baseUrl}}"], "path": ["admin", "inventory", "adjust"] }
+          }
+        },
+        {
+          "name": "Admin — Low Stock Summary",
+          "request": {
+            "auth": { "type": "bearer", "bearer": [{ "key": "token", "value": "{{adminToken}}", "type": "string" }] },
+            "method": "GET",
+            "url": { "raw": "{{baseUrl}}/admin/inventory/low-stock", "host": ["{{baseUrl}}"], "path": ["admin", "inventory", "low-stock"] }
+          }
+        },
+        {
+          "name": "Admin — Get Variant Stock",
+          "request": {
+            "auth": { "type": "bearer", "bearer": [{ "key": "token", "value": "{{adminToken}}", "type": "string" }] },
+            "method": "GET",
+            "url": { "raw": "{{baseUrl}}/admin/inventory/{{variantRingS6Id}}", "host": ["{{baseUrl}}"], "path": ["admin", "inventory", "{{variantRingS6Id}}"] }
+          }
+        }
+      ]
+    },
+    {
+      "name": "05 · Coupons",
+      "item": [
+        {
+          "name": "Validate Coupon — WELCOME10 (valid)",
+          "event": [{ "listen": "test", "script": { "type": "text/javascript", "exec": [
+            "pm.test('Status 200', () => pm.response.to.have.status(200));",
+            "pm.test('Has discountAmount', () => { const r = pm.response.json(); pm.expect(r.data).to.have.property('discountAmount'); });"
+          ]}}],
+          "request": {
+            "auth": { "type": "bearer", "bearer": [{ "key": "token", "value": "{{customerToken}}", "type": "string" }] },
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": { "mode": "raw", "raw": "{\n  \"code\": \"WELCOME10\",\n  \"orderSubtotal\": 1200\n}" },
+            "url": { "raw": "{{baseUrl}}/coupons/validate", "host": ["{{baseUrl}}"], "path": ["coupons", "validate"] }
+          }
+        },
+        {
+          "name": "❌ Validate Coupon — EXPIRED50 (inactive)",
+          "event": [{ "listen": "test", "script": { "type": "text/javascript", "exec": [
+            "pm.test('Returns 400 or 422', () => pm.expect(pm.response.code).to.be.oneOf([400, 422]));"
+          ]}}],
+          "request": {
+            "auth": { "type": "bearer", "bearer": [{ "key": "token", "value": "{{customerToken}}", "type": "string" }] },
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": { "mode": "raw", "raw": "{\n  \"code\": \"EXPIRED50\",\n  \"orderSubtotal\": 1000\n}" },
+            "url": { "raw": "{{baseUrl}}/coupons/validate", "host": ["{{baseUrl}}"], "path": ["coupons", "validate"] }
+          }
+        },
+        {
+          "name": "❌ Validate Coupon — below minimum order",
+          "request": {
+            "auth": { "type": "bearer", "bearer": [{ "key": "token", "value": "{{customerToken}}", "type": "string" }] },
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": { "mode": "raw", "raw": "{\n  \"code\": \"FLAT100\",\n  \"orderSubtotal\": 300\n}" },
+            "url": { "raw": "{{baseUrl}}/coupons/validate", "host": ["{{baseUrl}}"], "path": ["coupons", "validate"] }
+          }
+        },
+        {
+          "name": "Admin — Create Coupon",
+          "request": {
+            "auth": { "type": "bearer", "bearer": [{ "key": "token", "value": "{{adminToken}}", "type": "string" }] },
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": { "mode": "raw", "raw": "{\n  \"code\": \"TESTCODE20\",\n  \"type\": \"PERCENT\",\n  \"value\": 20,\n  \"minOrderAmount\": 500,\n  \"maxDiscount\": 300,\n  \"usageLimit\": 100,\n  \"expiresAt\": \"2027-12-31T23:59:59Z\"\n}" },
+            "url": { "raw": "{{baseUrl}}/admin/coupons", "host": ["{{baseUrl}}"], "path": ["admin", "coupons"] }
+          }
+        },
+        {
+          "name": "Admin — List Coupons",
+          "request": {
+            "auth": { "type": "bearer", "bearer": [{ "key": "token", "value": "{{adminToken}}", "type": "string" }] },
+            "method": "GET",
+            "url": { "raw": "{{baseUrl}}/admin/coupons", "host": ["{{baseUrl}}"], "path": ["admin", "coupons"] }
+          }
+        }
+      ]
+    },
+    {
+      "name": "06 · Search",
+      "item": [
+        {
+          "name": "Search Products — 'gold ring'",
+          "request": {
+            "method": "GET",
+            "url": { "raw": "{{baseUrl}}/search/products?q=gold+ring&page=1&limit=12", "host": ["{{baseUrl}}"], "path": ["search", "products"], "query": [{ "key": "q", "value": "gold ring" }, { "key": "page", "value": "1" }, { "key": "limit", "value": "12" }] }
+          }
+        },
+        {
+          "name": "Search Products — filter by category",
+          "request": {
+            "method": "GET",
+            "url": { "raw": "{{baseUrl}}/search/products?q=*&categoryId={{catRingsId}}&sortBy=PRICE_ASC", "host": ["{{baseUrl}}"], "path": ["search", "products"], "query": [{ "key": "q", "value": "*" }, { "key": "categoryId", "value": "{{catRingsId}}" }, { "key": "sortBy", "value": "PRICE_ASC" }] }
+          }
+        },
+        {
+          "name": "Admin — Reindex All Products",
+          "request": {
+            "auth": { "type": "bearer", "bearer": [{ "key": "token", "value": "{{adminToken}}", "type": "string" }] },
+            "method": "POST",
+            "url": { "raw": "{{baseUrl}}/admin/search/reindex", "host": ["{{baseUrl}}"], "path": ["admin", "search", "reindex"] }
+          }
+        }
+      ]
+    },
+    {
+      "name": "07 · Orders",
+      "item": [
+        {
+          "name": "Place Order — COD",
+          "event": [{ "listen": "test", "script": { "type": "text/javascript", "exec": [
+            "const r = pm.response.json();",
+            "if (r.success && r.data.order) { pm.environment.set('newOrderId', r.data.order.id); console.log('orderId saved:', r.data.order.id); }"
+          ]}}],
+          "request": {
+            "auth": { "type": "bearer", "bearer": [{ "key": "token", "value": "{{customerToken}}", "type": "string" }] },
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": { "mode": "raw", "raw": "{\n  \"addressId\": \"{{seedAddressId}}\",\n  \"items\": [\n    { \"variantId\": \"{{variantRingS7Id}}\", \"quantity\": 1 }\n  ],\n  \"paymentMethod\": \"COD\",\n  \"deliveryType\": \"SELF\"\n}" },
+            "url": { "raw": "{{baseUrl}}/orders", "host": ["{{baseUrl}}"], "path": ["orders"] }
+          }
+        },
+        {
+          "name": "Place Order — Razorpay (get razorpayOrderId)",
+          "event": [{ "listen": "test", "script": { "type": "text/javascript", "exec": [
+            "const r = pm.response.json();",
+            "if (r.success && r.data.order) {",
+            "  pm.environment.set('rzpOrderId', r.data.payment.razorpayOrderId);",
+            "  pm.environment.set('newRzpTestOrderId', r.data.order.id);",
+            "}"
+          ]}}],
+          "request": {
+            "auth": { "type": "bearer", "bearer": [{ "key": "token", "value": "{{customerToken}}", "type": "string" }] },
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": { "mode": "raw", "raw": "{\n  \"addressId\": \"{{seedAddressId}}\",\n  \"items\": [\n    { \"variantId\": \"{{variantNecklace18Id}}\", \"quantity\": 1 }\n  ],\n  \"paymentMethod\": \"UPI\",\n  \"deliveryType\": \"SELF\"\n}" },
+            "url": { "raw": "{{baseUrl}}/orders", "host": ["{{baseUrl}}"], "path": ["orders"] }
+          }
+        },
+        {
+          "name": "Place Order — with WELCOME10 coupon",
+          "request": {
+            "auth": { "type": "bearer", "bearer": [{ "key": "token", "value": "{{customerToken}}", "type": "string" }] },
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": { "mode": "raw", "raw": "{\n  \"addressId\": \"{{seedAddressId}}\",\n  \"items\": [\n    { \"variantId\": \"{{variantRingS7Id}}\", \"quantity\": 2 }\n  ],\n  \"paymentMethod\": \"COD\",\n  \"deliveryType\": \"SELF\",\n  \"couponCode\": \"WELCOME10\"\n}" },
+            "url": { "raw": "{{baseUrl}}/orders", "host": ["{{baseUrl}}"], "path": ["orders"] }
+          }
+        },
+        {
+          "name": "Get My Orders",
+          "request": {
+            "auth": { "type": "bearer", "bearer": [{ "key": "token", "value": "{{customerToken}}", "type": "string" }] },
+            "method": "GET",
+            "url": { "raw": "{{baseUrl}}/orders?page=1&limit=10", "host": ["{{baseUrl}}"], "path": ["orders"], "query": [{ "key": "page", "value": "1" }, { "key": "limit", "value": "10" }] }
+          }
+        },
+        {
+          "name": "Get Single Order (seed order 1 — DELIVERED)",
+          "request": {
+            "auth": { "type": "bearer", "bearer": [{ "key": "token", "value": "{{customerToken}}", "type": "string" }] },
+            "method": "GET",
+            "url": { "raw": "{{baseUrl}}/orders/{{order1DeliveredId}}", "host": ["{{baseUrl}}"], "path": ["orders", "{{order1DeliveredId}}"] }
+          }
+        },
+        {
+          "name": "Cancel Order (COD order just placed)",
+          "request": {
+            "auth": { "type": "bearer", "bearer": [{ "key": "token", "value": "{{customerToken}}", "type": "string" }] },
+            "method": "PATCH",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": { "mode": "raw", "raw": "{\n  \"reason\": \"Changed my mind\"\n}" },
+            "url": { "raw": "{{baseUrl}}/orders/{{newOrderId}}/cancel", "host": ["{{baseUrl}}"], "path": ["orders", "{{newOrderId}}", "cancel"] }
+          }
+        },
+        {
+          "name": "Request Return (seed order 1 — DELIVERED)",
+          "request": {
+            "auth": { "type": "bearer", "bearer": [{ "key": "token", "value": "{{customerToken}}", "type": "string" }] },
+            "method": "PATCH",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": { "mode": "raw", "raw": "{\n  \"reason\": \"Item size doesn't fit\"\n}" },
+            "url": { "raw": "{{baseUrl}}/orders/{{order1DeliveredId}}/return", "host": ["{{baseUrl}}"], "path": ["orders", "{{order1DeliveredId}}", "return"] }
+          }
+        },
+        {
+          "name": "Admin — List All Orders",
+          "request": {
+            "auth": { "type": "bearer", "bearer": [{ "key": "token", "value": "{{adminToken}}", "type": "string" }] },
+            "method": "GET",
+            "url": { "raw": "{{baseUrl}}/admin/orders?page=1&limit=20", "host": ["{{baseUrl}}"], "path": ["admin", "orders"], "query": [{ "key": "page", "value": "1" }, { "key": "limit", "value": "20" }] }
+          }
+        },
+        {
+          "name": "Admin — Update Order Status → CONFIRMED",
+          "request": {
+            "auth": { "type": "bearer", "bearer": [{ "key": "token", "value": "{{adminToken}}", "type": "string" }] },
+            "method": "PATCH",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": { "mode": "raw", "raw": "{\n  \"status\": \"CONFIRMED\",\n  \"notes\": \"Payment verified by admin\"\n}" },
+            "url": { "raw": "{{baseUrl}}/admin/orders/{{order5PendingId}}/status", "host": ["{{baseUrl}}"], "path": ["admin", "orders", "{{order5PendingId}}", "status"] }
+          }
+        },
+        {
+          "name": "Admin — Assign SELF Delivery (order 3)",
+          "request": {
+            "auth": { "type": "bearer", "bearer": [{ "key": "token", "value": "{{adminToken}}", "type": "string" }] },
+            "method": "PATCH",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": { "mode": "raw", "raw": "{\n  \"type\": \"SELF\",\n  \"agentId\": \"{{agentProfileId}}\",\n  \"estimatedAt\": \"2026-05-23T14:00:00Z\"\n}" },
+            "url": { "raw": "{{baseUrl}}/admin/orders/{{order3AssignedId}}/delivery", "host": ["{{baseUrl}}"], "path": ["admin", "orders", "{{order3AssignedId}}", "delivery"] }
+          }
+        },
+        {
+          "name": "Admin — Assign THIRD_PARTY Delivery",
+          "request": {
+            "auth": { "type": "bearer", "bearer": [{ "key": "token", "value": "{{adminToken}}", "type": "string" }] },
+            "method": "PATCH",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": { "mode": "raw", "raw": "{\n  \"type\": \"THIRD_PARTY\",\n  \"provider\": \"delhivery\",\n  \"awbCode\": \"DL9876543210\",\n  \"trackingUrl\": \"https://www.delhivery.com/track/DL9876543210\",\n  \"estimatedAt\": \"2026-05-24T18:00:00Z\"\n}" },
+            "url": { "raw": "{{baseUrl}}/admin/orders/{{newOrderId}}/delivery", "host": ["{{baseUrl}}"], "path": ["admin", "orders", "{{newOrderId}}", "delivery"] }
+          }
+        }
+      ]
+    },
+    {
+      "name": "08 · Payments",
+      "item": [
+        {
+          "name": "Verify Razorpay Payment — placeholder (needs real sig)",
+          "request": {
+            "auth": { "type": "bearer", "bearer": [{ "key": "token", "value": "{{customerToken}}", "type": "string" }] },
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": { "mode": "raw", "raw": "{\n  \"orderId\": \"{{order5PendingId}}\",\n  \"razorpayOrderId\": \"order_seed_005_rzp\",\n  \"razorpayPaymentId\": \"pay_test_placeholder\",\n  \"razorpaySignature\": \"REPLACE_WITH_HMAC_SHA256_SIGNATURE\"\n}" },
+            "url": { "raw": "{{baseUrl}}/payments/verify", "host": ["{{baseUrl}}"], "path": ["payments", "verify"] }
+          }
+        },
+        {
+          "name": "❌ Verify Payment — invalid signature",
+          "event": [{ "listen": "test", "script": { "type": "text/javascript", "exec": [
+            "pm.test('Returns 400', () => pm.response.to.have.status(400));"
+          ]}}],
+          "request": {
+            "auth": { "type": "bearer", "bearer": [{ "key": "token", "value": "{{customerToken}}", "type": "string" }] },
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": { "mode": "raw", "raw": "{\n  \"orderId\": \"{{order5PendingId}}\",\n  \"razorpayOrderId\": \"order_seed_005_rzp\",\n  \"razorpayPaymentId\": \"pay_fake_id\",\n  \"razorpaySignature\": \"invalidsignaturehash\"\n}" },
+            "url": { "raw": "{{baseUrl}}/payments/verify", "host": ["{{baseUrl}}"], "path": ["payments", "verify"] }
+          }
+        },
+        {
+          "name": "Admin — Initiate Refund",
+          "request": {
+            "auth": { "type": "bearer", "bearer": [{ "key": "token", "value": "{{adminToken}}", "type": "string" }] },
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": { "mode": "raw", "raw": "{\n  \"orderId\": \"{{order1DeliveredId}}\",\n  \"amount\": 599\n}" },
+            "url": { "raw": "{{baseUrl}}/admin/payments/refund", "host": ["{{baseUrl}}"], "path": ["admin", "payments", "refund"] }
+          }
+        }
+      ]
+    },
+    {
+      "name": "09 · Reviews",
+      "item": [
+        {
+          "name": "Create Review — order 1, ring (post-delivery)",
+          "event": [{ "listen": "test", "script": { "type": "text/javascript", "exec": [
+            "pm.test('Returns 201 or 409 (duplicate)', () => pm.expect(pm.response.code).to.be.oneOf([201, 409]));"
+          ]}}],
+          "request": {
+            "auth": { "type": "bearer", "bearer": [{ "key": "token", "value": "{{customerToken}}", "type": "string" }] },
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": { "mode": "raw", "raw": "{\n  \"orderId\": \"{{order1DeliveredId}}\",\n  \"productId\": \"{{productRingId}}\",\n  \"rating\": 5,\n  \"title\": \"Absolutely Beautiful!\",\n  \"body\": \"The ring is stunning. Wore it to a wedding and got so many compliments.\"\n}" },
+            "url": { "raw": "{{baseUrl}}/reviews", "host": ["{{baseUrl}}"], "path": ["reviews"] }
+          }
+        },
+        {
+          "name": "❌ Review before delivery (order 3 — ASSIGNED)",
+          "event": [{ "listen": "test", "script": { "type": "text/javascript", "exec": [
+            "pm.test('Returns 400', () => pm.response.to.have.status(400));"
+          ]}}],
+          "request": {
+            "auth": { "type": "bearer", "bearer": [{ "key": "token", "value": "{{customerToken}}", "type": "string" }] },
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": { "mode": "raw", "raw": "{\n  \"orderId\": \"{{order3AssignedId}}\",\n  \"productId\": \"{{productEarringsId}}\",\n  \"rating\": 4,\n  \"title\": \"Too early to review\"\n}" },
+            "url": { "raw": "{{baseUrl}}/reviews", "host": ["{{baseUrl}}"], "path": ["reviews"] }
+          }
+        },
+        {
+          "name": "Get Product Reviews",
+          "request": {
+            "method": "GET",
+            "url": { "raw": "{{baseUrl}}/products/{{productRingId}}/reviews?page=1&limit=10", "host": ["{{baseUrl}}"], "path": ["products", "{{productRingId}}", "reviews"], "query": [{ "key": "page", "value": "1" }, { "key": "limit", "value": "10" }] }
+          }
+        },
+        {
+          "name": "Admin — List All Reviews",
+          "request": {
+            "auth": { "type": "bearer", "bearer": [{ "key": "token", "value": "{{adminToken}}", "type": "string" }] },
+            "method": "GET",
+            "url": { "raw": "{{baseUrl}}/admin/reviews?page=1&limit=20", "host": ["{{baseUrl}}"], "path": ["admin", "reviews"], "query": [{ "key": "page", "value": "1" }, { "key": "limit", "value": "20" }] }
+          }
+        },
+        {
+          "name": "Admin — Hide Review",
+          "request": {
+            "auth": { "type": "bearer", "bearer": [{ "key": "token", "value": "{{adminToken}}", "type": "string" }] },
+            "method": "PATCH",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": { "mode": "raw", "raw": "{\n  \"isVisible\": false\n}" },
+            "url": { "raw": "{{baseUrl}}/admin/reviews/{{review1Id}}", "host": ["{{baseUrl}}"], "path": ["admin", "reviews", "{{review1Id}}"] }
+          }
+        }
+      ]
+    },
+    {
+      "name": "10 · Notifications",
+      "item": [
+        {
+          "name": "Get My Notifications",
+          "request": {
+            "auth": { "type": "bearer", "bearer": [{ "key": "token", "value": "{{customerToken}}", "type": "string" }] },
+            "method": "GET",
+            "url": { "raw": "{{baseUrl}}/notifications?page=1&limit=20", "host": ["{{baseUrl}}"], "path": ["notifications"], "query": [{ "key": "page", "value": "1" }, { "key": "limit", "value": "20" }] }
+          }
+        },
+        {
+          "name": "Get Unread Count",
+          "request": {
+            "auth": { "type": "bearer", "bearer": [{ "key": "token", "value": "{{customerToken}}", "type": "string" }] },
+            "method": "GET",
+            "url": { "raw": "{{baseUrl}}/notifications/unread-count", "host": ["{{baseUrl}}"], "path": ["notifications", "unread-count"] }
+          }
+        },
+        {
+          "name": "Mark All Notifications as Read",
+          "request": {
+            "auth": { "type": "bearer", "bearer": [{ "key": "token", "value": "{{customerToken}}", "type": "string" }] },
+            "method": "PATCH",
+            "url": { "raw": "{{baseUrl}}/notifications/read-all", "host": ["{{baseUrl}}"], "path": ["notifications", "read-all"] }
+          }
+        },
+        {
+          "name": "Admin — Send Notification to Customer",
+          "request": {
+            "auth": { "type": "bearer", "bearer": [{ "key": "token", "value": "{{adminToken}}", "type": "string" }] },
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": { "mode": "raw", "raw": "{\n  \"userId\": \"{{customerUserId}}\",\n  \"type\": \"SYSTEM\",\n  \"title\": \"Profile Verified\",\n  \"body\": \"Your account has been verified. Enjoy exclusive member discounts.\"\n}" },
+            "url": { "raw": "{{baseUrl}}/admin/notifications", "host": ["{{baseUrl}}"], "path": ["admin", "notifications"] }
+          }
+        },
+        {
+          "name": "Admin — Broadcast to All Customers",
+          "request": {
+            "auth": { "type": "bearer", "bearer": [{ "key": "token", "value": "{{adminToken}}", "type": "string" }] },
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": { "mode": "raw", "raw": "{\n  \"type\": \"OFFER\",\n  \"title\": \"Monsoon Sale — 25% Off!\",\n  \"body\": \"Use code MONSOON25 at checkout. Valid until July 31.\",\n  \"targetRole\": \"CUSTOMER\"\n}" },
+            "url": { "raw": "{{baseUrl}}/admin/notifications/broadcast", "host": ["{{baseUrl}}"], "path": ["admin", "notifications", "broadcast"] }
+          }
+        }
+      ]
+    },
+    {
+      "name": "11 · Analytics",
+      "item": [
+        {
+          "name": "Overview KPIs (last 30 days)",
+          "request": {
+            "auth": { "type": "bearer", "bearer": [{ "key": "token", "value": "{{adminToken}}", "type": "string" }] },
+            "method": "GET",
+            "url": { "raw": "{{baseUrl}}/admin/analytics/overview", "host": ["{{baseUrl}}"], "path": ["admin", "analytics", "overview"] }
+          }
+        },
+        {
+          "name": "Sales Trend — daily (last 30 days)",
+          "request": {
+            "auth": { "type": "bearer", "bearer": [{ "key": "token", "value": "{{adminToken}}", "type": "string" }] },
+            "method": "GET",
+            "url": { "raw": "{{baseUrl}}/admin/analytics/sales-trend?granularity=day", "host": ["{{baseUrl}}"], "path": ["admin", "analytics", "sales-trend"], "query": [{ "key": "granularity", "value": "day" }] }
+          }
+        },
+        {
+          "name": "Sales Trend — weekly",
+          "request": {
+            "auth": { "type": "bearer", "bearer": [{ "key": "token", "value": "{{adminToken}}", "type": "string" }] },
+            "method": "GET",
+            "url": { "raw": "{{baseUrl}}/admin/analytics/sales-trend?granularity=week&from=2026-01-01&to=2026-05-21", "host": ["{{baseUrl}}"], "path": ["admin", "analytics", "sales-trend"], "query": [{ "key": "granularity", "value": "week" }, { "key": "from", "value": "2026-01-01" }, { "key": "to", "value": "2026-05-21" }] }
+          }
+        },
+        {
+          "name": "Top Products (by revenue)",
+          "request": {
+            "auth": { "type": "bearer", "bearer": [{ "key": "token", "value": "{{adminToken}}", "type": "string" }] },
+            "method": "GET",
+            "url": { "raw": "{{baseUrl}}/admin/analytics/top-products?limit=5", "host": ["{{baseUrl}}"], "path": ["admin", "analytics", "top-products"], "query": [{ "key": "limit", "value": "5" }] }
+          }
+        },
+        {
+          "name": "Order Status Distribution",
+          "request": {
+            "auth": { "type": "bearer", "bearer": [{ "key": "token", "value": "{{adminToken}}", "type": "string" }] },
+            "method": "GET",
+            "url": { "raw": "{{baseUrl}}/admin/analytics/order-status", "host": ["{{baseUrl}}"], "path": ["admin", "analytics", "order-status"] }
+          }
+        },
+        {
+          "name": "Payment Analytics",
+          "request": {
+            "auth": { "type": "bearer", "bearer": [{ "key": "token", "value": "{{adminToken}}", "type": "string" }] },
+            "method": "GET",
+            "url": { "raw": "{{baseUrl}}/admin/analytics/payments", "host": ["{{baseUrl}}"], "path": ["admin", "analytics", "payments"] }
+          }
+        },
+        {
+          "name": "Delivery Analytics",
+          "request": {
+            "auth": { "type": "bearer", "bearer": [{ "key": "token", "value": "{{adminToken}}", "type": "string" }] },
+            "method": "GET",
+            "url": { "raw": "{{baseUrl}}/admin/analytics/delivery", "host": ["{{baseUrl}}"], "path": ["admin", "analytics", "delivery"] }
+          }
+        },
+        {
+          "name": "Customer Growth — monthly",
+          "request": {
+            "auth": { "type": "bearer", "bearer": [{ "key": "token", "value": "{{adminToken}}", "type": "string" }] },
+            "method": "GET",
+            "url": { "raw": "{{baseUrl}}/admin/analytics/customer-growth?granularity=month", "host": ["{{baseUrl}}"], "path": ["admin", "analytics", "customer-growth"], "query": [{ "key": "granularity", "value": "month" }] }
+          }
+        },
+        {
+          "name": "Low Stock Summary",
+          "request": {
+            "auth": { "type": "bearer", "bearer": [{ "key": "token", "value": "{{adminToken}}", "type": "string" }] },
+            "method": "GET",
+            "url": { "raw": "{{baseUrl}}/admin/analytics/low-stock", "host": ["{{baseUrl}}"], "path": ["admin", "analytics", "low-stock"] }
+          }
+        }
+      ]
+    },
+    {
+      "name": "12 · Delivery — Full Flow",
+      "item": [
+        {
+          "name": "── ADMIN: AGENT MANAGEMENT ──",
+          "item": [
+            {
+              "name": "Admin — Create Delivery Agent",
+              "event": [{ "listen": "test", "script": { "type": "text/javascript", "exec": [
+                "const r = pm.response.json();",
+                "if (r.success && r.data.id) { pm.environment.set('newAgentProfileId', r.data.id); console.log('agentProfileId saved:', r.data.id); }"
+              ]}}],
+              "request": {
+                "auth": { "type": "bearer", "bearer": [{ "key": "token", "value": "{{adminToken}}", "type": "string" }] },
+                "method": "POST",
+                "header": [{ "key": "Content-Type", "value": "application/json" }],
+                "body": { "mode": "raw", "raw": "{\n  \"userId\": \"{{agentUserId}}\",\n  \"vehicleType\": \"bike\",\n  \"zones\": [\"400001\", \"400002\", \"400003\"]\n}" },
+                "url": { "raw": "{{baseUrl}}/admin/agents", "host": ["{{baseUrl}}"], "path": ["admin", "agents"] }
+              }
+            },
+            {
+              "name": "Admin — List Agents",
+              "request": {
+                "auth": { "type": "bearer", "bearer": [{ "key": "token", "value": "{{adminToken}}", "type": "string" }] },
+                "method": "GET",
+                "url": { "raw": "{{baseUrl}}/admin/agents?page=1&limit=10", "host": ["{{baseUrl}}"], "path": ["admin", "agents"], "query": [{ "key": "page", "value": "1" }, { "key": "limit", "value": "10" }] }
+              }
+            },
+            {
+              "name": "Admin — Get Agent Detail",
+              "request": {
+                "auth": { "type": "bearer", "bearer": [{ "key": "token", "value": "{{adminToken}}", "type": "string" }] },
+                "method": "GET",
+                "url": { "raw": "{{baseUrl}}/admin/agents/{{agentProfileId}}", "host": ["{{baseUrl}}"], "path": ["admin", "agents", "{{agentProfileId}}"] }
+              }
+            },
+            {
+              "name": "Admin — Update Agent Zones",
+              "request": {
+                "auth": { "type": "bearer", "bearer": [{ "key": "token", "value": "{{adminToken}}", "type": "string" }] },
+                "method": "PATCH",
+                "header": [{ "key": "Content-Type", "value": "application/json" }],
+                "body": { "mode": "raw", "raw": "{\n  \"vehicleType\": \"cycle\",\n  \"zones\": [\"400001\", \"400002\", \"400003\", \"400004\", \"400005\"]\n}" },
+                "url": { "raw": "{{baseUrl}}/admin/agents/{{agentProfileId}}", "host": ["{{baseUrl}}"], "path": ["admin", "agents", "{{agentProfileId}}"] }
+              }
+            },
+            {
+              "name": "❌ Admin — Delete Agent with Active Deliveries",
+              "event": [{ "listen": "test", "script": { "type": "text/javascript", "exec": [
+                "pm.test('Returns 400 — active deliveries', () => pm.response.to.have.status(400));"
+              ]}}],
+              "request": {
+                "auth": { "type": "bearer", "bearer": [{ "key": "token", "value": "{{adminToken}}", "type": "string" }] },
+                "method": "DELETE",
+                "url": { "raw": "{{baseUrl}}/admin/agents/{{agentProfileId}}", "host": ["{{baseUrl}}"], "path": ["admin", "agents", "{{agentProfileId}}"] }
+              }
+            }
+          ]
+        },
+        {
+          "name": "── ADMIN: DELIVERY MANAGEMENT ──",
+          "item": [
+            {
+              "name": "Admin — List All Deliveries",
+              "request": {
+                "auth": { "type": "bearer", "bearer": [{ "key": "token", "value": "{{adminToken}}", "type": "string" }] },
+                "method": "GET",
+                "url": { "raw": "{{baseUrl}}/admin/deliveries?page=1&limit=20", "host": ["{{baseUrl}}"], "path": ["admin", "deliveries"], "query": [{ "key": "page", "value": "1" }, { "key": "limit", "value": "20" }] }
+              }
+            },
+            {
+              "name": "Admin — Filter Deliveries by Status",
+              "request": {
+                "auth": { "type": "bearer", "bearer": [{ "key": "token", "value": "{{adminToken}}", "type": "string" }] },
+                "method": "GET",
+                "url": { "raw": "{{baseUrl}}/admin/deliveries?status=ASSIGNED", "host": ["{{baseUrl}}"], "path": ["admin", "deliveries"], "query": [{ "key": "status", "value": "ASSIGNED" }] }
+              }
+            },
+            {
+              "name": "Admin — Get Full Delivery Detail (order 2)",
+              "request": {
+                "auth": { "type": "bearer", "bearer": [{ "key": "token", "value": "{{adminToken}}", "type": "string" }] },
+                "method": "GET",
+                "url": { "raw": "{{baseUrl}}/admin/deliveries/{{order2OtpId}}", "host": ["{{baseUrl}}"], "path": ["admin", "deliveries", "{{order2OtpId}}"] }
+              }
+            },
+            {
+              "name": "Admin — Regenerate OTP (order 2)",
+              "event": [{ "listen": "test", "script": { "type": "text/javascript", "exec": [
+                "pm.test('Status 200', () => pm.response.to.have.status(200));",
+                "pm.test('OTP regenerated', () => { const r = pm.response.json(); pm.expect(r.data.message).to.include('regenerated'); });"
+              ]}}],
+              "request": {
+                "auth": { "type": "bearer", "bearer": [{ "key": "token", "value": "{{adminToken}}", "type": "string" }] },
+                "method": "POST",
+                "url": { "raw": "{{baseUrl}}/admin/deliveries/{{order2OtpId}}/regenerate-otp", "host": ["{{baseUrl}}"], "path": ["admin", "deliveries", "{{order2OtpId}}", "regenerate-otp"] }
+              }
+            },
+            {
+              "name": "❌ Admin — Regenerate OTP for THIRD_PARTY delivery",
+              "event": [{ "listen": "test", "script": { "type": "text/javascript", "exec": [
+                "pm.test('Returns 400', () => pm.response.to.have.status(400));"
+              ]}}],
+              "request": {
+                "auth": { "type": "bearer", "bearer": [{ "key": "token", "value": "{{adminToken}}", "type": "string" }] },
+                "method": "POST",
+                "url": { "raw": "{{baseUrl}}/admin/deliveries/{{order4ThirdPartyId}}/regenerate-otp", "host": ["{{baseUrl}}"], "path": ["admin", "deliveries", "{{order4ThirdPartyId}}", "regenerate-otp"] }
+              }
+            }
+          ]
+        },
+        {
+          "name": "── AGENT: PROFILE & LOCATION ──",
+          "item": [
+            {
+              "name": "Agent — Get My Profile",
+              "request": {
+                "auth": { "type": "bearer", "bearer": [{ "key": "token", "value": "{{agentToken}}", "type": "string" }] },
+                "method": "GET",
+                "url": { "raw": "{{baseUrl}}/agent/profile", "host": ["{{baseUrl}}"], "path": ["agent", "profile"] }
+              }
+            },
+            {
+              "name": "Agent — Update Profile (switch to cycle)",
+              "request": {
+                "auth": { "type": "bearer", "bearer": [{ "key": "token", "value": "{{agentToken}}", "type": "string" }] },
+                "method": "PATCH",
+                "header": [{ "key": "Content-Type", "value": "application/json" }],
+                "body": { "mode": "raw", "raw": "{\n  \"vehicleType\": \"cycle\",\n  \"zones\": [\"400001\", \"400002\"]\n}" },
+                "url": { "raw": "{{baseUrl}}/agent/profile", "host": ["{{baseUrl}}"], "path": ["agent", "profile"] }
+              }
+            },
+            {
+              "name": "Agent — Go Online",
+              "request": {
+                "auth": { "type": "bearer", "bearer": [{ "key": "token", "value": "{{agentToken}}", "type": "string" }] },
+                "method": "PATCH",
+                "header": [{ "key": "Content-Type", "value": "application/json" }],
+                "body": { "mode": "raw", "raw": "{\n  \"isOnline\": true\n}" },
+                "url": { "raw": "{{baseUrl}}/agent/online", "host": ["{{baseUrl}}"], "path": ["agent", "online"] }
+              }
+            },
+            {
+              "name": "Agent — Go Offline",
+              "request": {
+                "auth": { "type": "bearer", "bearer": [{ "key": "token", "value": "{{agentToken}}", "type": "string" }] },
+                "method": "PATCH",
+                "header": [{ "key": "Content-Type", "value": "application/json" }],
+                "body": { "mode": "raw", "raw": "{\n  \"isOnline\": false\n}" },
+                "url": { "raw": "{{baseUrl}}/agent/online", "host": ["{{baseUrl}}"], "path": ["agent", "online"] }
+              }
+            },
+            {
+              "name": "Agent — Update GPS Location (point 1)",
+              "event": [{ "listen": "test", "script": { "type": "text/javascript", "exec": [
+                "pm.test('Location updated', () => { const r = pm.response.json(); pm.expect(r.data).to.have.property('lat'); });"
+              ]}}],
+              "request": {
+                "auth": { "type": "bearer", "bearer": [{ "key": "token", "value": "{{agentToken}}", "type": "string" }] },
+                "method": "PATCH",
+                "header": [{ "key": "Content-Type", "value": "application/json" }],
+                "body": { "mode": "raw", "raw": "{\n  \"lat\": 19.0760,\n  \"lng\": 72.8777\n}" },
+                "url": { "raw": "{{baseUrl}}/agent/location", "host": ["{{baseUrl}}"], "path": ["agent", "location"] }
+              }
+            },
+            {
+              "name": "Agent — Update GPS Location (point 2)",
+              "request": {
+                "auth": { "type": "bearer", "bearer": [{ "key": "token", "value": "{{agentToken}}", "type": "string" }] },
+                "method": "PATCH",
+                "header": [{ "key": "Content-Type", "value": "application/json" }],
+                "body": { "mode": "raw", "raw": "{\n  \"lat\": 19.0775,\n  \"lng\": 72.8785\n}" },
+                "url": { "raw": "{{baseUrl}}/agent/location", "host": ["{{baseUrl}}"], "path": ["agent", "location"] }
+              }
+            },
+            {
+              "name": "❌ Agent — Invalid GPS (lat > 90)",
+              "event": [{ "listen": "test", "script": { "type": "text/javascript", "exec": [
+                "pm.test('Returns 400', () => pm.response.to.have.status(400));"
+              ]}}],
+              "request": {
+                "auth": { "type": "bearer", "bearer": [{ "key": "token", "value": "{{agentToken}}", "type": "string" }] },
+                "method": "PATCH",
+                "header": [{ "key": "Content-Type", "value": "application/json" }],
+                "body": { "mode": "raw", "raw": "{\n  \"lat\": 91,\n  \"lng\": 72.8777\n}" },
+                "url": { "raw": "{{baseUrl}}/agent/location", "host": ["{{baseUrl}}"], "path": ["agent", "location"] }
+              }
+            }
+          ]
+        },
+        {
+          "name": "── AGENT: DELIVERY STATUS FLOW (order 3) ──",
+          "item": [
+            {
+              "name": "Agent — List My Deliveries",
+              "request": {
+                "auth": { "type": "bearer", "bearer": [{ "key": "token", "value": "{{agentToken}}", "type": "string" }] },
+                "method": "GET",
+                "url": { "raw": "{{baseUrl}}/agent/deliveries?page=1&limit=10", "host": ["{{baseUrl}}"], "path": ["agent", "deliveries"], "query": [{ "key": "page", "value": "1" }, { "key": "limit", "value": "10" }] }
+              }
+            },
+            {
+              "name": "Agent — Update Status → PICKED_UP (order 3)",
+              "event": [{ "listen": "test", "script": { "type": "text/javascript", "exec": [
+                "pm.test('Status 200', () => pm.response.to.have.status(200));",
+                "pm.test('Message contains PICKED_UP', () => { const r = pm.response.json(); pm.expect(r.data.message).to.include('PICKED_UP'); });"
+              ]}}],
+              "request": {
+                "auth": { "type": "bearer", "bearer": [{ "key": "token", "value": "{{agentToken}}", "type": "string" }] },
+                "method": "PATCH",
+                "header": [{ "key": "Content-Type", "value": "application/json" }],
+                "body": { "mode": "raw", "raw": "{\n  \"status\": \"PICKED_UP\"\n}" },
+                "url": { "raw": "{{baseUrl}}/agent/deliveries/{{order3AssignedId}}/status", "host": ["{{baseUrl}}"], "path": ["agent", "deliveries", "{{order3AssignedId}}", "status"] }
+              }
+            },
+            {
+              "name": "Agent — Update Status → IN_TRANSIT (order 3)",
+              "request": {
+                "auth": { "type": "bearer", "bearer": [{ "key": "token", "value": "{{agentToken}}", "type": "string" }] },
+                "method": "PATCH",
+                "header": [{ "key": "Content-Type", "value": "application/json" }],
+                "body": { "mode": "raw", "raw": "{\n  \"status\": \"IN_TRANSIT\"\n}" },
+                "url": { "raw": "{{baseUrl}}/agent/deliveries/{{order3AssignedId}}/status", "host": ["{{baseUrl}}"], "path": ["agent", "deliveries", "{{order3AssignedId}}", "status"] }
+              }
+            },
+            {
+              "name": "❌ Agent — Invalid Transition (IN_TRANSIT → DELIVERED)",
+              "event": [{ "listen": "test", "script": { "type": "text/javascript", "exec": [
+                "pm.test('Returns 400', () => pm.response.to.have.status(400));",
+                "pm.test('Message mentions verify-otp', () => { const r = pm.response.json(); pm.expect(r.message).to.include('verify-otp'); });"
+              ]}}],
+              "request": {
+                "auth": { "type": "bearer", "bearer": [{ "key": "token", "value": "{{agentToken}}", "type": "string" }] },
+                "method": "PATCH",
+                "header": [{ "key": "Content-Type", "value": "application/json" }],
+                "body": { "mode": "raw", "raw": "{\n  \"status\": \"DELIVERED\"\n}" },
+                "url": { "raw": "{{baseUrl}}/agent/deliveries/{{order3AssignedId}}/status", "host": ["{{baseUrl}}"], "path": ["agent", "deliveries", "{{order3AssignedId}}", "status"] }
+              }
+            },
+            {
+              "name": "Agent — Update Status → OUT_FOR_DELIVERY (OTP auto-generated)",
+              "event": [{ "listen": "test", "script": { "type": "text/javascript", "exec": [
+                "pm.test('Status 200', () => pm.response.to.have.status(200));",
+                "console.log('⚡ OTP should now be in customer notifications. Query DB: SELECT data->>otp FROM Notification WHERE userId=customerUserId ORDER BY createdAt DESC LIMIT 1');"
+              ]}}],
+              "request": {
+                "auth": { "type": "bearer", "bearer": [{ "key": "token", "value": "{{agentToken}}", "type": "string" }] },
+                "method": "PATCH",
+                "header": [{ "key": "Content-Type", "value": "application/json" }],
+                "body": { "mode": "raw", "raw": "{\n  \"status\": \"OUT_FOR_DELIVERY\"\n}" },
+                "url": { "raw": "{{baseUrl}}/agent/deliveries/{{order3AssignedId}}/status", "host": ["{{baseUrl}}"], "path": ["agent", "deliveries", "{{order3AssignedId}}", "status"] }
+              }
+            },
+            {
+              "name": "❌ Agent — Verify OTP — invalid (order 3)",
+              "event": [{ "listen": "test", "script": { "type": "text/javascript", "exec": [
+                "pm.test('Returns 400', () => pm.response.to.have.status(400));",
+                "pm.test('Invalid OTP message', () => { const r = pm.response.json(); pm.expect(r.message).to.include('Invalid OTP'); });"
+              ]}}],
+              "request": {
+                "auth": { "type": "bearer", "bearer": [{ "key": "token", "value": "{{agentToken}}", "type": "string" }] },
+                "method": "POST",
+                "header": [{ "key": "Content-Type", "value": "application/json" }],
+                "body": { "mode": "raw", "raw": "{\n  \"otp\": \"000000\"\n}" },
+                "url": { "raw": "{{baseUrl}}/agent/deliveries/{{order3AssignedId}}/verify-otp", "host": ["{{baseUrl}}"], "path": ["agent", "deliveries", "{{order3AssignedId}}", "verify-otp"] }
+              }
+            },
+            {
+              "name": "Agent — Verify OTP — SEED OTP for order 2 (482910)",
+              "event": [{ "listen": "test", "script": { "type": "text/javascript", "exec": [
+                "pm.test('Status 200', () => pm.response.to.have.status(200));",
+                "pm.test('Delivery confirmed', () => { const r = pm.response.json(); pm.expect(r.data.message).to.include('confirmed'); });"
+              ]}}],
+              "request": {
+                "auth": { "type": "bearer", "bearer": [{ "key": "token", "value": "{{agentToken}}", "type": "string" }] },
+                "method": "POST",
+                "header": [{ "key": "Content-Type", "value": "application/json" }],
+                "body": { "mode": "raw", "raw": "{\n  \"otp\": \"{{seedOtp}}\"\n}" },
+                "url": { "raw": "{{baseUrl}}/agent/deliveries/{{order2OtpId}}/verify-otp", "host": ["{{baseUrl}}"], "path": ["agent", "deliveries", "{{order2OtpId}}", "verify-otp"] }
+              }
+            },
+            {
+              "name": "❌ Agent — Verify OTP — 5-digit input (validation error)",
+              "event": [{ "listen": "test", "script": { "type": "text/javascript", "exec": [
+                "pm.test('Returns 400', () => pm.response.to.have.status(400));"
+              ]}}],
+              "request": {
+                "auth": { "type": "bearer", "bearer": [{ "key": "token", "value": "{{agentToken}}", "type": "string" }] },
+                "method": "POST",
+                "header": [{ "key": "Content-Type", "value": "application/json" }],
+                "body": { "mode": "raw", "raw": "{\n  \"otp\": \"12345\"\n}" },
+                "url": { "raw": "{{baseUrl}}/agent/deliveries/{{order3AssignedId}}/verify-otp", "host": ["{{baseUrl}}"], "path": ["agent", "deliveries", "{{order3AssignedId}}", "verify-otp"] }
+              }
+            },
+            {
+              "name": "Agent — Mark FAILED (need failureReason)",
+              "event": [{ "listen": "test", "script": { "type": "text/javascript", "exec": [
+                "pm.test('Requires failureReason — skip if not FAILED state', () => true);"
+              ]}}],
+              "request": {
+                "auth": { "type": "bearer", "bearer": [{ "key": "token", "value": "{{agentToken}}", "type": "string" }] },
+                "method": "PATCH",
+                "header": [{ "key": "Content-Type", "value": "application/json" }],
+                "body": { "mode": "raw", "raw": "{\n  \"status\": \"FAILED\",\n  \"failureReason\": \"Customer was not available at the address\"\n}" },
+                "url": { "raw": "{{baseUrl}}/agent/deliveries/{{order3AssignedId}}/status", "host": ["{{baseUrl}}"], "path": ["agent", "deliveries", "{{order3AssignedId}}", "status"] }
+              }
+            }
+          ]
+        },
+        {
+          "name": "── CUSTOMER: TRACKING ──",
+          "item": [
+            {
+              "name": "Customer — Track Delivery (order 2 — OUT_FOR_DELIVERY)",
+              "event": [{ "listen": "test", "script": { "type": "text/javascript", "exec": [
+                "pm.test('Status 200', () => pm.response.to.have.status(200));",
+                "pm.test('Has agent info', () => { const r = pm.response.json(); pm.expect(r.data).to.have.property('agent'); });",
+                "pm.test('Has location log', () => { const r = pm.response.json(); pm.expect(r.data).to.have.property('locationLog'); });"
+              ]}}],
+              "request": {
+                "auth": { "type": "bearer", "bearer": [{ "key": "token", "value": "{{customerToken}}", "type": "string" }] },
+                "method": "GET",
+                "url": { "raw": "{{baseUrl}}/orders/{{order2OtpId}}/tracking", "host": ["{{baseUrl}}"], "path": ["orders", "{{order2OtpId}}", "tracking"] }
+              }
+            },
+            {
+              "name": "Customer — Track Delivered Order (order 1)",
+              "request": {
+                "auth": { "type": "bearer", "bearer": [{ "key": "token", "value": "{{customerToken}}", "type": "string" }] },
+                "method": "GET",
+                "url": { "raw": "{{baseUrl}}/orders/{{order1DeliveredId}}/tracking", "host": ["{{baseUrl}}"], "path": ["orders", "{{order1DeliveredId}}", "tracking"] }
+              }
+            },
+            {
+              "name": "Customer — Track Third-Party Order (order 4 — awb visible)",
+              "request": {
+                "auth": { "type": "bearer", "bearer": [{ "key": "token", "value": "{{customerToken}}", "type": "string" }] },
+                "method": "GET",
+                "url": { "raw": "{{baseUrl}}/orders/{{order4ThirdPartyId}}/tracking", "host": ["{{baseUrl}}"], "path": ["orders", "{{order4ThirdPartyId}}", "tracking"] }
+              }
+            }
+          ]
+        },
+        {
+          "name": "── SECURITY CHECKS ──",
+          "item": [
+            {
+              "name": "❌ Customer → Agent Route (403)",
+              "event": [{ "listen": "test", "script": { "type": "text/javascript", "exec": [
+                "pm.test('Returns 403 Forbidden', () => pm.response.to.have.status(403));"
+              ]}}],
+              "request": {
+                "auth": { "type": "bearer", "bearer": [{ "key": "token", "value": "{{customerToken}}", "type": "string" }] },
+                "method": "GET",
+                "url": { "raw": "{{baseUrl}}/agent/profile", "host": ["{{baseUrl}}"], "path": ["agent", "profile"] }
+              }
+            },
+            {
+              "name": "❌ Agent → Admin Route (403)",
+              "event": [{ "listen": "test", "script": { "type": "text/javascript", "exec": [
+                "pm.test('Returns 403 Forbidden', () => pm.response.to.have.status(403));"
+              ]}}],
+              "request": {
+                "auth": { "type": "bearer", "bearer": [{ "key": "token", "value": "{{agentToken}}", "type": "string" }] },
+                "method": "GET",
+                "url": { "raw": "{{baseUrl}}/admin/agents", "host": ["{{baseUrl}}"], "path": ["admin", "agents"] }
+              }
+            },
+            {
+              "name": "❌ Customer → Other Customer's Order Tracking (404)",
+              "event": [{ "listen": "test", "script": { "type": "text/javascript", "exec": [
+                "pm.test('Returns 404 — not found, not 403', () => pm.response.to.have.status(404));"
+              ]}}],
+              "request": {
+                "auth": { "type": "bearer", "bearer": [{ "key": "token", "value": "{{customerToken}}", "type": "string" }] },
+                "method": "GET",
+                "url": { "raw": "{{baseUrl}}/orders/00000000-0000-0000-0000-000000000000/tracking", "host": ["{{baseUrl}}"], "path": ["orders", "00000000-0000-0000-0000-000000000000", "tracking"] }
+              }
+            },
+            {
+              "name": "❌ Unauthenticated → Protected Route (401)",
+              "event": [{ "listen": "test", "script": { "type": "text/javascript", "exec": [
+                "pm.test('Returns 401 Unauthorized', () => pm.response.to.have.status(401));"
+              ]}}],
+              "request": {
+                "method": "GET",
+                "url": { "raw": "{{baseUrl}}/orders", "host": ["{{baseUrl}}"], "path": ["orders"] }
+              }
+            }
+          ]
+        }
+      ]
+    }
+  ]
+}

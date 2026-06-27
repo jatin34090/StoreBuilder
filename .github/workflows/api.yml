@@ -111,6 +111,9 @@ jobs:
       - name: Lint
         run: pnpm --filter @jewellery/api lint
 
+      - name: Run unit tests
+        run: pnpm --filter @jewellery/api test -- --passWithNoTests
+
       - name: Run e2e tests
         run: pnpm --filter @jewellery/api test:e2e
 

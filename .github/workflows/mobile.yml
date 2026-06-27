@@ -2,6 +2,11 @@ name: Mobile — EAS Build
 
 on:
   push:
+    branches: [main, develop]
+    paths:
+      - 'apps/mobile/**'
+      - 'packages/**'
+  pull_request:
     branches: [main]
     paths:
       - 'apps/mobile/**'
@@ -10,10 +15,30 @@ on:
     types: [published]
 
 jobs:
+  check:
+    name: Lint & Type Check
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 10
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'pnpm'
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+      - name: Type check
+        run: pnpm --filter @jewellery/mobile typecheck
+      - name: Lint
+        run: pnpm --filter @jewellery/mobile lint
+
   build:
     name: EAS Build
     runs-on: ubuntu-latest
-    if: github.event_name == 'push'
+    needs: check
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
 
     steps:
       - uses: actions/checkout@v4

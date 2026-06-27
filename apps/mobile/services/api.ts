@@ -1,5 +1,4 @@
 import axios, { type AxiosError, type InternalAxiosRequestConfig } from 'axios';
-import * as SecureStore from 'expo-secure-store';
 import { useAuthStore } from '../store/authStore';
 
 const API_URL = process.env['EXPO_PUBLIC_API_URL'] ?? 'http://localhost:3001/api/v1';
@@ -7,10 +6,11 @@ const API_URL = process.env['EXPO_PUBLIC_API_URL'] ?? 'http://localhost:3001/api
 const api = axios.create({
   baseURL: API_URL,
   headers: { 'Content-Type': 'application/json' },
-  timeout: 10_000,
+  timeout: 15_000,
 });
 
-api.interceptors.request.use(async (config: InternalAxiosRequestConfig) => {
+// Attach the agent's bearer token to every request.
+api.interceptors.request.use((config: InternalAxiosRequestConfig) => {
   const token = useAuthStore.getState().accessToken;
   if (token) {
     config.headers['Authorization'] = `Bearer ${token}`;
@@ -18,60 +18,24 @@ api.interceptors.request.use(async (config: InternalAxiosRequestConfig) => {
   return config;
 });
 
-let isRefreshing = false;
-let refreshQueue: Array<(token: string | null) => void> = [];
-
+// The API's refresh token is an HttpOnly cookie the mobile client can't read,
+// so an expired/invalid access token (401) ends the session and the agent
+// re-authenticates via OTP. Auth endpoints are exempt so login errors surface
+// to the form instead of triggering a logout loop.
 api.interceptors.response.use(
   (response) => response,
   async (error: AxiosError) => {
-    const original = error.config as InternalAxiosRequestConfig & { _retry?: boolean };
-
-    if (error.response?.status === 401 && !original._retry) {
-      if (isRefreshing) {
-        return new Promise((resolve, reject) => {
-          refreshQueue.push((token) => {
-            if (token) {
-              original.headers['Authorization'] = `Bearer ${token}`;
-              resolve(api(original));
-            } else {
-              reject(error);
-            }
-          });
-        });
-      }
-
-      original._retry = true;
-      isRefreshing = true;
-
-      try {
-        const refreshToken = await SecureStore.getItemAsync('refresh_token');
-        if (!refreshToken) throw new Error('No refresh token');
-
-        const { data } = await axios.post<{ data: { accessToken: string } }>(
-          `${API_URL}/auth/refresh`,
-          {},
-          { headers: { Cookie: `refresh_token=${refreshToken}` } },
-        );
-
-        const newToken = data.data.accessToken;
-        useAuthStore.getState().setAccessToken(newToken);
-        refreshQueue.forEach((cb) => cb(newToken));
-        refreshQueue = [];
-        original.headers['Authorization'] = `Bearer ${newToken}`;
-        return api(original);
-      } catch {
-        await SecureStore.deleteItemAsync('refresh_token');
-        useAuthStore.getState().logout();
-        refreshQueue.forEach((cb) => cb(null));
-        refreshQueue = [];
-        return Promise.reject(error);
-      } finally {
-        isRefreshing = false;
+    const url = error.config?.url ?? '';
+    const isAuthCall = url.includes('/auth/');
+    if (error.response?.status === 401 && !isAuthCall) {
+      const { isAuthenticated, logout } = useAuthStore.getState();
+      if (isAuthenticated) {
+        await logout();
       }
     }
-
     return Promise.reject(error);
   },
 );
 
 export default api;
+export { API_URL };

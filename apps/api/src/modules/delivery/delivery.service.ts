@@ -441,6 +441,49 @@ export class DeliveryService {
     return { deliveries, pagination: { page, limit, total } };
   }
 
+  async agentGetDelivery(userId: string, orderId: string) {
+    const agent = await this.prisma.deliveryAgent.findUnique({
+      where: { userId },
+      select: { id: true },
+    });
+    if (!agent) throw new ForbiddenException('Delivery agent profile not found');
+
+    const delivery = await this.prisma.delivery.findUnique({
+      where: { orderId },
+      select: {
+        id:            true,
+        orderId:       true,
+        agentId:       true,
+        type:          true,
+        status:        true,
+        otpVerified:   true,
+        estimatedAt:   true,
+        deliveredAt:   true,
+        failureReason: true,
+        order: {
+          select: {
+            id:          true,
+            orderNumber: true,
+            status:      true,
+            total:       true,
+            subtotal:    true,
+            notes:       true,
+            address: {
+              select: { name: true, phone: true, line1: true, line2: true, city: true, state: true, pincode: true },
+            },
+            items: { select: { name: true, sku: true, quantity: true, price: true, image: true } },
+            payment: { select: { method: true, status: true } },
+          },
+        },
+      },
+    });
+    if (!delivery) throw new NotFoundException('Delivery not found');
+    if (delivery.agentId !== agent.id) {
+      throw new ForbiddenException('This delivery is not assigned to you');
+    }
+    return delivery;
+  }
+
   async agentUpdateStatus(
     userId: string,
     orderId: string,

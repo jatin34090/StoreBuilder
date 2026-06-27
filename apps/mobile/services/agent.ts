@@ -51,6 +51,9 @@ export const agentApi = {
     };
   },
 
+  getDelivery: (orderId: string) =>
+    unwrap<AgentDelivery>(api.get(`/agent/deliveries/${orderId}`)),
+
   updateStatus: (orderId: string, status: DeliveryStatus, failureReason?: string) =>
     unwrap<{ status?: DeliveryStatus; message?: string }>(
       api.patch(`/agent/deliveries/${orderId}/status`, { status, ...(failureReason ? { failureReason } : {}) }),

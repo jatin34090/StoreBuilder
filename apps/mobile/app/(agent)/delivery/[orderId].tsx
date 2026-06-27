@@ -1,20 +1,58 @@
-import { View, Text, StyleSheet, ScrollView, Pressable, Linking, ActivityIndicator, Image, RefreshControl, Platform } from 'react-native';
+import { useState } from 'react';
+import { View, Text, StyleSheet, ScrollView, Pressable, Linking, ActivityIndicator, Image, RefreshControl, Platform, Alert } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
-import { useQuery } from '@tanstack/react-query';
+import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { agentApi } from '../../../services/agent';
 import { StatusBadge } from '../../../components/StatusBadge';
+import { StatusActionBar } from '../../../components/StatusActionBar';
+import { FailureReasonModal } from '../../../components/FailureReasonModal';
 import { colors, spacing, radius } from '../../../constants/theme';
+import type { DeliveryStatus } from '../../../types/delivery';
 
 export default function DeliveryDetailScreen() {
   const { orderId } = useLocalSearchParams<{ orderId: string }>();
   const router = useRouter();
+  const queryClient = useQueryClient();
+  const [failOpen, setFailOpen] = useState(false);
 
   const { data: delivery, isLoading, isError, refetch, isRefetching } = useQuery({
     queryKey: ['agent', 'delivery', orderId],
     queryFn: () => agentApi.getDelivery(String(orderId)),
     enabled: !!orderId,
+  });
+
+  const invalidate = () => {
+    queryClient.invalidateQueries({ queryKey: ['agent', 'delivery', orderId] });
+    queryClient.invalidateQueries({ queryKey: ['agent', 'deliveries'] });
+    queryClient.invalidateQueries({ queryKey: ['agent', 'profile'] });
+  };
+
+  const advanceMutation = useMutation({
+    mutationFn: (next: DeliveryStatus) => agentApi.updateStatus(String(orderId), next),
+    onSuccess: (_res, next) => {
+      invalidate();
+      if (next === 'OUT_FOR_DELIVERY') {
+        Alert.alert('Out for delivery', 'A 6-digit OTP has been sent to the customer. Ask them for it on arrival to complete the delivery.');
+      }
+    },
+    onError: (err: unknown) => {
+      const msg = (err as { response?: { data?: { message?: string } } })?.response?.data?.message ?? 'Could not update status.';
+      Alert.alert('Update failed', msg);
+    },
+  });
+
+  const failMutation = useMutation({
+    mutationFn: (reason: string) => agentApi.updateStatus(String(orderId), 'FAILED', reason),
+    onSuccess: () => {
+      setFailOpen(false);
+      invalidate();
+    },
+    onError: (err: unknown) => {
+      const msg = (err as { response?: { data?: { message?: string } } })?.response?.data?.message ?? 'Could not mark as failed.';
+      Alert.alert('Error', msg);
+    },
   });
 
   const callCustomer = () => {
@@ -142,6 +180,23 @@ export default function DeliveryDetailScreen() {
           <View style={{ height: 20 }} />
         </ScrollView>
       )}
+
+      {delivery ? (
+        <StatusActionBar
+          status={delivery.status}
+          pending={advanceMutation.isPending}
+          onAdvance={(next) => advanceMutation.mutate(next)}
+          onVerifyOtp={() => router.push(`/(agent)/verify-otp/${delivery.orderId}`)}
+          onFail={() => setFailOpen(true)}
+        />
+      ) : null}
+
+      <FailureReasonModal
+        visible={failOpen}
+        pending={failMutation.isPending}
+        onClose={() => setFailOpen(false)}
+        onSubmit={(reason) => failMutation.mutate(reason)}
+      />
     </SafeAreaView>
   );
 }

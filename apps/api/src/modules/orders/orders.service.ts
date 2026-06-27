@@ -18,6 +18,8 @@ import type { AssignDeliveryDto } from './dto/assign-delivery.dto';
 import type { UpdateDeliveryStatusDto } from './dto/update-delivery-status.dto';
 import { CouponsService } from '../coupons/coupons.service';
 import { PaymentsService } from '../payments/payments.service';
+import { NotificationsService } from '../notifications/notifications.service';
+import { NotificationType } from '@jewellery/types';
 
 // ─── Constants ────────────────────────────────────────────────────────────────
 
@@ -79,6 +81,7 @@ export class OrdersService {
     private readonly prisma: PrismaService,
     private readonly coupons: CouponsService,
     @Inject(forwardRef(() => PaymentsService)) private readonly payments: PaymentsService,
+    private readonly notifications: NotificationsService,
   ) {}
 
   // ─── Customer: Place Order ─────────────────────────────────────────────────
@@ -503,6 +506,26 @@ export class OrdersService {
 
     this.emitOrderEvent('delivery:assigned', { orderId, agentId: dto.agentId });
     this.logger.log(`Delivery for order ${orderId} assigned to agent ${dto.agentId ?? 'third-party'}`);
+
+    // Notify the assigned agent of the new delivery (push + in-app).
+    if (dto.agentId) {
+      const agent = await this.prisma.deliveryAgent.findUnique({
+        where: { id: dto.agentId },
+        select: { userId: true },
+      });
+      const order = await this.prisma.order.findUnique({
+        where: { id: orderId },
+        select: { orderNumber: true, address: { select: { city: true, pincode: true } } },
+      });
+      if (agent?.userId && order) {
+        await this.notifications.notify(agent.userId, {
+          type: NotificationType.DELIVERY,
+          title: 'New Delivery Assigned',
+          body: `Order ${order.orderNumber} to ${order.address?.city ?? ''} ${order.address?.pincode ?? ''} has been assigned to you.`,
+          data: { orderId },
+        });
+      }
+    }
 
     return updated;
   }

@@ -83,6 +83,13 @@ export class NotificationsController {
     return this.notificationsService.markAsRead(user.id, id);
   }
 
+  @Patch('notifications/push-token')
+  @HttpCode(HttpStatus.OK)
+  @ApiOperation({ summary: 'Register/refresh the current user Expo push token' })
+  savePushToken(@CurrentUser() user: AuthUser, @Body('token') token: string) {
+    return this.notificationsService.savePushToken(user.id, token);
+  }
+
   // ─── Admin Routes ──────────────────────────────────────────────────────────
 
   @Post('admin/notifications')

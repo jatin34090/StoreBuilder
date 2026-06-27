@@ -7,6 +7,7 @@ import * as SplashScreen from 'expo-splash-screen';
 import * as Notifications from 'expo-notifications';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { useAuthStore } from '../store/authStore';
+import { registerForPushNotificationsAsync } from '../services/notifications';
 import { colors } from '../constants/theme';
 
 SplashScreen.preventAutoHideAsync().catch(() => {});
@@ -34,6 +35,13 @@ function AuthGate() {
   useEffect(() => {
     restoreSession().finally(() => SplashScreen.hideAsync().catch(() => {}));
   }, [restoreSession]);
+
+  // Register for push notifications once the agent is authenticated.
+  useEffect(() => {
+    if (isAuthenticated) {
+      registerForPushNotificationsAsync().catch(() => {});
+    }
+  }, [isAuthenticated]);
 
   useEffect(() => {
     if (!hydrated) return;

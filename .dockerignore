@@ -1,0 +1,27 @@
+# Keep build context small and avoid leaking local state into images.
+**/node_modules
+**/.next
+**/dist
+**/build
+**/.turbo
+**/.expo
+**/coverage
+**/*.tsbuildinfo
+
+# Local env & secrets — never copy into images.
+**/.env
+**/.env.*
+!**/.env.example
+
+# VCS / tooling
+.git
+.github
+.husky
+**/.DS_Store
+*.log
+npm-debug.log*
+
+# Tests & docs not needed at runtime
+**/*.spec.ts
+**/*.test.ts
+postman

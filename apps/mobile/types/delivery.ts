@@ -20,12 +20,15 @@ export interface DeliveryAddress {
   line1: string;
   line2?: string | null;
   city: string;
+  state?: string;
   pincode: string;
 }
 
 export interface DeliveryOrderItem {
   name: string;
+  sku?: string;
   quantity: number;
+  price?: number | string;
   image?: string | null;
 }
 
@@ -34,6 +37,7 @@ export interface DeliveryOrder {
   orderNumber: string;
   status: string;
   total: number | string;
+  subtotal?: number | string;
   address: DeliveryAddress;
   items: DeliveryOrderItem[];
   payment?: { method?: string; status?: string } | null;

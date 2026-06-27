@@ -191,6 +191,14 @@ export class DeliveryController {
     return this.deliveryService.agentListDeliveries(user.id, query);
   }
 
+  @Get('agent/deliveries/:orderId')
+  @Roles(Role.DELIVERY_AGENT)
+  @ApiOperation({ summary: 'Agent: get one assigned delivery with full order, payment and notes' })
+  @ApiParam({ name: 'orderId', description: 'Order UUID', format: 'uuid' })
+  agentGetDelivery(@CurrentUser() user: AuthUser, @Param('orderId') orderId: string) {
+    return this.deliveryService.agentGetDelivery(user.id, orderId);
+  }
+
   @Patch('agent/deliveries/:orderId/status')
   @Roles(Role.DELIVERY_AGENT)
   @HttpCode(HttpStatus.OK)

@@ -9,7 +9,8 @@ import { StatusBadge } from '../../../components/StatusBadge';
 import { StatusActionBar } from '../../../components/StatusActionBar';
 import { FailureReasonModal } from '../../../components/FailureReasonModal';
 import { colors, spacing, radius } from '../../../constants/theme';
-import type { DeliveryStatus } from '../../../types/delivery';
+import { ACTIVE_STATUSES, type DeliveryStatus } from '../../../types/delivery';
+import { useLocationTracking } from '../../../hooks/useLocationTracking';
 
 export default function DeliveryDetailScreen() {
   const { orderId } = useLocalSearchParams<{ orderId: string }>();
@@ -22,6 +23,11 @@ export default function DeliveryDetailScreen() {
     queryFn: () => agentApi.getDelivery(String(orderId)),
     enabled: !!orderId,
   });
+
+  // GPS tracking runs only while the delivery is in progress and stops on
+  // completion (DELIVERED/FAILED) or when leaving the screen.
+  const isActive = !!delivery && ACTIVE_STATUSES.includes(delivery.status);
+  const tracking = useLocationTracking(isActive);
 
   const invalidate = () => {
     queryClient.invalidateQueries({ queryKey: ['agent', 'delivery', orderId] });
@@ -108,6 +114,32 @@ export default function DeliveryDetailScreen() {
               <Text style={styles.eta}>ETA: {new Date(delivery.estimatedAt).toLocaleString()}</Text>
             ) : null}
           </View>
+
+          {/* GPS tracking banner */}
+          {isActive ? (
+            tracking.permission === 'denied' ? (
+              <View style={[styles.trackBanner, { backgroundColor: '#FEE2E2' }]}>
+                <Ionicons name="location-outline" size={18} color={colors.danger} />
+                <Text style={[styles.trackText, { color: '#B91C1C' }]}>
+                  Location permission denied — enable it to share your live position.
+                </Text>
+              </View>
+            ) : tracking.permission === 'disabled' ? (
+              <View style={[styles.trackBanner, { backgroundColor: '#FEF3C7' }]}>
+                <Ionicons name="warning-outline" size={18} color={colors.warning} />
+                <Text style={[styles.trackText, { color: '#B45309' }]}>
+                  Location services are off. Turn on GPS to share your position.
+                </Text>
+              </View>
+            ) : (
+              <View style={[styles.trackBanner, { backgroundColor: '#D1FAE5' }]}>
+                <Ionicons name="navigate-circle" size={18} color={colors.success} />
+                <Text style={[styles.trackText, { color: '#047857' }]}>
+                  Live location sharing on · updates every 30s
+                </Text>
+              </View>
+            )
+          ) : null}
 
           {/* Quick actions */}
           <View style={styles.actionRow}>
@@ -229,6 +261,8 @@ const styles = StyleSheet.create({
   orderNo: { color: colors.white, fontSize: 16, fontWeight: '800' },
   amount: { color: colors.gold, fontSize: 28, fontWeight: '800' },
   eta: { color: '#E9D5FF', fontSize: 13, marginTop: 6 },
+  trackBanner: { flexDirection: 'row', alignItems: 'center', gap: 8, padding: spacing.md, borderRadius: radius.md, marginBottom: spacing.lg },
+  trackText: { flex: 1, fontSize: 13, fontWeight: '600' },
   actionRow: { flexDirection: 'row', gap: spacing.md, marginBottom: spacing.lg },
   actionBtn: { flex: 1, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8, backgroundColor: colors.surface, borderRadius: radius.md, paddingVertical: 14, borderWidth: 1.5, borderColor: colors.primary },
   actionText: { color: colors.primary, fontWeight: '700', fontSize: 15 },

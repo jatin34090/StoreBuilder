@@ -35,9 +35,9 @@ export async function registerForPushNotificationsAsync(): Promise<string | null
     projectId: process.env['EXPO_PUBLIC_EAS_PROJECT_ID'],
   });
 
-  // Send token to server
+  // Register the token with the backend so it can target this device.
   try {
-    await api.post('/users/me/push-token', { token: tokenData.data });
+    await api.patch('/notifications/push-token', { token: tokenData.data });
   } catch (error) {
     console.error('Failed to register push token:', error);
   }

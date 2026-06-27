@@ -185,6 +185,14 @@ export class NotificationsService {
     return { sent: userIds.length };
   }
 
+  async savePushToken(userId: string, token: string): Promise<{ success: boolean }> {
+    await this.prisma.user.update({
+      where: { id: userId },
+      data: { expoPushToken: token ?? null },
+    });
+    return { success: true };
+  }
+
   // ─── Core: notify() — used by all other modules ───────────────────────────
 
   /**

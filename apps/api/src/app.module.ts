@@ -5,6 +5,7 @@ import { APP_GUARD } from '@nestjs/core';
 import { configValidationSchema } from './config/config.schema';
 import { PrismaModule } from './prisma/prisma.module';
 import { AuthModule } from './modules/auth/auth.module';
+import { HealthModule } from './modules/health/health.module';
 import { UsersModule } from './modules/users/users.module';
 import { CategoriesModule } from './modules/categories/categories.module';
 import { ProductsModule } from './modules/products/products.module';
@@ -37,6 +38,7 @@ import { RolesGuard } from './common/guards/roles.guard';
 
     PrismaModule,
     AuthModule,
+    HealthModule,
     UsersModule,
     CategoriesModule,
     ProductsModule,

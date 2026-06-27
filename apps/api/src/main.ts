@@ -7,8 +7,11 @@ import helmet from 'helmet';
 import { AppModule } from './app.module';
 import { AllExceptionsFilter } from './common/filters/all-exceptions.filter';
 import { ResponseInterceptor } from './common/interceptors/response.interceptor';
+import { initErrorTracking } from './common/monitoring/error-tracker';
 
 async function bootstrap() {
+  // Initialise optional error tracking (Sentry) before the app starts.
+  initErrorTracking();
   const app = await NestFactory.create(AppModule, {
     logger: ['error', 'warn', 'log', 'debug'],
     // Required for Razorpay webhook HMAC verification — stores raw body at req.rawBody

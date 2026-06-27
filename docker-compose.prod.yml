@@ -1,0 +1,96 @@
+# Production-style stack: API + Web + Redis + Typesense.
+# Postgres is managed externally (Neon) — set DATABASE_URL/DIRECT_URL in .env.production.
+#
+#   docker compose -f docker-compose.prod.yml --env-file .env.production up -d --build
+#
+services:
+  api:
+    build:
+      context: .
+      dockerfile: apps/api/Dockerfile
+    image: jewellery-api:latest
+    container_name: jewellery_api
+    restart: unless-stopped
+    env_file: .env.production
+    environment:
+      NODE_ENV: production
+      PORT: 3001
+      REDIS_URL: redis://default:${REDIS_PASSWORD}@redis:6379
+      TYPESENSE_HOST: typesense
+      TYPESENSE_PORT: '8108'
+      TYPESENSE_PROTOCOL: http
+    depends_on:
+      redis:
+        condition: service_healthy
+      typesense:
+        condition: service_healthy
+    ports:
+      - '3001:3001'
+    healthcheck:
+      test: ['CMD', 'node', '-e', "fetch('http://127.0.0.1:3001/api/v1/health/ready').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 40s
+    networks: [jewellery]
+
+  web:
+    build:
+      context: .
+      dockerfile: apps/web/Dockerfile
+      args:
+        NEXT_PUBLIC_API_URL: ${NEXT_PUBLIC_API_URL}
+        NEXT_PUBLIC_WEB_URL: ${NEXT_PUBLIC_WEB_URL}
+        NEXT_PUBLIC_RAZORPAY_KEY_ID: ${NEXT_PUBLIC_RAZORPAY_KEY_ID}
+        NEXT_PUBLIC_CLOUDINARY_CLOUD_NAME: ${NEXT_PUBLIC_CLOUDINARY_CLOUD_NAME}
+    image: jewellery-web:latest
+    container_name: jewellery_web
+    restart: unless-stopped
+    depends_on:
+      api:
+        condition: service_healthy
+    ports:
+      - '3000:3000'
+    healthcheck:
+      test: ['CMD', 'node', '-e', "fetch('http://127.0.0.1:3000').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 30s
+    networks: [jewellery]
+
+  redis:
+    image: redis:7-alpine
+    container_name: jewellery_redis
+    restart: unless-stopped
+    command: ['redis-server', '--requirepass', '${REDIS_PASSWORD}', '--appendonly', 'yes']
+    volumes:
+      - redis_data:/data
+    healthcheck:
+      test: ['CMD', 'redis-cli', '-a', '${REDIS_PASSWORD}', 'ping']
+      interval: 10s
+      timeout: 3s
+      retries: 5
+    networks: [jewellery]
+
+  typesense:
+    image: typesense/typesense:0.25.2
+    container_name: jewellery_typesense
+    restart: unless-stopped
+    command: ['--data-dir', '/data', '--api-key', '${TYPESENSE_API_KEY}', '--enable-cors']
+    volumes:
+      - typesense_data:/data
+    healthcheck:
+      test: ['CMD-SHELL', "curl -sf http://localhost:8108/health || exit 1"]
+      interval: 15s
+      timeout: 5s
+      retries: 5
+    networks: [jewellery]
+
+volumes:
+  redis_data:
+  typesense_data:
+
+networks:
+  jewellery:
+    driver: bridge

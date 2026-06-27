@@ -47,8 +47,9 @@ export default function AgentLayout() {
           tabBarIcon: ({ color, size }) => <Ionicons name="person-outline" color={color} size={size} />,
         }}
       />
-      {/* Delivery detail is a stack-style route hidden from the tab bar. */}
+      {/* Stack-style routes hidden from the tab bar. */}
       <Tabs.Screen name="delivery/[orderId]" options={{ href: null }} />
+      <Tabs.Screen name="verify-otp/[orderId]" options={{ href: null }} />
     </Tabs>
   );
 }

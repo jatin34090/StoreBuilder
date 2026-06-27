@@ -44,9 +44,9 @@ function CategoryNode({
           )}
         </button>
         <span className="flex-1 text-sm font-medium text-slate-800">{category.name}</span>
-        {category.productCount > 0 && (
+        {(category._count?.products ?? 0) > 0 && (
           <Badge variant="outline" className="text-xs text-slate-500">
-            {category.productCount}
+            {category._count?.products}
           </Badge>
         )}
         {!category.isActive && (

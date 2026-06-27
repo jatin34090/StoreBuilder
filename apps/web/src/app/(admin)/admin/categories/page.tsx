@@ -57,7 +57,7 @@ export default function AdminCategoriesPage() {
     queryFn: () => adminApi.categories.list(),
   });
 
-  const categories: AdminCategory[] = categoriesData?.data ?? [];
+  const categories: AdminCategory[] = categoriesData?.items ?? [];
 
   const {
     register,
@@ -129,9 +129,10 @@ export default function AdminCategoriesPage() {
   const showForm = isCreating || !!editTarget;
 
   function onSubmit(values: CategoryFormValues) {
+    // The API derives the slug from the name; sending it is rejected by the
+    // DTO whitelist, so it is intentionally omitted from the payload.
     const payload = {
       name: values.name,
-      slug: values.slug,
       ...(values.parentId ? { parentId: values.parentId } : {}),
       sortOrder: values.sortOrder,
       ...(values.description ? { description: values.description } : {}),
@@ -302,10 +303,10 @@ export default function AdminCategoriesPage() {
                   Deleting it may affect those categories.
                 </p>
               )}
-              {deleteTarget.productCount > 0 && (
+              {(deleteTarget._count?.products ?? 0) > 0 && (
                 <p className="text-amber-600 bg-amber-50 rounded p-2">
-                  Warning: This category contains {deleteTarget.productCount} product
-                  {deleteTarget.productCount === 1 ? '' : 's'}.
+                  Warning: This category contains {deleteTarget._count?.products} product
+                  {deleteTarget._count?.products === 1 ? '' : 's'}.
                 </p>
               )}
             </div>

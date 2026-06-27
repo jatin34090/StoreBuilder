@@ -47,8 +47,8 @@ export default function AdminOrdersPage() {
     limit: 10,
     ...(statusTab !== 'ALL' ? { status: statusTab } : {}),
     ...(debouncedSearch ? { search: debouncedSearch } : {}),
-    ...(fromDate ? { fromDate } : {}),
-    ...(toDate ? { toDate } : {}),
+    ...(fromDate ? { from: new Date(fromDate).toISOString() } : {}),
+    ...(toDate ? { to: new Date(toDate).toISOString() } : {}),
   };
 
   const { data, isLoading, isError, refetch } = useQuery({
@@ -56,8 +56,8 @@ export default function AdminOrdersPage() {
     queryFn: () => adminApi.orders.list(params),
   });
 
-  const orders = data?.data?.data ?? [];
-  const total = data?.data?.total ?? 0;
+  const orders = data?.items ?? [];
+  const total = data?.total ?? 0;
 
   const columns: Column<AdminOrder>[] = [
     {
@@ -88,13 +88,15 @@ export default function AdminOrdersPage() {
       key: 'total',
       header: 'Total',
       render: (row) => (
-        <span className="text-sm font-semibold">₹{row.total.toLocaleString('en-IN')}</span>
+        <span className="text-sm font-semibold">₹{Number(row.total ?? 0).toLocaleString('en-IN')}</span>
       ),
     },
     {
       key: 'paymentMethod',
       header: 'Payment',
-      render: (row) => <span className="text-xs text-slate-600">{row.paymentMethod}</span>,
+      render: (row) => (
+        <span className="text-xs text-slate-600">{row.payment?.method ?? row.payment?.status ?? '—'}</span>
+      ),
     },
     {
       key: 'status',

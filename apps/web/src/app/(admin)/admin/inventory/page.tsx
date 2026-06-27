@@ -10,8 +10,22 @@ import { Badge } from '../../../../components/ui/badge';
 import { Card, CardContent, CardHeader, CardTitle } from '../../../../components/ui/card';
 import { PageHeader } from '../../../../components/admin/PageHeader';
 import { TableSkeleton } from '../../../../components/admin/LoadingSkeleton';
-import { adminInventoryApi, type InventoryItem } from '../../../../lib/admin-api';
+import { adminInventoryApi, type InventoryItem, type InventoryVariant } from '../../../../lib/admin-api';
 import { useDebounce } from '../../../../hooks/useDebounce';
+
+function toItem(v: InventoryVariant): InventoryItem {
+  return {
+    variantId: v.id,
+    productId: v.product?.id ?? '',
+    productName: v.product?.name ?? 'Unknown product',
+    sku: v.sku,
+    size: v.size ?? undefined,
+    color: v.color ?? undefined,
+    stock: v.stock,
+    price: Number(v.price ?? 0),
+    image: v.product?.images?.[0]?.url,
+  };
+}
 
 export default function InventoryPage() {
   const queryClient = useQueryClient();
@@ -24,38 +38,33 @@ export default function InventoryPage() {
 
   const { data: inventoryData, isLoading, isError, refetch } = useQuery({
     queryKey: ['admin', 'inventory', debouncedSearch, page],
-    queryFn: async () => {
-      const res = await adminInventoryApi.list({
+    queryFn: () =>
+      adminInventoryApi.list({
         search: debouncedSearch || undefined,
         page,
         limit: 20,
-      });
-      return res.data;
-    },
+      }),
     enabled: !showLowStock,
   });
 
   const { data: lowStockData, isLoading: lowStockLoading } = useQuery({
     queryKey: ['admin', 'inventory', 'low-stock'],
-    queryFn: async () => {
-      const res = await adminInventoryApi.lowStock({ threshold: 5 });
-      return res.data;
-    },
+    queryFn: () => adminInventoryApi.lowStock({ threshold: 5 }),
   });
 
   const items: InventoryItem[] = showLowStock
-    ? (Array.isArray(lowStockData) ? (lowStockData as InventoryItem[]) : [])
-    : ((inventoryData as { items?: InventoryItem[]; data?: InventoryItem[] } | undefined)?.items ??
-       (inventoryData as { items?: InventoryItem[]; data?: InventoryItem[] } | undefined)?.data ??
-       (Array.isArray(inventoryData) ? (inventoryData as InventoryItem[]) : []));
+    ? (lowStockData?.items ?? []).map(toItem)
+    : (inventoryData?.items ?? []).map(toItem);
 
-  const total: number = (inventoryData as { total?: number } | undefined)?.total ?? items.length;
-  const lowStockCount = Array.isArray(lowStockData) ? (lowStockData as InventoryItem[]).length : 0;
+  const total: number = showLowStock
+    ? (lowStockData?.total ?? items.length)
+    : (inventoryData?.total ?? items.length);
+  const lowStockCount = lowStockData?.total ?? lowStockData?.items?.length ?? 0;
   const totalPages = Math.ceil(total / 20);
 
   const updateMutation = useMutation({
-    mutationFn: ({ variantId, stock }: { variantId: string; stock: number }) =>
-      adminInventoryApi.update(variantId, stock),
+    mutationFn: ({ variantId, stock, currentStock }: { variantId: string; stock: number; currentStock: number }) =>
+      adminInventoryApi.update(variantId, stock, currentStock),
     onSuccess: () => {
       toast.success('Stock updated successfully');
       queryClient.invalidateQueries({ queryKey: ['admin', 'inventory'] });
@@ -69,13 +78,17 @@ export default function InventoryPage() {
     setEditStock(String(item.stock));
   };
 
-  const handleEditSave = (variantId: string) => {
+  const handleEditSave = (variantId: string, currentStock: number) => {
     const stock = parseInt(editStock);
     if (isNaN(stock) || stock < 0) {
       toast.error('Stock must be a non-negative number');
       return;
     }
-    updateMutation.mutate({ variantId, stock });
+    if (stock === currentStock) {
+      setEditingId(null);
+      return;
+    }
+    updateMutation.mutate({ variantId, stock, currentStock });
   };
 
   return (
@@ -216,7 +229,7 @@ export default function InventoryPage() {
                             min="0"
                             autoFocus
                           />
-                          <Button size="sm" className="h-7 w-7 p-0 bg-green-600 hover:bg-green-700" onClick={() => handleEditSave(item.variantId)} disabled={updateMutation.isPending}>
+                          <Button size="sm" className="h-7 w-7 p-0 bg-green-600 hover:bg-green-700" onClick={() => handleEditSave(item.variantId, item.stock)} disabled={updateMutation.isPending}>
                             <Check className="w-3.5 h-3.5" />
                           </Button>
                           <Button size="sm" variant="outline" className="h-7 w-7 p-0" onClick={() => setEditingId(null)}>

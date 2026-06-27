@@ -42,21 +42,17 @@ export default function ReviewsPage() {
 
   const { data, isLoading, isError, refetch } = useQuery({
     queryKey: ['admin', 'reviews', ratingFilter, visibilityFilter, page],
-    queryFn: async () => {
-      const res = await adminReviewsApi.list({
+    queryFn: () =>
+      adminReviewsApi.list({
         rating: ratingFilter || undefined,
         isVisible: visibilityFilter !== '' ? visibilityFilter === 'true' : undefined,
         page,
         limit: 15,
-      });
-      return res.data;
-    },
+      }),
   });
 
-  const reviews: AdminReview[] = (data as { items?: AdminReview[]; data?: AdminReview[] } | undefined)?.items ??
-    (data as { items?: AdminReview[]; data?: AdminReview[] } | undefined)?.data ??
-    (Array.isArray(data) ? (data as AdminReview[]) : []);
-  const total: number = (data as { total?: number } | undefined)?.total ?? reviews.length;
+  const reviews: AdminReview[] = data?.items ?? [];
+  const total: number = data?.total ?? reviews.length;
   const totalPages = Math.ceil(total / 15);
 
   const visibilityMutation = useMutation({

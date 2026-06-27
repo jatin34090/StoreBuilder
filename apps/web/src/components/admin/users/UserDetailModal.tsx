@@ -78,14 +78,14 @@ export function UserDetailModal({ user, onClose }: UserDetailModalProps) {
 
           <div className="grid grid-cols-2 gap-3">
             <div className="bg-slate-50 rounded-lg p-3 text-center">
-              <p className="text-2xl font-bold text-slate-900">{user.totalOrders}</p>
+              <p className="text-2xl font-bold text-slate-900">{user._count?.orders ?? 0}</p>
               <p className="text-xs text-slate-500">Total Orders</p>
             </div>
             <div className="bg-slate-50 rounded-lg p-3 text-center">
               <p className="text-2xl font-bold text-slate-900">
-                ₹{user.totalSpent.toLocaleString('en-IN')}
+                {user.isVerified ? 'Yes' : 'No'}
               </p>
-              <p className="text-xs text-slate-500">Total Spent</p>
+              <p className="text-xs text-slate-500">Verified</p>
             </div>
           </div>
 

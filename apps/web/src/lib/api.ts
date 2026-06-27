@@ -8,6 +8,26 @@ export const api = axios.create({
   headers: { 'Content-Type': 'application/json' },
 });
 
+// ─── Attach admin bearer token on every request ──────────────────────────────
+// The admin dashboard authenticates with a JWT stored in localStorage (Zustand
+// persist). Reading it per-request guarantees the header is present even before
+// the store's rehydration callback has run, eliminating an auth-timing race.
+api.interceptors.request.use((config) => {
+  if (typeof window !== 'undefined') {
+    try {
+      const raw = window.localStorage.getItem('jewellery-admin-auth');
+      const token = raw ? JSON.parse(raw)?.state?.adminToken : null;
+      if (token) {
+        config.headers = config.headers ?? {};
+        (config.headers as Record<string, string>)['Authorization'] = `Bearer ${token}`;
+      }
+    } catch {
+      /* ignore malformed persisted state */
+    }
+  }
+  return config;
+});
+
 // ─── Silent token refresh on 401 ─────────────────────────────────────────────
 
 let isRefreshing = false;

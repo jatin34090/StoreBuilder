@@ -53,14 +53,12 @@ export default function AdminProductsPage() {
 
   const debouncedSearch = useDebounce(search, 300);
 
+  // The admin products list API only supports page/limit/category server-side,
+  // so search, status and sort are applied client-side over the fetched page.
   const params: Record<string, unknown> = {
     page,
     limit: 10,
-    ...(debouncedSearch ? { search: debouncedSearch } : {}),
-    ...(statusFilter !== 'ALL' ? { isActive: statusFilter === 'ACTIVE' } : {}),
-    ...(categoryFilter !== 'ALL' ? { categoryId: categoryFilter } : {}),
-    sortBy,
-    sortOrder,
+    ...(categoryFilter !== 'ALL' ? { category: categoryFilter } : {}),
   };
 
   const { data, isLoading, isError, refetch } = useQuery({
@@ -73,9 +71,25 @@ export default function AdminProductsPage() {
     queryFn: () => adminApi.categories.list(),
   });
 
-  const categories = categoriesData?.data ?? [];
-  const products = data?.data?.data ?? [];
-  const total = data?.data?.total ?? 0;
+  const categories = categoriesData?.items ?? [];
+  const total = data?.total ?? 0;
+
+  const products = (data?.items ?? [])
+    .filter((p) =>
+      debouncedSearch
+        ? p.name.toLowerCase().includes(debouncedSearch.toLowerCase()) ||
+          p.slug.toLowerCase().includes(debouncedSearch.toLowerCase())
+        : true,
+    )
+    .filter((p) =>
+      statusFilter === 'ALL' ? true : statusFilter === 'ACTIVE' ? p.isActive : !p.isActive,
+    )
+    .sort((a, b) => {
+      const dir = sortOrder === 'asc' ? 1 : -1;
+      if (sortBy === 'price') return (Number(a.basePrice) - Number(b.basePrice)) * dir;
+      if (sortBy === 'name') return a.name.localeCompare(b.name) * dir;
+      return (new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime()) * dir;
+    });
 
   const deleteMutation = useMutation({
     mutationFn: (id: string) => adminApi.products.delete(id),
@@ -154,7 +168,7 @@ export default function AdminProductsPage() {
       header: 'Base Price',
       render: (row) => (
         <button className="text-sm font-medium" onClick={() => toggleSort('price')}>
-          ₹{row.basePrice.toLocaleString('en-IN')}
+          ₹{Number(row.basePrice ?? 0).toLocaleString('en-IN')}
           <SortIcon col="price" />
         </button>
       ),
@@ -163,8 +177,8 @@ export default function AdminProductsPage() {
       key: 'discountPct',
       header: 'Discount',
       render: (row) => {
-        if (!row.discountedPrice) return <span className="text-slate-400">—</span>;
-        const pct = Math.round((1 - row.discountedPrice / row.basePrice) * 100);
+        const pct = row.discountPct ?? 0;
+        if (!pct) return <span className="text-slate-400">—</span>;
         return <span className="text-sm text-green-600">{pct}%</span>;
       },
     },

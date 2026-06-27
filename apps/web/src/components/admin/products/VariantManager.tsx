@@ -191,7 +191,7 @@ export function VariantManager({ productId, variants }: VariantManagerProps) {
                 sku: variant.sku,
                 size: variant.size,
                 color: variant.color,
-                price: variant.price,
+                price: Number(variant.price ?? 0),
                 stock: variant.stock,
                 isActive: variant.isActive,
               }}

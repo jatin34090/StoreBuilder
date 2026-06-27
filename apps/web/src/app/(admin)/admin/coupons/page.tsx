@@ -25,9 +25,9 @@ import { adminCouponsApi, type AdminCoupon } from '../../../../lib/admin-api';
 
 const couponSchema = z.object({
   code: z.string().min(3).max(32).toUpperCase(),
-  type: z.enum(['PERCENT', 'FIXED']),
+  type: z.enum(['PERCENT', 'FLAT']),
   value: z.coerce.number().min(1),
-  minOrderValue: z.coerce.number().min(0).default(0),
+  minOrderAmount: z.coerce.number().min(0).default(0),
   maxDiscount: z.coerce.number().min(0).optional(),
   usageLimit: z.coerce.number().min(1).optional(),
   expiresAt: z.string().optional(),
@@ -42,13 +42,10 @@ export default function CouponsPage() {
 
   const { data, isLoading, isError, refetch } = useQuery({
     queryKey: ['admin', 'coupons'],
-    queryFn: async () => {
-      const res = await adminCouponsApi.list();
-      return res.data;
-    },
+    queryFn: () => adminCouponsApi.list(),
   });
 
-  const coupons: AdminCoupon[] = Array.isArray(data) ? (data as AdminCoupon[]) : [];
+  const coupons: AdminCoupon[] = data?.items ?? [];
 
   const {
     register,
@@ -59,7 +56,7 @@ export default function CouponsPage() {
     formState: { errors },
   } = useForm<CouponFormData>({
     resolver: zodResolver(couponSchema),
-    defaultValues: { type: 'PERCENT', isActive: true, minOrderValue: 0 },
+    defaultValues: { type: 'PERCENT', isActive: true, minOrderAmount: 0 },
   });
 
   const createMutation = useMutation({
@@ -98,7 +95,7 @@ export default function CouponsPage() {
 
   const openCreate = () => {
     setEditCoupon(null);
-    reset({ type: 'PERCENT', isActive: true, minOrderValue: 0 });
+    reset({ type: 'PERCENT', isActive: true, minOrderAmount: 0 });
     setModalOpen(true);
   };
 
@@ -106,11 +103,11 @@ export default function CouponsPage() {
     setEditCoupon(coupon);
     reset({
       code: coupon.code,
-      type: (coupon.type === 'PERCENTAGE' ? 'PERCENT' : coupon.type) as 'PERCENT' | 'FIXED',
-      value: coupon.value,
-      minOrderValue: coupon.minOrderValue,
-      maxDiscount: coupon.maxDiscount,
-      usageLimit: coupon.usageLimit,
+      type: (String(coupon.type).includes('PERCENT') ? 'PERCENT' : 'FLAT') as 'PERCENT' | 'FLAT',
+      value: Number(coupon.value ?? 0),
+      minOrderAmount: Number(coupon.minOrderAmount ?? 0),
+      maxDiscount: coupon.maxDiscount != null ? Number(coupon.maxDiscount) : undefined,
+      usageLimit: coupon.usageLimit ?? undefined,
       expiresAt: coupon.expiresAt ? coupon.expiresAt.slice(0, 10) : undefined,
       isActive: coupon.isActive,
     });
@@ -192,7 +189,7 @@ export default function CouponsPage() {
                       <td className="px-4 py-3 font-semibold text-slate-800">
                         {String(coupon.type).includes('PERCENT') ? `${coupon.value}%` : `₹${coupon.value}`}
                       </td>
-                      <td className="px-4 py-3 text-slate-600">₹{coupon.minOrderValue}</td>
+                      <td className="px-4 py-3 text-slate-600">₹{coupon.minOrderAmount}</td>
                       <td className="px-4 py-3 text-slate-600">
                         {coupon.usedCount ?? 0} / {coupon.usageLimit ?? '∞'}
                       </td>
@@ -260,7 +257,7 @@ export default function CouponsPage() {
                   className="mt-1 w-full h-9 px-3 border border-slate-200 rounded-md text-sm focus:outline-none focus:ring-2 focus:ring-purple-500/20"
                 >
                   <option value="PERCENT">Percentage (%)</option>
-                  <option value="FIXED">Fixed Amount (₹)</option>
+                  <option value="FLAT">Fixed Amount (₹)</option>
                 </select>
               </div>
               <div>
@@ -270,7 +267,7 @@ export default function CouponsPage() {
               </div>
               <div>
                 <Label>Min Order Value (₹)</Label>
-                <Input type="number" {...register('minOrderValue')} placeholder="0" className="mt-1" min="0" />
+                <Input type="number" {...register('minOrderAmount')} placeholder="0" className="mt-1" min="0" />
               </div>
               {couponType === 'PERCENT' && (
                 <div>

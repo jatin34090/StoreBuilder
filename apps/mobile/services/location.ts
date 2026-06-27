@@ -1,66 +1,75 @@
 import * as Location from 'expo-location';
-import * as TaskManager from 'expo-task-manager';
-import { io } from 'socket.io-client';
+import { agentApi } from './agent';
 
-const TASK_NAME = 'AGENT_LOCATION';
-const API_URL = process.env['EXPO_PUBLIC_API_URL'] ?? 'http://localhost:3001';
-const SOCKET_URL = API_URL.replace('/api/v1', '');
+export type LocationPermission = 'granted' | 'denied' | 'disabled';
 
-let activeDeliveryId: string | null = null;
-let socket: ReturnType<typeof io> | null = null;
+/** How often to push a fix to the backend while a delivery is active. */
+export const LOCATION_INTERVAL_MS = 30_000;
 
-TaskManager.defineTask(TASK_NAME, ({ data, error }: TaskManager.TaskManagerTaskBody<{ locations: Location.LocationObject[] }>) => {
-  if (error) {
-    console.error('Location task error:', error);
-    return;
-  }
+/**
+ * Ensure foreground location permission is granted and the device's location
+ * services are enabled. Returns a discriminated status the UI can act on.
+ */
+export async function ensureLocationPermission(): Promise<LocationPermission> {
+  const servicesEnabled = await Location.hasServicesEnabledAsync();
+  if (!servicesEnabled) return 'disabled';
 
-  const location = data.locations[0];
-  if (!location || !activeDeliveryId || !socket?.connected) return;
-
-  socket.emit('delivery:location', {
-    deliveryId: activeDeliveryId,
-    lat: location.coords.latitude,
-    lng: location.coords.longitude,
-    timestamp: Date.now(),
-  });
-});
-
-export async function startLocationTracking(deliveryId: string, authToken: string): Promise<void> {
-  const { status } = await Location.requestBackgroundPermissionsAsync();
-  if (status !== 'granted') {
-    throw new Error('Background location permission not granted');
-  }
-
-  activeDeliveryId = deliveryId;
-
-  // Connect socket for GPS streaming
-  socket = io(SOCKET_URL, {
-    auth: { token: authToken },
-    transports: ['websocket'],
-  });
-
-  await Location.startLocationUpdatesAsync(TASK_NAME, {
-    accuracy: Location.Accuracy.Balanced,
-    timeInterval: 30_000,    // 30 seconds
-    distanceInterval: 50,    // or every 50 meters
-    foregroundService: {
-      notificationTitle: 'Delivery Active',
-      notificationBody: 'Tracking your location for delivery',
-      notificationColor: '#4A0E8F',
-    },
-    pausesUpdatesAutomatically: false,
-  });
+  const { status } = await Location.requestForegroundPermissionsAsync();
+  return status === 'granted' ? 'granted' : 'denied';
 }
 
-export async function stopLocationTracking(): Promise<void> {
-  activeDeliveryId = null;
+/**
+ * Foreground GPS tracker: pushes the agent's position to the backend every
+ * LOCATION_INTERVAL_MS while running. REST-based (PATCH /agent/location), which
+ * the API records on the agent and appends to the active delivery's locationLog.
+ */
+export class LocationTracker {
+  private subscription: Location.LocationSubscription | null = null;
+  private running = false;
 
-  const isRegistered = await TaskManager.isTaskRegisteredAsync(TASK_NAME);
-  if (isRegistered) {
-    await Location.stopLocationUpdatesAsync(TASK_NAME);
+  isRunning() {
+    return this.running;
   }
 
-  socket?.disconnect();
-  socket = null;
+  async start(onError?: (message: string) => void): Promise<LocationPermission> {
+    const permission = await ensureLocationPermission();
+    if (permission !== 'granted') return permission;
+    if (this.running) return 'granted';
+    this.running = true;
+
+    const push = async (loc: Location.LocationObject) => {
+      try {
+        await agentApi.updateLocation(loc.coords.latitude, loc.coords.longitude);
+      } catch {
+        onError?.('Failed to send location update.');
+      }
+    };
+
+    // Immediate first fix, then a watcher throttled to the interval.
+    try {
+      const current = await Location.getCurrentPositionAsync({ accuracy: Location.Accuracy.Balanced });
+      await push(current);
+    } catch {
+      onError?.('Could not get current location.');
+    }
+
+    this.subscription = await Location.watchPositionAsync(
+      {
+        accuracy: Location.Accuracy.Balanced,
+        timeInterval: LOCATION_INTERVAL_MS,
+        distanceInterval: 25,
+      },
+      (loc) => {
+        void push(loc);
+      },
+    );
+
+    return 'granted';
+  }
+
+  stop() {
+    this.subscription?.remove();
+    this.subscription = null;
+    this.running = false;
+  }
 }

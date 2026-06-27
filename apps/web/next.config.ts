@@ -4,9 +4,7 @@ import { withSentryConfig } from '@sentry/nextjs';
 const nextConfig: NextConfig = {
   // Emit a self-contained server bundle for small, fast Docker images.
   output: 'standalone',
-  experimental: {
-    typedRoutes: false,
-  },
+  typedRoutes: false,
   images: {
     remotePatterns: [
       {

@@ -62,8 +62,8 @@ export default function AdminOrderDetailPage() {
     queryFn: () => adminApi.delivery.listAgents(),
   });
 
-  const order = orderRes?.data;
-  const agents = agentsRes?.data ?? [];
+  const order = orderRes;
+  const agents = agentsRes?.items ?? [];
 
   const invalidate = () => {
     queryClient.invalidateQueries({ queryKey: ['admin', 'orders', id] });
@@ -152,11 +152,11 @@ export default function AdminOrderDetailPage() {
               </div>
               <div>
                 <dt className="text-slate-500">Payment Status</dt>
-                <dd><StatusBadge status={order.paymentStatus} /></dd>
+                <dd><StatusBadge status={order.payment?.status ?? 'PENDING'} /></dd>
               </div>
               <div>
                 <dt className="text-slate-500">Payment Method</dt>
-                <dd>{order.paymentMethod}</dd>
+                <dd>{order.payment?.method ?? '—'}</dd>
               </div>
               <div>
                 <dt className="text-slate-500">Date</dt>
@@ -171,10 +171,10 @@ export default function AdminOrderDetailPage() {
             <div className="divide-y divide-slate-100">
               {order.items.map((item) => (
                 <div key={item.id} className="flex items-center gap-3 py-3">
-                  {item.product.image ? (
+                  {item.image ? (
                     <img
-                      src={item.product.image}
-                      alt={item.product.name}
+                      src={item.image}
+                      alt={item.name}
                       className="w-12 h-12 rounded-md object-cover border border-slate-200"
                     />
                   ) : (
@@ -183,15 +183,11 @@ export default function AdminOrderDetailPage() {
                     </div>
                   )}
                   <div className="flex-1 min-w-0">
-                    <p className="text-sm font-medium truncate">{item.product.name}</p>
-                    <p className="text-xs text-slate-400">
-                      SKU: {item.variant.sku}
-                      {item.variant.size ? ` · ${item.variant.size}` : ''}
-                      {item.variant.color ? ` · ${item.variant.color}` : ''}
-                    </p>
+                    <p className="text-sm font-medium truncate">{item.name}</p>
+                    <p className="text-xs text-slate-400">SKU: {item.sku ?? '—'}</p>
                   </div>
                   <div className="text-right shrink-0">
-                    <p className="text-sm font-medium">₹{item.price.toLocaleString('en-IN')}</p>
+                    <p className="text-sm font-medium">₹{Number(item.price ?? 0).toLocaleString('en-IN')}</p>
                     <p className="text-xs text-slate-400">× {item.quantity}</p>
                   </div>
                 </div>
@@ -200,25 +196,25 @@ export default function AdminOrderDetailPage() {
             <div className="border-t border-slate-100 pt-3 mt-2 space-y-1.5 text-sm">
               <div className="flex justify-between text-slate-600">
                 <span>Subtotal</span>
-                <span>₹{order.subtotal.toLocaleString('en-IN')}</span>
+                <span>₹{Number(order.subtotal ?? 0).toLocaleString('en-IN')}</span>
               </div>
-              {order.discount > 0 && (
+              {Number(order.discountAmount ?? 0) > 0 && (
                 <div className="flex justify-between text-green-600">
-                  <span>Discount {order.couponCode ? `(${order.couponCode})` : ''}</span>
-                  <span>−₹{order.discount.toLocaleString('en-IN')}</span>
+                  <span>Discount {order.coupon?.code ? `(${order.coupon.code})` : ''}</span>
+                  <span>−₹{Number(order.discountAmount ?? 0).toLocaleString('en-IN')}</span>
                 </div>
               )}
               <div className="flex justify-between text-slate-600">
                 <span>Shipping</span>
                 <span>
-                  {order.deliveryCharge === 0
+                  {Number(order.shippingCharge ?? 0) === 0
                     ? 'Free'
-                    : `₹${order.deliveryCharge.toLocaleString('en-IN')}`}
+                    : `₹${Number(order.shippingCharge ?? 0).toLocaleString('en-IN')}`}
                 </span>
               </div>
               <div className="flex justify-between font-semibold text-slate-900 pt-1 border-t border-slate-100">
                 <span>Total</span>
-                <span>₹{order.total.toLocaleString('en-IN')}</span>
+                <span>₹{Number(order.total ?? 0).toLocaleString('en-IN')}</span>
               </div>
             </div>
           </div>
@@ -251,17 +247,17 @@ export default function AdminOrderDetailPage() {
           </div>
 
           {/* Delivery Info */}
-          {order.deliveryAgent && (
+          {order.delivery?.agent && (
             <div className="bg-white rounded-xl border border-slate-200 p-5">
               <h2 className="font-semibold text-slate-800 mb-3">Delivery Agent</h2>
               <div className="text-sm text-slate-600 space-y-0.5">
-                <p className="font-medium text-slate-800">{order.deliveryAgent.name}</p>
-                <p>{order.deliveryAgent.phone}</p>
-                {order.trackingNumber && (
-                  <p className="font-mono text-xs">{order.trackingNumber}</p>
+                <p className="font-medium text-slate-800">{order.delivery.agent.user?.name ?? '—'}</p>
+                {order.delivery.agent.user?.phone && <p>{order.delivery.agent.user.phone}</p>}
+                {order.delivery.awbCode && (
+                  <p className="font-mono text-xs">{order.delivery.awbCode}</p>
                 )}
-                {order.estimatedDelivery && (
-                  <p>ETA: {format(new Date(order.estimatedDelivery), 'dd MMM yyyy')}</p>
+                {order.delivery.estimatedAt && (
+                  <p>ETA: {format(new Date(order.delivery.estimatedAt), 'dd MMM yyyy')}</p>
                 )}
               </div>
             </div>
@@ -303,7 +299,7 @@ export default function AdminOrderDetailPage() {
                 <SelectContent>
                   {agents.map((agent) => (
                     <SelectItem key={agent.id} value={agent.id}>
-                      {agent.name} {agent.isAvailable ? '(Available)' : '(Busy)'}
+                      {agent.user?.name ?? 'Agent'} {agent.isOnline ? '(Online)' : '(Offline)'}
                     </SelectItem>
                   ))}
                 </SelectContent>
@@ -326,7 +322,7 @@ export default function AdminOrderDetailPage() {
           </div>
 
           {/* Refund */}
-          {['PAID', 'PARTIALLY_REFUNDED'].includes(order.paymentStatus) && (
+          {['PAID', 'SUCCESS', 'PARTIALLY_REFUNDED'].includes(order.payment?.status ?? '') && (
             <Button
               variant="outline"
               className="w-full text-red-600 border-red-200 hover:bg-red-50"
@@ -350,7 +346,7 @@ export default function AdminOrderDetailPage() {
               <Input
                 type="number"
                 step="0.01"
-                placeholder={`Max ₹${order.total.toLocaleString('en-IN')}`}
+                placeholder={`Max ₹${Number(order.total ?? 0).toLocaleString('en-IN')}`}
                 value={refundAmount}
                 onChange={(e) => setRefundAmount(e.target.value)}
               />

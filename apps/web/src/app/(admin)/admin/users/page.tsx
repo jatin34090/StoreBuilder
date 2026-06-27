@@ -43,22 +43,17 @@ export default function UsersPage() {
 
   const { data, isLoading, isError, refetch } = useQuery({
     queryKey: ['admin', 'users', debouncedSearch, roleFilter, page],
-    queryFn: async () => {
-      const res = await adminUsersApi.list({
+    queryFn: () =>
+      adminUsersApi.list({
         search: debouncedSearch || undefined,
         role: roleFilter || undefined,
         page,
         limit: 15,
-      });
-      return res.data;
-    },
+      }),
   });
 
-  const users: AdminUser[] = (data as { items?: AdminUser[]; data?: AdminUser[] } | undefined)
-    ?.items ??
-    (data as { items?: AdminUser[]; data?: AdminUser[] } | undefined)?.data ??
-    (Array.isArray(data) ? (data as AdminUser[]) : []);
-  const total: number = (data as { total?: number } | undefined)?.total ?? users.length;
+  const users: AdminUser[] = data?.items ?? [];
+  const total: number = data?.total ?? users.length;
 
   const blockMutation = useMutation({
     mutationFn: ({ id, isBlocked }: { id: string; isBlocked: boolean }) =>
@@ -121,7 +116,7 @@ export default function UsersPage() {
                   <th className="px-4 py-3 text-left text-xs font-semibold text-slate-500 uppercase tracking-wider">Contact</th>
                   <th className="px-4 py-3 text-left text-xs font-semibold text-slate-500 uppercase tracking-wider">Role</th>
                   <th className="px-4 py-3 text-left text-xs font-semibold text-slate-500 uppercase tracking-wider">Orders</th>
-                  <th className="px-4 py-3 text-left text-xs font-semibold text-slate-500 uppercase tracking-wider">Spent</th>
+                  <th className="px-4 py-3 text-left text-xs font-semibold text-slate-500 uppercase tracking-wider">Verified</th>
                   <th className="px-4 py-3 text-left text-xs font-semibold text-slate-500 uppercase tracking-wider">Joined</th>
                   <th className="px-4 py-3 text-left text-xs font-semibold text-slate-500 uppercase tracking-wider">Status</th>
                   <th className="px-4 py-3 text-left text-xs font-semibold text-slate-500 uppercase tracking-wider">Actions</th>
@@ -156,11 +151,15 @@ export default function UsersPage() {
                     <td className="px-4 py-3">
                       <div className="flex items-center gap-1 text-slate-600">
                         <ShoppingBag className="w-3.5 h-3.5" />
-                        {user.totalOrders ?? 0}
+                        {user._count?.orders ?? 0}
                       </div>
                     </td>
                     <td className="px-4 py-3 text-slate-700 font-medium">
-                      ₹{((user.totalSpent ?? 0) / 100).toLocaleString('en-IN')}
+                      {user.isVerified ? (
+                        <span className="text-green-600 text-xs font-medium">Verified</span>
+                      ) : (
+                        <span className="text-slate-400 text-xs">No</span>
+                      )}
                     </td>
                     <td className="px-4 py-3 text-slate-500 text-xs">
                       {user.createdAt ? format(new Date(user.createdAt), 'dd MMM yyyy') : '—'}

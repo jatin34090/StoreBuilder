@@ -98,6 +98,15 @@ export class ProductsController {
     return this.productsService.adminFindAll(query);
   }
 
+  @Get('admin/products/:id')
+  @Roles(Role.ADMIN)
+  @ApiBearerAuth('access-token')
+  @ApiOperation({ summary: '[Admin] Get a single product by ID with variants and images' })
+  @ApiParam({ name: 'id', description: 'Product UUID' })
+  adminFindOne(@Param('id') id: string) {
+    return this.productsService.adminFindOne(id);
+  }
+
   @Post('admin/products')
   @Roles(Role.ADMIN)
   @ApiBearerAuth('access-token')

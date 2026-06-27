@@ -182,6 +182,20 @@ export class ProductsService {
     return { products, pagination: { page, limit, total } };
   }
 
+  async adminFindOne(id: string) {
+    const product = await this.prisma.product.findUnique({
+      where: { id },
+      include: {
+        category: { select: { id: true, name: true, slug: true } },
+        images: { orderBy: [{ isPrimary: 'desc' }, { sortOrder: 'asc' }] },
+        variants: { orderBy: { price: 'asc' } },
+        _count: { select: { reviews: true } },
+      },
+    });
+    if (!product) throw new NotFoundException('Product not found');
+    return product;
+  }
+
   async create(dto: CreateProductDto) {
     const slug = await this.generateUniqueSlug(dto.name);
 

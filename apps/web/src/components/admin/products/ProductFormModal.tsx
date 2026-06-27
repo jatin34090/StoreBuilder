@@ -31,9 +31,16 @@ const productSchema = z.object({
   categoryId: z.string().min(1, 'Category is required'),
   basePrice: z.coerce.number().positive('Price must be greater than 0'),
   discountPct: z.coerce.number().min(0).max(90),
-  description: z.string().optional(),
+  description: z.string().min(10, 'Description must be at least 10 characters'),
   isFeatured: z.boolean(),
   attributes: z.string().optional(),
+  // Initial variant — required when creating (the API requires ≥1 variant).
+  variantSku: z.string().optional(),
+  variantSize: z.string().optional(),
+  variantColor: z.string().optional(),
+  variantPrice: z.coerce.number().optional(),
+  variantStock: z.coerce.number().min(0).optional(),
+  variantWeight: z.coerce.number().optional(),
 });
 
 type ProductFormValues = z.infer<typeof productSchema>;
@@ -60,7 +67,7 @@ export function ProductFormModal({ open, onClose, product }: ProductFormModalPro
     enabled: open,
   });
 
-  const categories = categoriesData?.data ?? [];
+  const categories = categoriesData?.items ?? [];
 
   const {
     register,
@@ -91,11 +98,9 @@ export function ProductFormModal({ open, onClose, product }: ProductFormModalPro
         name: product.name,
         slug: product.slug,
         categoryId: product.category.id,
-        basePrice: product.basePrice,
-        discountPct: product.discountedPrice
-          ? Math.round((1 - product.discountedPrice / product.basePrice) * 100)
-          : 0,
-        description: product.description,
+        basePrice: Number(product.basePrice ?? 0),
+        discountPct: product.discountPct ?? 0,
+        description: product.description ?? '',
         isFeatured: product.isFeatured,
         attributes: '',
       });
@@ -151,9 +156,9 @@ export function ProductFormModal({ open, onClose, product }: ProductFormModalPro
         return;
       }
     }
-    const payload = {
+    // The API derives slug from name and rejects an explicit slug field.
+    const basePayload = {
       name: values.name,
-      slug: values.slug,
       categoryId: values.categoryId,
       basePrice: values.basePrice,
       discountPct: values.discountPct,
@@ -162,9 +167,31 @@ export function ProductFormModal({ open, onClose, product }: ProductFormModalPro
       ...(attributes ? { attributes } : {}),
     };
     if (product) {
-      updateMutation.mutate(payload);
+      updateMutation.mutate(basePayload);
     } else {
-      createMutation.mutate(payload);
+      // Creating requires at least one variant.
+      if (!values.variantSku || !values.variantSku.trim()) {
+        toast.error('SKU is required for the initial variant');
+        return;
+      }
+      if (!values.variantWeight || values.variantWeight < 0.1) {
+        toast.error('Variant weight is required (minimum 0.1 g)');
+        return;
+      }
+      const createPayload = {
+        ...basePayload,
+        variants: [
+          {
+            sku: values.variantSku.trim().toUpperCase(),
+            price: values.variantPrice && values.variantPrice > 0 ? values.variantPrice : values.basePrice,
+            stock: values.variantStock ?? 0,
+            weight: values.variantWeight,
+            ...(values.variantSize ? { size: values.variantSize } : {}),
+            ...(values.variantColor ? { color: values.variantColor } : {}),
+          },
+        ],
+      };
+      createMutation.mutate(createPayload);
     }
   }
 
@@ -182,9 +209,8 @@ export function ProductFormModal({ open, onClose, product }: ProductFormModalPro
           </div>
 
           <div className="space-y-1">
-            <Label htmlFor="slug">Slug *</Label>
-            <Input id="slug" {...register('slug')} placeholder="product-slug" />
-            {errors.slug && <p className="text-xs text-red-500">{errors.slug.message}</p>}
+            <Label htmlFor="slug">Slug (auto-generated)</Label>
+            <Input id="slug" {...register('slug')} placeholder="product-slug" disabled className="bg-slate-50 text-slate-500" />
           </div>
 
           <div className="space-y-1">
@@ -240,15 +266,50 @@ export function ProductFormModal({ open, onClose, product }: ProductFormModalPro
           </div>
 
           <div className="space-y-1">
-            <Label htmlFor="description">Description</Label>
+            <Label htmlFor="description">Description *</Label>
             <textarea
               id="description"
               {...register('description')}
               rows={3}
-              placeholder="Product description"
+              placeholder="Product description (min 10 characters)"
               className="w-full rounded-md border border-input bg-background px-3 py-2 text-sm placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
             />
+            {errors.description && (
+              <p className="text-xs text-red-500">{errors.description.message}</p>
+            )}
           </div>
+
+          {!product && (
+            <div className="space-y-3 rounded-lg border border-slate-200 p-3 bg-slate-50/60">
+              <p className="text-sm font-medium text-slate-700">Initial Variant *</p>
+              <div className="grid grid-cols-2 gap-3">
+                <div className="space-y-1">
+                  <Label htmlFor="variantSku" className="text-xs">SKU *</Label>
+                  <Input id="variantSku" {...register('variantSku')} placeholder="RNG-GLD-01" className="uppercase" />
+                </div>
+                <div className="space-y-1">
+                  <Label htmlFor="variantStock" className="text-xs">Stock *</Label>
+                  <Input id="variantStock" type="number" min="0" {...register('variantStock')} placeholder="0" />
+                </div>
+                <div className="space-y-1">
+                  <Label htmlFor="variantSize" className="text-xs">Size</Label>
+                  <Input id="variantSize" {...register('variantSize')} placeholder="Optional" />
+                </div>
+                <div className="space-y-1">
+                  <Label htmlFor="variantColor" className="text-xs">Color</Label>
+                  <Input id="variantColor" {...register('variantColor')} placeholder="Optional" />
+                </div>
+                <div className="space-y-1">
+                  <Label htmlFor="variantWeight" className="text-xs">Weight (g) *</Label>
+                  <Input id="variantWeight" type="number" step="0.1" min="0.1" {...register('variantWeight')} placeholder="e.g. 5.0" />
+                </div>
+                <div className="space-y-1">
+                  <Label htmlFor="variantPrice" className="text-xs">Variant Price (₹)</Label>
+                  <Input id="variantPrice" type="number" step="0.01" {...register('variantPrice')} placeholder="Base price" />
+                </div>
+              </div>
+            </div>
+          )}
 
           <div className="space-y-1">
             <Label htmlFor="attributes">Attributes (JSON)</Label>

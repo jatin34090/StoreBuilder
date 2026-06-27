@@ -17,7 +17,7 @@ import { adminNotificationsApi } from '../../../../lib/admin-api';
 const broadcastSchema = z.object({
   title: z.string().min(3, 'Title must be at least 3 characters').max(100),
   body: z.string().min(5, 'Message must be at least 5 characters').max(500),
-  type: z.string().default('INFO'),
+  type: z.string().default('SYSTEM'),
 });
 type BroadcastForm = z.infer<typeof broadcastSchema>;
 
@@ -25,15 +25,16 @@ const directSchema = z.object({
   userId: z.string().min(1, 'User ID is required'),
   title: z.string().min(3).max(100),
   body: z.string().min(5).max(500),
-  type: z.string().default('INFO'),
+  type: z.string().default('SYSTEM'),
 });
 type DirectForm = z.infer<typeof directSchema>;
 
 const NOTIFICATION_TYPES = [
-  { value: 'INFO', label: 'Info', color: 'text-blue-600' },
+  { value: 'SYSTEM', label: 'System', color: 'text-blue-600' },
   { value: 'ORDER', label: 'Order Update', color: 'text-purple-600' },
-  { value: 'PROMO', label: 'Promotion', color: 'text-orange-600' },
-  { value: 'ALERT', label: 'Alert', color: 'text-red-600' },
+  { value: 'OFFER', label: 'Offer', color: 'text-orange-600' },
+  { value: 'DELIVERY', label: 'Delivery', color: 'text-green-600' },
+  { value: 'REVIEW', label: 'Review', color: 'text-amber-600' },
 ];
 
 export default function NotificationsPage() {
@@ -41,19 +42,19 @@ export default function NotificationsPage() {
 
   const broadcastForm = useForm<BroadcastForm>({
     resolver: zodResolver(broadcastSchema),
-    defaultValues: { type: 'INFO' },
+    defaultValues: { type: 'SYSTEM' },
   });
 
   const directForm = useForm<DirectForm>({
     resolver: zodResolver(directSchema),
-    defaultValues: { type: 'INFO' },
+    defaultValues: { type: 'SYSTEM' },
   });
 
   const broadcastMutation = useMutation({
     mutationFn: (data: BroadcastForm) => adminNotificationsApi.broadcast(data),
     onSuccess: () => {
       toast.success('Broadcast notification sent to all users!');
-      broadcastForm.reset({ type: 'INFO' });
+      broadcastForm.reset({ type: 'SYSTEM' });
     },
     onError: () => toast.error('Failed to send broadcast notification'),
   });
@@ -62,7 +63,7 @@ export default function NotificationsPage() {
     mutationFn: (data: DirectForm) => adminNotificationsApi.send(data),
     onSuccess: () => {
       toast.success('Notification sent successfully!');
-      directForm.reset({ type: 'INFO' });
+      directForm.reset({ type: 'SYSTEM' });
     },
     onError: () => toast.error('Failed to send notification'),
   });
@@ -259,7 +260,7 @@ export default function NotificationsPage() {
                   <div>
                     <p className="text-sm font-medium text-slate-700">{t.label}</p>
                     <p className="text-xs text-slate-500">
-                      {t.value === 'INFO' && 'General announcements and updates'}
+                      {t.value === 'SYSTEM' && 'General announcements and updates'}
                       {t.value === 'ORDER' && 'Order status changes and tracking'}
                       {t.value === 'PROMO' && 'Sales, discounts and offers'}
                       {t.value === 'ALERT' && 'Important account or security alerts'}

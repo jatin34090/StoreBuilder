@@ -23,15 +23,26 @@ import {
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '../../../../components/ui/tabs';
 import { PageHeader } from '../../../../components/admin/PageHeader';
 import { TableSkeleton } from '../../../../components/admin/LoadingSkeleton';
-import { adminDeliveryApi, type DeliveryAgent } from '../../../../lib/admin-api';
+import {
+  adminDeliveryApi,
+  adminUsersApi,
+  type DeliveryAgent,
+  type AdminDelivery,
+} from '../../../../lib/admin-api';
 
 const agentSchema = z.object({
-  name: z.string().min(2, 'Name must be at least 2 characters'),
-  phone: z.string().min(10, 'Enter a valid phone number'),
-  email: z.string().email('Enter a valid email').optional().or(z.literal('')),
-  vehicleNumber: z.string().optional(),
+  userId: z.string().min(1, 'Select a user'),
+  vehicleType: z.enum(['bike', 'cycle', 'foot']),
+  zones: z.string().min(1, 'Enter at least one pincode'),
 });
 type AgentFormData = z.infer<typeof agentSchema>;
+
+function zonesToArray(zones: string): string[] {
+  return zones
+    .split(',')
+    .map((z) => z.trim())
+    .filter(Boolean);
+}
 
 export default function DeliveryPage() {
   const queryClient = useQueryClient();
@@ -41,35 +52,35 @@ export default function DeliveryPage() {
 
   const { data: agentsData, isLoading: agentsLoading } = useQuery({
     queryKey: ['admin', 'delivery', 'agents'],
-    queryFn: async () => {
-      const res = await adminDeliveryApi.listAgents();
-      return res.data;
-    },
+    queryFn: () => adminDeliveryApi.listAgents(),
   });
 
   const { data: deliveriesData, isLoading: deliveriesLoading } = useQuery({
     queryKey: ['admin', 'delivery', 'deliveries'],
-    queryFn: async () => {
-      const res = await adminDeliveryApi.listDeliveries({ limit: 20 });
-      return res.data;
-    },
+    queryFn: () => adminDeliveryApi.listDeliveries({ limit: 20 }),
   });
 
-  const agents: DeliveryAgent[] = Array.isArray(agentsData)
-    ? (agentsData as DeliveryAgent[])
-    : ((agentsData as { data?: DeliveryAgent[] } | undefined)?.data ?? []);
+  const { data: usersData } = useQuery({
+    queryKey: ['admin', 'users', 'for-agents'],
+    queryFn: () => adminUsersApi.list({ limit: 100 }),
+  });
 
-  const deliveries: Record<string, unknown>[] = Array.isArray(deliveriesData)
-    ? (deliveriesData as Record<string, unknown>[])
-    : ((deliveriesData as { items?: Record<string, unknown>[]; data?: Record<string, unknown>[] } | undefined)?.items ??
-       (deliveriesData as { items?: Record<string, unknown>[]; data?: Record<string, unknown>[] } | undefined)?.data ?? []);
+  const agents: DeliveryAgent[] = agentsData?.items ?? [];
+  const deliveries: AdminDelivery[] = deliveriesData?.items ?? [];
+  const eligibleUsers = (usersData?.items ?? []).filter((u) => u.role !== 'ADMIN');
 
   const { register, handleSubmit, reset, formState: { errors } } = useForm<AgentFormData>({
     resolver: zodResolver(agentSchema),
+    defaultValues: { vehicleType: 'bike' },
   });
 
   const createMutation = useMutation({
-    mutationFn: (data: AgentFormData) => adminDeliveryApi.createAgent(data),
+    mutationFn: (data: AgentFormData) =>
+      adminDeliveryApi.createAgent({
+        userId: data.userId,
+        vehicleType: data.vehicleType,
+        zones: zonesToArray(data.zones),
+      }),
     onSuccess: () => {
       toast.success('Delivery agent added');
       queryClient.invalidateQueries({ queryKey: ['admin', 'delivery'] });
@@ -81,7 +92,10 @@ export default function DeliveryPage() {
 
   const updateMutation = useMutation({
     mutationFn: ({ id, data }: { id: string; data: AgentFormData }) =>
-      adminDeliveryApi.updateAgent(id, data),
+      adminDeliveryApi.updateAgent(id, {
+        vehicleType: data.vehicleType,
+        zones: zonesToArray(data.zones),
+      }),
     onSuccess: () => {
       toast.success('Agent updated');
       queryClient.invalidateQueries({ queryKey: ['admin', 'delivery'] });
@@ -111,9 +125,9 @@ export default function DeliveryPage() {
   const openEdit = (agent: DeliveryAgent) => {
     setEditAgent(agent);
     reset({
-      name: agent.name,
-      phone: agent.phone,
-      email: agent.email ?? '',
+      userId: agent.user?.id ?? '',
+      vehicleType: (agent.vehicleType as 'bike' | 'cycle' | 'foot') ?? 'bike',
+      zones: (agent.zones ?? []).join(', '),
     });
     setAgentModal(true);
   };
@@ -126,8 +140,8 @@ export default function DeliveryPage() {
     }
   };
 
-  const availableAgents = agents.filter((a) => a.isAvailable);
-  const busyAgents = agents.filter((a) => !a.isAvailable);
+  const availableAgents = agents.filter((a) => a.isOnline);
+  const busyAgents = agents.filter((a) => !a.isOnline);
 
   return (
     <div>
@@ -226,28 +240,31 @@ export default function DeliveryPage() {
                         <td className="px-4 py-3">
                           <div className="flex items-center gap-3">
                             <div className="w-8 h-8 rounded-full bg-blue-100 flex items-center justify-center text-blue-700 font-semibold text-xs">
-                              {agent.name[0]?.toUpperCase()}
+                              {(agent.user?.name?.[0] ?? 'A').toUpperCase()}
                             </div>
-                            <span className="font-medium text-slate-800">{agent.name}</span>
+                            <div>
+                              <span className="font-medium text-slate-800">{agent.user?.name ?? 'Agent'}</span>
+                              <p className="text-xs text-slate-400 capitalize">{agent.vehicleType ?? ''}</p>
+                            </div>
                           </div>
                         </td>
                         <td className="px-4 py-3 text-slate-500">
-                          <div>{agent.phone}</div>
-                          {agent.email && <div className="text-xs">{agent.email}</div>}
+                          <div>{agent.user?.phone ?? '—'}</div>
+                          {agent.user?.email && <div className="text-xs">{agent.user.email}</div>}
                         </td>
                         <td className="px-4 py-3">
-                          {agent.isAvailable ? (
-                            <Badge className="bg-green-100 text-green-700 border-0 text-xs">Available</Badge>
+                          {agent.isOnline ? (
+                            <Badge className="bg-green-100 text-green-700 border-0 text-xs">Online</Badge>
                           ) : (
-                            <Badge className="bg-orange-100 text-orange-700 border-0 text-xs">On Delivery</Badge>
+                            <Badge className="bg-slate-100 text-slate-600 border-0 text-xs">Offline</Badge>
                           )}
                         </td>
                         <td className="px-4 py-3 text-slate-600 font-medium">
-                          {agent.totalDeliveries ?? 0}
+                          {agent._count?.deliveries ?? 0}
                         </td>
                         <td className="px-4 py-3 text-slate-400">
                           <MapPin className="w-3.5 h-3.5 inline mr-1" />
-                          <span className="text-xs">Live tracking</span>
+                          <span className="text-xs">{(agent.zones ?? []).length} zones</span>
                         </td>
                         <td className="px-4 py-3">
                           <div className="flex items-center gap-2">
@@ -296,25 +313,27 @@ export default function DeliveryPage() {
                           No active deliveries
                         </td>
                       </tr>
-                    ) : deliveries.map((d, i) => (
-                      <tr key={String(d.id ?? i)} className="hover:bg-slate-50">
-                        <td className="px-4 py-3 font-mono text-xs text-[#4A0E8F]">{String(d.orderId ?? d.id ?? '—')}</td>
+                    ) : deliveries.map((d) => (
+                      <tr key={d.id} className="hover:bg-slate-50">
+                        <td className="px-4 py-3 font-mono text-xs text-[#4A0E8F]">
+                          {d.order?.orderNumber ?? d.orderId ?? '—'}
+                        </td>
                         <td className="px-4 py-3">
                           <Badge className="bg-slate-100 text-slate-700 border-0 text-xs">
-                            {String(d.type ?? '—')}
+                            {d.type ?? '—'}
                           </Badge>
                         </td>
                         <td className="px-4 py-3">
                           <Badge className="bg-blue-100 text-blue-700 border-0 text-xs">
-                            {String(d.status ?? '—')}
+                            {d.status ?? '—'}
                           </Badge>
                         </td>
                         <td className="px-4 py-3 text-slate-500">
-                          {d.agent ? String((d.agent as { name?: string })?.name ?? '—') : 'Unassigned'}
+                          {d.agent?.user?.name ?? 'Unassigned'}
                         </td>
                         <td className="px-4 py-3 text-slate-500 text-xs">
                           {d.estimatedAt
-                            ? format(new Date(String(d.estimatedAt)), 'dd MMM yyyy')
+                            ? format(new Date(d.estimatedAt), 'dd MMM yyyy')
                             : '—'}
                         </td>
                       </tr>
@@ -335,23 +354,46 @@ export default function DeliveryPage() {
           </DialogHeader>
           <form onSubmit={handleSubmit(onSubmit)} className="space-y-4">
             <div>
-              <Label>Full Name *</Label>
-              <Input {...register('name')} placeholder="Rajesh Kumar" className="mt-1" />
-              {errors.name && <p className="text-red-500 text-xs mt-1">{errors.name.message}</p>}
+              <Label>User *</Label>
+              <select
+                {...register('userId')}
+                disabled={!!editAgent}
+                className="mt-1 w-full h-9 px-3 border border-slate-200 rounded-md text-sm focus:outline-none focus:ring-2 focus:ring-purple-500/20 disabled:bg-slate-50 disabled:text-slate-400"
+              >
+                <option value="">Select a user…</option>
+                {editAgent && (
+                  <option value={editAgent.user?.id ?? ''}>
+                    {editAgent.user?.name} ({editAgent.user?.phone})
+                  </option>
+                )}
+                {!editAgent &&
+                  eligibleUsers.map((u) => (
+                    <option key={u.id} value={u.id}>
+                      {u.name} {u.phone ? `(${u.phone})` : ''}
+                    </option>
+                  ))}
+              </select>
+              {editAgent && (
+                <p className="text-xs text-slate-400 mt-1">User cannot be changed after creation.</p>
+              )}
+              {errors.userId && <p className="text-red-500 text-xs mt-1">{errors.userId.message}</p>}
             </div>
             <div>
-              <Label>Phone *</Label>
-              <Input {...register('phone')} placeholder="9876543210" className="mt-1" />
-              {errors.phone && <p className="text-red-500 text-xs mt-1">{errors.phone.message}</p>}
+              <Label>Vehicle Type *</Label>
+              <select
+                {...register('vehicleType')}
+                className="mt-1 w-full h-9 px-3 border border-slate-200 rounded-md text-sm focus:outline-none focus:ring-2 focus:ring-purple-500/20"
+              >
+                <option value="bike">Bike</option>
+                <option value="cycle">Cycle</option>
+                <option value="foot">On Foot</option>
+              </select>
             </div>
             <div>
-              <Label>Email</Label>
-              <Input {...register('email')} type="email" placeholder="agent@email.com" className="mt-1" />
-              {errors.email && <p className="text-red-500 text-xs mt-1">{errors.email.message}</p>}
-            </div>
-            <div>
-              <Label>Vehicle Number</Label>
-              <Input {...register('vehicleNumber')} placeholder="MH01AB1234" className="mt-1 uppercase" />
+              <Label>Service Zones (pincodes) *</Label>
+              <Input {...register('zones')} placeholder="400001, 400002, 400003" className="mt-1" />
+              <p className="text-xs text-slate-400 mt-1">Comma-separated pincodes.</p>
+              {errors.zones && <p className="text-red-500 text-xs mt-1">{errors.zones.message}</p>}
             </div>
             <DialogFooter>
               <Button type="button" variant="outline" onClick={() => { setAgentModal(false); setEditAgent(null); reset(); }}>Cancel</Button>
@@ -370,7 +412,7 @@ export default function DeliveryPage() {
             <DialogTitle>Remove Agent</DialogTitle>
           </DialogHeader>
           <p className="text-sm text-slate-600">
-            Are you sure you want to remove <strong>{deleteConfirm?.name}</strong>? This action cannot be undone.
+            Are you sure you want to remove <strong>{deleteConfirm?.user?.name ?? 'this agent'}</strong>? This action cannot be undone.
           </p>
           <DialogFooter>
             <Button variant="outline" onClick={() => setDeleteConfirm(null)}>Cancel</Button>

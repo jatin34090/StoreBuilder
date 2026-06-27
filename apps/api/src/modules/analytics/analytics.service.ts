@@ -132,7 +132,7 @@ export class AnalyticsService {
         FROM "Order"
         WHERE "createdAt" >= ${from}
           AND "createdAt" <= ${to}
-          AND status = ANY(${REVENUE_STATUSES}::text[])
+          AND status::text = ANY(${REVENUE_STATUSES}::text[])
         GROUP BY bucket
         ORDER BY bucket ASC
       `,
@@ -181,7 +181,7 @@ export class AnalyticsService {
         JOIN "Order"          o  ON o.id  = oi."orderId"
         WHERE o."createdAt" >= ${from}
           AND o."createdAt" <= ${to}
-          AND o.status = ANY(${REVENUE_STATUSES}::text[])
+          AND o.status::text = ANY(${REVENUE_STATUSES}::text[])
         GROUP BY p.id, p.name, p.slug
         ORDER BY "totalRevenue" DESC
         LIMIT ${limit}

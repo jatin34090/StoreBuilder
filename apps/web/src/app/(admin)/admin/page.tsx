@@ -31,15 +31,7 @@ import { Button } from '../../../components/ui/button';
 import { Skeleton } from '../../../components/ui/skeleton';
 import { StatusBadge } from '../../../components/admin/StatusBadge';
 import { KpiCardSkeleton, ChartSkeleton, TableSkeleton } from '../../../components/admin/LoadingSkeleton';
-import {
-  adminAnalyticsApi,
-  adminOrdersApi,
-  type AnalyticsOverview,
-  type SalesTrendPoint,
-  type OrderStatusStat,
-  type LowStockItem,
-  type AdminOrder,
-} from '../../../lib/admin-api';
+import { adminAnalyticsApi, adminOrdersApi } from '../../../lib/admin-api';
 
 // ─── KPI Card ─────────────────────────────────────────────────────────────────
 
@@ -121,39 +113,30 @@ function formatDate(dateStr: string) {
 // ─── Dashboard Page ───────────────────────────────────────────────────────────
 
 export default function AdminDashboardPage() {
-  const { data: overviewData, isLoading: overviewLoading } = useQuery({
+  const { data: overview, isLoading: overviewLoading } = useQuery({
     queryKey: ['admin', 'analytics', 'overview'],
-    queryFn: () => adminAnalyticsApi.overview().then((r) => r.data),
+    queryFn: () => adminAnalyticsApi.overview(),
   });
 
-  const { data: salesTrend, isLoading: salesLoading } = useQuery({
+  const { data: trend, isLoading: salesLoading } = useQuery({
     queryKey: ['admin', 'analytics', 'sales-trend'],
-    queryFn: () => adminAnalyticsApi.salesTrend({ days: 30 }).then((r) => r.data),
+    queryFn: () => adminAnalyticsApi.salesTrend({ granularity: 'day' }),
   });
 
-  const { data: orderStatus, isLoading: statusLoading } = useQuery({
+  const { data: statuses, isLoading: statusLoading } = useQuery({
     queryKey: ['admin', 'analytics', 'order-status'],
-    queryFn: () => adminAnalyticsApi.orderStatus().then((r) => r.data),
+    queryFn: () => adminAnalyticsApi.orderStatus(),
   });
 
-  const { data: lowStockData, isLoading: lowStockLoading } = useQuery({
+  const { data: lowStock, isLoading: lowStockLoading } = useQuery({
     queryKey: ['admin', 'analytics', 'low-stock'],
-    queryFn: () => adminAnalyticsApi.lowStock({ threshold: 10 }).then((r) => r.data),
+    queryFn: () => adminAnalyticsApi.lowStock({ threshold: 10 }),
   });
 
-  const { data: recentOrdersData, isLoading: ordersLoading } = useQuery({
+  const { data: recentOrders, isLoading: ordersLoading } = useQuery({
     queryKey: ['admin', 'orders', 'recent'],
-    queryFn: () =>
-      adminOrdersApi
-        .list({ limit: 5, sort: 'createdAt:desc' })
-        .then((r) => r.data),
+    queryFn: () => adminOrdersApi.list({ limit: 5 }),
   });
-
-  const overview = overviewData as AnalyticsOverview | undefined;
-  const trend = salesTrend as SalesTrendPoint[] | undefined;
-  const statuses = orderStatus as OrderStatusStat[] | undefined;
-  const lowStock = lowStockData as LowStockItem[] | undefined;
-  const recentOrders = recentOrdersData as { data: AdminOrder[] } | undefined;
 
   return (
     <div className="space-y-6">
@@ -186,11 +169,11 @@ export default function AdminDashboardPage() {
             />
             <KpiCard
               title="Low Stock Items"
-              value={(overview?.lowStockCount ?? 0).toString()}
+              value={(lowStock?.length ?? 0).toString()}
               iconBg="bg-red-100"
               icon={<AlertTriangle className="w-5 h-5 text-red-500" />}
               badge={
-                (overview?.lowStockCount ?? 0) > 0 ? (
+                (lowStock?.length ?? 0) > 0 ? (
                   <Badge className="bg-red-100 text-red-700 border-0 text-xs px-1.5 py-0">
                     Action needed
                   </Badge>
@@ -359,14 +342,14 @@ export default function AdminDashboardPage() {
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-slate-50">
-                    {(recentOrders?.data ?? []).length === 0 ? (
+                    {(recentOrders?.items ?? []).length === 0 ? (
                       <tr>
                         <td colSpan={4} className="px-4 py-8 text-center text-slate-400 text-sm">
                           No recent orders
                         </td>
                       </tr>
                     ) : (
-                      (recentOrders?.data ?? []).map((order) => (
+                      (recentOrders?.items ?? []).map((order) => (
                         <tr key={order.id} className="hover:bg-slate-50 transition-colors">
                           <td className="px-4 py-3">
                             <Link
@@ -388,7 +371,7 @@ export default function AdminDashboardPage() {
                             </p>
                           </td>
                           <td className="px-4 py-3 font-medium text-slate-800 text-xs">
-                            ₹{order.total?.toLocaleString('en-IN') ?? 0}
+                            ₹{Number(order.total ?? 0).toLocaleString('en-IN')}
                           </td>
                           <td className="px-4 py-3">
                             <StatusBadge status={order.status} size="sm" />

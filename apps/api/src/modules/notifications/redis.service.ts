@@ -75,6 +75,17 @@ export class RedisService implements OnModuleInit, OnModuleDestroy {
 
   // ─── Public interface (mirrors ioredis) ───────────────────────────────────
 
+  /**
+   * Health probe. Returns 'memory' when running on the in-memory fallback
+   * (dev), 'ok' when a real Redis responds to PING, or throws on failure.
+   */
+  async ping(): Promise<'ok' | 'memory'> {
+    if (this.useMemory) return 'memory';
+    const res = await this.client.ping();
+    if (res !== 'PONG') throw new Error('Unexpected PING response');
+    return 'ok';
+  }
+
   async get(key: string): Promise<string | null> {
     if (this.useMemory) return this.memGet(key);
     return this.client.get(key);

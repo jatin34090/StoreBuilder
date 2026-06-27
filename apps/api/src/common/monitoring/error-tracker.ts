@@ -30,10 +30,13 @@ export function initErrorTracking(): void {
     mod.init({
       dsn,
       environment: process.env['NODE_ENV'] ?? 'development',
-      tracesSampleRate: 0.1,
+      release: process.env['SENTRY_RELEASE'] ?? process.env['GIT_SHA'],
+      tracesSampleRate: process.env['NODE_ENV'] === 'production' ? 0.1 : 0,
+      serverName: process.env['HOSTNAME'] ?? 'api',
+      ignoreErrors: ['ECONNRESET', 'EPIPE', 'ECONNABORTED'],
     });
     sentry = mod;
-    logger.log('Sentry error tracking enabled');
+    logger.log(`Sentry error tracking enabled (env=${process.env['NODE_ENV']})`);
   } catch {
     logger.warn('SENTRY_DSN is set but @sentry/node is not installed — error tracking disabled');
   }

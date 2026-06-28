@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { Suspense, useState, useEffect } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { useQuery } from '@tanstack/react-query';
 import { Search, X } from 'lucide-react';
@@ -12,7 +12,7 @@ import { ProductGridSkeleton } from '@/components/product/ProductCardSkeleton';
 import { searchApi } from '@/lib/api';
 import { useDebounce } from '@/hooks/useDebounce';
 
-export default function SearchPage() {
+function SearchPageContent() {
   const sp = useSearchParams();
   const router = useRouter();
   const [input, setInput] = useState(sp.get('q') ?? '');
@@ -27,7 +27,6 @@ export default function SearchPage() {
   const results = data?.data?.data?.results ?? [];
   const total   = data?.data?.data?.pagination?.total ?? 0;
 
-  // Update URL query param without navigation
   useEffect(() => {
     const url = input ? `/search?q=${encodeURIComponent(input)}` : '/search';
     window.history.replaceState(null, '', url);
@@ -36,7 +35,6 @@ export default function SearchPage() {
   return (
     <MainLayout>
       <div className="container py-8 max-w-5xl">
-        {/* Search input */}
         <div className="relative max-w-xl mb-8">
           <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-5 w-5 text-muted-foreground" />
           <Input
@@ -56,7 +54,6 @@ export default function SearchPage() {
           )}
         </div>
 
-        {/* Popular searches */}
         {!input && (
           <div>
             <p className="text-sm font-medium mb-3 text-muted-foreground">Popular searches</p>
@@ -74,7 +71,6 @@ export default function SearchPage() {
           </div>
         )}
 
-        {/* Results */}
         {debouncedQ && (
           <div>
             {isLoading ? (
@@ -82,13 +78,13 @@ export default function SearchPage() {
             ) : results.length === 0 ? (
               <div className="text-center py-16 text-muted-foreground">
                 <Search className="h-10 w-10 mx-auto mb-3 opacity-20" />
-                <p className="font-medium">No results for "{debouncedQ}"</p>
+                <p className="font-medium">No results for &quot;{debouncedQ}&quot;</p>
                 <p className="text-sm mt-1">Try different keywords or browse our categories</p>
                 <Button variant="outline" className="mt-4" onClick={() => router.push('/products')}>Browse All</Button>
               </div>
             ) : (
               <>
-                <p className="text-sm text-muted-foreground mb-4">{total} result{total !== 1 ? 's' : ''} for "{debouncedQ}"</p>
+                <p className="text-sm text-muted-foreground mb-4">{total} result{total !== 1 ? 's' : ''} for &quot;{debouncedQ}&quot;</p>
                 <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-4">
                   {results.map((product: Parameters<typeof ProductCard>[0]['product'] & { id: string }) => (
                     <ProductCard key={product.id} product={product} />
@@ -100,5 +96,13 @@ export default function SearchPage() {
         )}
       </div>
     </MainLayout>
+  );
+}
+
+export default function SearchPage() {
+  return (
+    <Suspense fallback={<MainLayout><div className="container py-8"><ProductGridSkeleton count={8} /></div></MainLayout>}>
+      <SearchPageContent />
+    </Suspense>
   );
 }

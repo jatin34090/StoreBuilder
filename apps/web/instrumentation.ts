@@ -1,7 +1,10 @@
 // Next.js server + edge instrumentation file.
 // @sentry/nextjs v10+ requires Sentry.init to be called here instead of
 // sentry.server.config.ts / sentry.edge.config.ts (which are deprecated).
-export { onRequestError } from '@sentry/nextjs';
+import * as Sentry from '@sentry/nextjs';
+
+// Wire Next.js request-error hook to Sentry so RSC / route-handler errors are captured.
+export const onRequestError = Sentry.captureRequestError;
 
 export async function register() {
   const dsn = process.env.NEXT_PUBLIC_SENTRY_DSN;

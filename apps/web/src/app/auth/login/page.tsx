@@ -1,6 +1,6 @@
 'use client';
 
-import { useState } from 'react';
+import { Suspense, useState } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import Link from 'next/link';
 import { useForm } from 'react-hook-form';
@@ -35,9 +35,9 @@ type OtpRequestForm = z.infer<typeof otpRequestSchema>;
 type OtpVerifyForm = z.infer<typeof otpVerifySchema>;
 type LoginForm = z.infer<typeof loginSchema>;
 
-// ─── Component ────────────────────────────────────────────────────────────────
+// ─── Inner component (needs Suspense because it reads searchParams) ───────────
 
-export default function LoginPage() {
+function LoginPageContent() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const redirectTo = searchParams.get('redirect') ?? '/';
@@ -46,7 +46,6 @@ export default function LoginPage() {
   const [otpSent, setOtpSent] = useState(false);
   const [phone, setPhone] = useState('');
 
-  // Merge guest cart after login
   const mergeGuestCart = async () => {
     if (items.length === 0) return;
     try {
@@ -63,8 +62,6 @@ export default function LoginPage() {
     toast.success(`Welcome back, ${user.name.split(' ')[0]}!`);
     router.push(redirectTo);
   };
-
-  // ─── OTP flow ──────────────────────────────────────────────────────────────
 
   const otpRequestForm = useForm<OtpRequestForm>({ resolver: zodResolver(otpRequestSchema) });
   const otpVerifyForm = useForm<OtpVerifyForm>({ resolver: zodResolver(otpVerifySchema) });
@@ -91,8 +88,6 @@ export default function LoginPage() {
     }
   });
 
-  // ─── Password flow ─────────────────────────────────────────────────────────
-
   const loginForm = useForm<LoginForm>({ resolver: zodResolver(loginSchema) });
 
   const handleLogin = loginForm.handleSubmit(async (data) => {
@@ -108,7 +103,6 @@ export default function LoginPage() {
   return (
     <div className="min-h-[calc(100vh-4rem)] flex items-center justify-center py-12 px-4">
       <div className="w-full max-w-md">
-        {/* Header */}
         <div className="text-center mb-8">
           <div className="inline-flex items-center justify-center w-12 h-12 rounded-full bg-primary/10 mb-4">
             <span className="text-2xl">💎</span>
@@ -124,7 +118,6 @@ export default function LoginPage() {
               <TabsTrigger value="password" className="flex-1">🔒 Password</TabsTrigger>
             </TabsList>
 
-            {/* ─── OTP Tab ─────────────────────────────────────────────── */}
             <TabsContent value="otp">
               {!otpSent ? (
                 <form onSubmit={handleSendOtp} className="space-y-4">
@@ -150,11 +143,7 @@ export default function LoginPage() {
                       </p>
                     )}
                   </div>
-                  <Button
-                    type="submit"
-                    className="w-full"
-                    disabled={otpRequestForm.formState.isSubmitting}
-                  >
+                  <Button type="submit" className="w-full" disabled={otpRequestForm.formState.isSubmitting}>
                     {otpRequestForm.formState.isSubmitting ? (
                       <Loader2 className="h-4 w-4 animate-spin" />
                     ) : (
@@ -166,11 +155,7 @@ export default function LoginPage() {
                 <form onSubmit={handleVerifyOtp} className="space-y-4">
                   <p className="text-sm text-muted-foreground">
                     OTP sent to <span className="font-medium text-foreground">+91 {phone}</span>.{' '}
-                    <button
-                      type="button"
-                      onClick={() => setOtpSent(false)}
-                      className="text-primary underline text-xs"
-                    >
+                    <button type="button" onClick={() => setOtpSent(false)} className="text-primary underline text-xs">
                       Change
                     </button>
                   </p>
@@ -186,34 +171,23 @@ export default function LoginPage() {
                       {...otpVerifyForm.register('otp')}
                     />
                     {otpVerifyForm.formState.errors.otp && (
-                      <p className="text-destructive text-xs mt-1">
-                        {otpVerifyForm.formState.errors.otp.message}
-                      </p>
+                      <p className="text-destructive text-xs mt-1">{otpVerifyForm.formState.errors.otp.message}</p>
                     )}
                   </div>
-                  <Button
-                    type="submit"
-                    className="w-full"
-                    disabled={otpVerifyForm.formState.isSubmitting}
-                  >
-                    {otpVerifyForm.formState.isSubmitting ? (
-                      <Loader2 className="h-4 w-4 animate-spin" />
-                    ) : (
-                      'Verify & Sign In'
-                    )}
+                  <Button type="submit" className="w-full" disabled={otpVerifyForm.formState.isSubmitting}>
+                    {otpVerifyForm.formState.isSubmitting ? <Loader2 className="h-4 w-4 animate-spin" /> : 'Verify & Sign In'}
                   </Button>
                   <button
                     type="button"
                     onClick={() => handleSendOtp()}
                     className="w-full text-xs text-muted-foreground hover:text-primary underline"
                   >
-                    Didn't receive OTP? Resend
+                    Didn&apos;t receive OTP? Resend
                   </button>
                 </form>
               )}
             </TabsContent>
 
-            {/* ─── Password Tab ─────────────────────────────────────────── */}
             <TabsContent value="password">
               <form onSubmit={handleLogin} className="space-y-4">
                 <div>
@@ -228,9 +202,7 @@ export default function LoginPage() {
                     />
                   </div>
                   {loginForm.formState.errors.identifier && (
-                    <p className="text-destructive text-xs mt-1">
-                      {loginForm.formState.errors.identifier.message}
-                    </p>
+                    <p className="text-destructive text-xs mt-1">{loginForm.formState.errors.identifier.message}</p>
                   )}
                 </div>
                 <div>
@@ -246,31 +218,18 @@ export default function LoginPage() {
                     />
                   </div>
                   {loginForm.formState.errors.password && (
-                    <p className="text-destructive text-xs mt-1">
-                      {loginForm.formState.errors.password.message}
-                    </p>
+                    <p className="text-destructive text-xs mt-1">{loginForm.formState.errors.password.message}</p>
                   )}
                 </div>
-                <Button
-                  type="submit"
-                  className="w-full"
-                  disabled={loginForm.formState.isSubmitting}
-                >
-                  {loginForm.formState.isSubmitting ? (
-                    <Loader2 className="h-4 w-4 animate-spin" />
-                  ) : (
-                    'Sign In'
-                  )}
+                <Button type="submit" className="w-full" disabled={loginForm.formState.isSubmitting}>
+                  {loginForm.formState.isSubmitting ? <Loader2 className="h-4 w-4 animate-spin" /> : 'Sign In'}
                 </Button>
               </form>
             </TabsContent>
           </Tabs>
 
-          {/* Google OAuth */}
           <div className="mt-4 relative">
-            <div className="absolute inset-0 flex items-center">
-              <div className="w-full border-t" />
-            </div>
+            <div className="absolute inset-0 flex items-center"><div className="w-full border-t" /></div>
             <div className="relative flex justify-center text-xs uppercase">
               <span className="bg-card px-2 text-muted-foreground">or</span>
             </div>
@@ -298,5 +257,13 @@ export default function LoginPage() {
         </p>
       </div>
     </div>
+  );
+}
+
+export default function LoginPage() {
+  return (
+    <Suspense fallback={<div className="min-h-[calc(100vh-4rem)] flex items-center justify-center"><Loader2 className="h-8 w-8 animate-spin text-primary" /></div>}>
+      <LoginPageContent />
+    </Suspense>
   );
 }

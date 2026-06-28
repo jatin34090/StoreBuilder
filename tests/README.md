@@ -1,37 +1,105 @@
 # Testing
 
-| Layer | Where | Run |
-|-------|-------|-----|
-| Unit (API) | `apps/api/src/**/*.spec.ts` | `pnpm --filter @jewellery/api test` |
-| E2E (API) | `apps/api/test/*.e2e-spec.ts` | `pnpm --filter @jewellery/api test:e2e` |
-| Type checks | all apps | `pnpm -r typecheck` |
-| Load / smoke | `tests/load/k6-smoke.js` | `k6 run -e BASE_URL=… tests/load/k6-smoke.js` |
-| Mobile API contract | `tests/verify-mobile-api.mjs` | `node tests/verify-mobile-api.mjs` |
+## Quick reference
+
+| Layer | Command | When to run |
+|-------|---------|-------------|
+| Unit (API) | `pnpm --filter @jewellery/api test` | Every PR, pre-deploy |
+| Typecheck | `pnpm -r typecheck` | Every PR |
+| Staging infra | `node tests/staging-validate.mjs` | After every staging deploy |
+| Customer E2E | `node tests/e2e/customer-journey.mjs` | Before every release |
+| Admin E2E | `node tests/e2e/admin-journey.mjs` | Before every release |
+| Agent E2E | `node tests/e2e/delivery-agent-journey.mjs` | Before every release |
+| Load (smoke) | `k6 run tests/load/k6-smoke.js` | Weekly + before release |
+| Load (checkout) | `k6 run tests/load/k6-checkout.js` | Before release |
+| Security | `node tests/security/security-verify.mjs` | Before release + after security changes |
+| Mobile API | `node tests/verify-mobile-api.mjs` | Before mobile release |
+
+---
+
+## Environment variables
+
+```bash
+export API_BASE=https://api.staging.yourdomain.in/api/v1
+export WEB_BASE=https://staging.yourdomain.in
+export API_LOG=/var/log/jewellery/api.log   # for OTP reading in E2E tests
+export CUSTOMER_PHONE=9876543210
+export AGENT_PHONE=9000000002
+export ADMIN_EMAIL=admin@yourbrand.in
+export ADMIN_PASSWORD=<staging-admin-password>
+# k6 only:
+export BASE_URL=https://api.staging.yourdomain.in/api/v1
+export TOKEN=<customer-jwt>
+```
+
+---
 
 ## Unit tests
 
-Run with ts-jest (`apps/api/jest.config.js`). Cover pure/critical logic:
+ts-jest (`apps/api/jest.config.js`). Covers pure / security-critical logic:
 
-- `@jewellery/utils` — slug, money conversions, masking, clamp.
-- **Razorpay payment signature** — HMAC-SHA256 verification scheme
-  (`signature.spec.ts`): accepts valid, rejects tampered/wrong-secret/malformed,
-  constant-time compare. Mirrors `PaymentsService.verifyPaymentSignature`.
+- `@jewellery/utils` — slug, money conversions, masking, clamp (7 cases)
+- **Razorpay HMAC-SHA256** — valid, tampered, wrong-secret, malformed, deterministic (5 cases)
 
-## Load testing (k6)
+---
 
-Ramps to 50 VUs against read-heavy public endpoints (health, products, search).
-Thresholds (`p95 < 800ms`, `errors < 1%`) fail the run — usable as a CI gate.
+## E2E test suites
+
+### Customer journey (`tests/e2e/customer-journey.mjs`)
+OTP login → catalogue → search → cart → wishlist → COD checkout →
+order tracking → reviews → auth boundaries.
+
+Requires `API_LOG` for OTP steps; all other sections run without it.
+
+### Admin journey (`tests/e2e/admin-journey.mjs`)
+Password login → dashboard stats → product CRUD → orders → inventory →
+coupons → users → delivery management → role protection.
+
+### Delivery agent journey (`tests/e2e/delivery-agent-journey.mjs`)
+OTP login → profile → online toggle → deliveries → detail → status update →
+GPS location → auth boundaries.
+
+---
+
+## Load / performance tests
+
+### Smoke (`tests/load/k6-smoke.js`)
+50 VUs — health, products, search. Gate: `p95 < 800ms`, `errors < 1%`.
+
+### Checkout (`tests/load/k6-checkout.js`)
+50 VUs — search, catalogue, cart, orders. Separate `search_latency` and
+`checkout_latency` trends.
+
 Install k6: https://k6.io/docs/get-started/installation/
 
-## Payment flow verification
+---
 
-The signature unit test proves the HMAC scheme used for both checkout
-verification and the webhook receiver. End-to-end payment requires Razorpay test
-keys; verify in staging with a test card and confirm:
-order → `payment.verify` (signature) → order CONFIRMED → webhook reconciliation.
+## Security verification (`tests/security/security-verify.mjs`)
 
-## Mobile API verification
+- Rate limiting (120-burst + auth-burst)
+- Auth boundaries (7 endpoints × 3 token states)
+- Security headers, CORS, error exposure, admin isolation
 
-`verify-mobile-api.mjs` exercises the agent contract the mobile app depends on
-(auth → profile → deliveries → 401 handling; full status→OTP→DELIVERED flow when
-`API_LOG` points at the dev log so [DEV] OTPs can be read). CI/staging-friendly.
+---
+
+## Mobile API verification (`tests/verify-mobile-api.mjs`)
+
+Agent contract: auth → profile → deliveries → 401 handling.
+Full delivery flow requires `API_LOG`.
+
+---
+
+## Payment flow
+
+Razorpay HMAC is unit-tested. Manual staging test:
+
+1. Test card `4111 1111 1111 1111`, any future expiry, any CVV
+2. Confirm: order → `payment.verify` → CONFIRMED → webhook reconciled
+
+---
+
+## Staging validation report
+
+See [docs/STAGING_VALIDATION.md](../docs/STAGING_VALIDATION.md) for the
+fill-in checklist to complete after a full staging run before each production
+promotion.

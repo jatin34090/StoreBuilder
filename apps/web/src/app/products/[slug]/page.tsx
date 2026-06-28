@@ -5,12 +5,13 @@ import { ProductDetailClient } from './ProductDetailClient';
 import { productsApi } from '@/lib/api';
 
 interface Props {
-  params: { slug: string };
+  params: Promise<{ slug: string }>;
 }
 
 export async function generateMetadata({ params }: Props): Promise<Metadata> {
   try {
-    const res = await productsApi.bySlug(params.slug);
+    const { slug } = await params;
+    const res = await productsApi.bySlug(slug);
     const p = res.data.data;
     return {
       title: p.metaTitle ?? p.name,
@@ -28,7 +29,8 @@ export async function generateMetadata({ params }: Props): Promise<Metadata> {
 
 export default async function ProductDetailPage({ params }: Props) {
   try {
-    const res = await productsApi.bySlug(params.slug);
+    const { slug } = await params;
+    const res = await productsApi.bySlug(slug);
     const product = res.data.data;
     if (!product) return notFound();
     return (

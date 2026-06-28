@@ -1,7 +1,7 @@
 'use client';
 
-import { useEffect } from 'react';
-import { useRouter, useSearchParams } from 'next/navigation';
+import { Suspense, useEffect } from 'react';
+import { useRouter, useSearchParams, useParams } from 'next/navigation';
 import Image from 'next/image';
 import Link from 'next/link';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
@@ -18,9 +18,10 @@ import { formatPrice, formatDate, cn } from '@/lib/utils';
 
 const STATUS_STEPS = ['CONFIRMED', 'PROCESSING', 'SHIPPED', 'OUT_FOR_DELIVERY', 'DELIVERED'];
 
-export default function OrderDetailPage({ params }: { params: { id: string } }) {
+function OrderDetailPageContent() {
   const router = useRouter();
   const searchParams = useSearchParams();
+  const params = useParams<{ id: string }>();
   const isSuccess = searchParams.get('success') === 'true';
   const { isAuthenticated } = useAuthStore();
   const queryClient = useQueryClient();
@@ -191,5 +192,13 @@ export default function OrderDetailPage({ params }: { params: { id: string } }) 
         </div>
       </div>
     </MainLayout>
+  );
+}
+
+export default function OrderDetailPage() {
+  return (
+    <Suspense fallback={<MainLayout><div className="container py-8 max-w-2xl space-y-4"><div className="h-8 w-48 bg-muted animate-pulse rounded" /><div className="h-32 w-full bg-muted animate-pulse rounded" /></div></MainLayout>}>
+      <OrderDetailPageContent />
+    </Suspense>
   );
 }

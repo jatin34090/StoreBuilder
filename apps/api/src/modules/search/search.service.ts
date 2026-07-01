@@ -94,30 +94,39 @@ const PRODUCT_FOR_INDEX_INCLUDE = {
 @Injectable()
 export class SearchService implements OnModuleInit {
   private readonly logger = new Logger(SearchService.name);
-  private readonly client: Client;
+  private client: Client | null = null;
 
   constructor(
     private readonly prisma: PrismaService,
     private readonly configService: ConfigService,
   ) {
-    this.client = new Client({
-      nodes: [
-        {
-          host: this.configService.getOrThrow('TYPESENSE_HOST'),
-          port: Number(this.configService.get('TYPESENSE_PORT', '443')),
-          protocol: this.configService.get('TYPESENSE_PROTOCOL', 'https'),
-        },
-      ],
-      apiKey: this.configService.getOrThrow('TYPESENSE_API_KEY'),
-      connectionTimeoutSeconds: 5,
-      retryIntervalSeconds: 0.1,
-      numRetries: 3,
-    });
+    const host   = this.configService.get<string>('TYPESENSE_HOST', '');
+    const apiKey = this.configService.get<string>('TYPESENSE_API_KEY', '');
+
+    if (host && apiKey) {
+      this.client = new Client({
+        nodes: [
+          {
+            host,
+            port: Number(this.configService.get('TYPESENSE_PORT', '443')),
+            protocol: this.configService.get('TYPESENSE_PROTOCOL', 'https'),
+          },
+        ],
+        apiKey,
+        connectionTimeoutSeconds: 5,
+        retryIntervalSeconds: 0.1,
+        numRetries: 3,
+      });
+    }
   }
 
   // ─── Lifecycle ────────────────────────────────────────────────────────────
 
   async onModuleInit() {
+    if (!this.client) {
+      this.logger.warn('TYPESENSE_HOST not configured — search will use database fallback');
+      return;
+    }
     await this.ensureCollection();
   }
 
@@ -126,6 +135,10 @@ export class SearchService implements OnModuleInit {
   async search(dto: SearchProductsDto, isAdmin = false) {
     const page  = dto.page  ?? 1;
     const limit = dto.limit ?? 20;
+
+    if (!this.client) {
+      return this.dbFallbackSearch(dto, isAdmin, page, limit);
+    }
 
     // Build filter string
     const filters = this.buildFilters(dto, isAdmin);
@@ -170,8 +183,8 @@ export class SearchService implements OnModuleInit {
         facets,
       };
     } catch (error) {
-      this.logger.error('Typesense search failed', error);
-      return { results: [], pagination: { page, limit, total: 0, pageCount: 0 }, facets: {} };
+      this.logger.error('Typesense search failed — falling back to DB', error);
+      return this.dbFallbackSearch(dto, isAdmin, page, limit);
     }
   }
 
@@ -182,6 +195,7 @@ export class SearchService implements OnModuleInit {
    * Silently logs on failure — never throws — so main DB operations are unaffected.
    */
   async indexProduct(productId: string): Promise<void> {
+    if (!this.client) return;
     try {
       const doc = await this.buildDocument(productId);
       if (!doc) {
@@ -201,6 +215,7 @@ export class SearchService implements OnModuleInit {
   // ─── Public: Remove Product ───────────────────────────────────────────────
 
   async removeProduct(productId: string): Promise<void> {
+    if (!this.client) return;
     try {
       await this.client
         .collections(COLLECTION_NAME)
@@ -215,6 +230,10 @@ export class SearchService implements OnModuleInit {
   // ─── Admin: Full Reindex ──────────────────────────────────────────────────
 
   async adminReindex(): Promise<{ indexed: number; errors: number; total: number }> {
+    if (!this.client) {
+      this.logger.warn('adminReindex: Typesense not configured — skipping');
+      return { indexed: 0, errors: 0, total: 0 };
+    }
     this.logger.log('Starting full Typesense reindex...');
 
     // Fetch ALL products (active and inactive so admin can search them)
@@ -270,9 +289,38 @@ export class SearchService implements OnModuleInit {
     return { indexed, errors, total: products.length };
   }
 
+  // ─── Private: DB Fallback Search ─────────────────────────────────────────
+
+  private async dbFallbackSearch(dto: SearchProductsDto, isAdmin: boolean, page: number, limit: number) {
+    const where: Record<string, unknown> = {};
+    if (!isAdmin) where['isActive'] = true;
+    if (dto.q)          where['name'] = { contains: dto.q, mode: 'insensitive' };
+    if (dto.categoryId) where['categoryId'] = dto.categoryId;
+    if (dto.isFeatured) where['isFeatured'] = true;
+
+    const [products, total] = await Promise.all([
+      this.prisma.product.findMany({
+        where,
+        include: { category: true, images: { where: { isPrimary: true }, take: 1 }, variants: true },
+        skip: (page - 1) * limit,
+        take: limit,
+        orderBy: { createdAt: 'desc' },
+      }),
+      this.prisma.product.count({ where }),
+    ]);
+
+    const results = products.map((p) => this.productToDocument(p));
+    return {
+      results,
+      pagination: { page, limit, total, pageCount: Math.ceil(total / limit) },
+      facets: {},
+    };
+  }
+
   // ─── Private: Collection Setup ────────────────────────────────────────────
 
   private async ensureCollection(): Promise<void> {
+    if (!this.client) return;
     try {
       await this.client.collections(COLLECTION_NAME).retrieve();
       this.logger.log(`Typesense collection "${COLLECTION_NAME}" exists`);

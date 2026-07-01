@@ -3,7 +3,7 @@
 import React, { useState } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { useParams, useRouter } from 'next/navigation';
-import { format } from 'date-fns';
+import { fmtDate } from '../../../../../lib/formatters';
 import { toast } from 'sonner';
 import { ArrowLeft, RefreshCw } from 'lucide-react';
 import { Button } from '../../../../../components/ui/button';
@@ -128,7 +128,7 @@ export default function AdminOrderDetailPage() {
     <div className="p-6 space-y-6 max-w-5xl">
       <PageHeader
         title={`Order ${order.orderNumber}`}
-        description={`Placed on ${format(new Date(order.createdAt), 'dd MMM yyyy')}`}
+        description={`Placed on ${fmtDate(order.createdAt)}`}
         action={
           <Button variant="outline" onClick={() => router.push('/admin/orders')}>
             <ArrowLeft className="w-4 h-4 mr-1" /> Back to Orders
@@ -160,7 +160,7 @@ export default function AdminOrderDetailPage() {
               </div>
               <div>
                 <dt className="text-slate-500">Date</dt>
-                <dd>{format(new Date(order.createdAt), 'dd MMM yyyy')}</dd>
+                <dd>{fmtDate(order.createdAt)}</dd>
               </div>
             </dl>
           </div>
@@ -257,7 +257,7 @@ export default function AdminOrderDetailPage() {
                   <p className="font-mono text-xs">{order.delivery.awbCode}</p>
                 )}
                 {order.delivery.estimatedAt && (
-                  <p>ETA: {format(new Date(order.delivery.estimatedAt), 'dd MMM yyyy')}</p>
+                  <p>ETA: {fmtDate(order.delivery.estimatedAt)}</p>
                 )}
               </div>
             </div>

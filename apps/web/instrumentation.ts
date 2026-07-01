@@ -1,10 +1,13 @@
-// Next.js server + edge instrumentation file.
-// @sentry/nextjs v10+ requires Sentry.init to be called here instead of
-// sentry.server.config.ts / sentry.edge.config.ts (which are deprecated).
-import * as Sentry from '@sentry/nextjs';
+// Next.js server + edge instrumentation (Sentry v10+).
+// All imports are dynamic so Turbopack only compiles Sentry when a DSN is set.
 
-// Wire Next.js request-error hook to Sentry so RSC / route-handler errors are captured.
-export const onRequestError = Sentry.captureRequestError;
+export async function onRequestError(
+  ...args: Parameters<Awaited<typeof import('@sentry/nextjs')>['captureRequestError']>
+) {
+  if (!process.env.NEXT_PUBLIC_SENTRY_DSN) return;
+  const { captureRequestError } = await import('@sentry/nextjs');
+  return captureRequestError(...args);
+}
 
 export async function register() {
   const dsn = process.env.NEXT_PUBLIC_SENTRY_DSN;

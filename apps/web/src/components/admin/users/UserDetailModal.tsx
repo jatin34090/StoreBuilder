@@ -2,7 +2,7 @@
 
 import React from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { format } from 'date-fns';
+import { fmtDate } from '../../../lib/formatters';
 import { toast } from 'sonner';
 import {
   Dialog,
@@ -72,7 +72,7 @@ export function UserDetailModal({ user, onClose }: UserDetailModalProps) {
               </Badge>
             )}
             <span className="text-xs text-slate-400">
-              Joined {format(new Date(user.createdAt), 'dd MMM yyyy')}
+              Joined {fmtDate(user.createdAt)}
             </span>
           </div>
 

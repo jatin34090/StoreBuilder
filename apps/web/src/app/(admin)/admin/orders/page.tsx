@@ -3,7 +3,7 @@
 import React, { useState, useEffect } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { useRouter } from 'next/navigation';
-import { format } from 'date-fns';
+import { fmtDate } from '../../../../lib/formatters';
 import { Search } from 'lucide-react';
 import { Input } from '../../../../components/ui/input';
 import { Button } from '../../../../components/ui/button';
@@ -108,7 +108,7 @@ export default function AdminOrdersPage() {
       header: 'Date',
       render: (row) => (
         <span className="text-xs text-slate-500">
-          {format(new Date(row.createdAt), 'dd MMM yyyy')}
+          {fmtDate(row.createdAt)}
         </span>
       ),
     },

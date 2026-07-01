@@ -2,7 +2,7 @@
 
 import { useState } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { format } from 'date-fns';
+import { fmtDate } from '../../../../lib/formatters';
 import { Star, Eye, EyeOff, Trash2, Search } from 'lucide-react';
 import { toast } from 'sonner';
 import { Button } from '../../../../components/ui/button';
@@ -160,7 +160,7 @@ export default function ReviewsPage() {
                       <p className="text-xs text-slate-500 line-clamp-2">{review.body ?? ''}</p>
                     </td>
                     <td className="px-4 py-3 text-slate-500 text-xs whitespace-nowrap">
-                      {review.createdAt ? format(new Date(review.createdAt), 'dd MMM yyyy') : '—'}
+                      {review.createdAt ? fmtDate(review.createdAt) : '—'}
                     </td>
                     <td className="px-4 py-3">
                       {review.isVisible !== false ? (

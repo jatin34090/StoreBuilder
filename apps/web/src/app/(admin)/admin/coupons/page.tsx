@@ -5,7 +5,7 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { z } from 'zod';
-import { format } from 'date-fns';
+import { fmtDate } from '../../../../lib/formatters';
 import { Plus, Edit2, ToggleLeft, ToggleRight, Ticket } from 'lucide-react';
 import { toast } from 'sonner';
 import { Button } from '../../../../components/ui/button';
@@ -196,7 +196,7 @@ export default function CouponsPage() {
                       <td className="px-4 py-3 text-slate-500 text-xs">
                         {coupon.expiresAt ? (
                           <span className={isExpired ? 'text-red-500' : ''}>
-                            {format(new Date(coupon.expiresAt), 'dd MMM yyyy')}
+                            {fmtDate(coupon.expiresAt)}
                             {isExpired && ' (Expired)'}
                           </span>
                         ) : (

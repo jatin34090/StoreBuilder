@@ -2,8 +2,9 @@
 
 import React, { useState, useCallback, useEffect } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
+import dynamic from 'next/dynamic';
 import { toast } from 'sonner';
-import { format } from 'date-fns';
+import { fmtDate } from '../../../../lib/formatters';
 import { Plus, Search, Pencil, Trash2, ChevronUp, ChevronDown } from 'lucide-react';
 import { Button } from '../../../../components/ui/button';
 import { Input } from '../../../../components/ui/input';
@@ -25,9 +26,17 @@ import { PageHeader } from '../../../../components/admin/PageHeader';
 import { DataTable, Column } from '../../../../components/admin/DataTable';
 import { StatusBadge } from '../../../../components/admin/StatusBadge';
 import { TableSkeleton } from '../../../../components/admin/LoadingSkeleton';
-import { ProductFormModal } from '../../../../components/admin/products/ProductFormModal';
-import { VariantManager } from '../../../../components/admin/products/VariantManager';
 import { adminApi, AdminProduct } from '../../../../lib/admin-api';
+
+// Lazy-load heavy modals — only compiled when user opens them
+const ProductFormModal = dynamic(
+  () => import('../../../../components/admin/products/ProductFormModal').then((m) => ({ default: m.ProductFormModal })),
+  { ssr: false },
+);
+const VariantManager = dynamic(
+  () => import('../../../../components/admin/products/VariantManager').then((m) => ({ default: m.VariantManager })),
+  { ssr: false },
+);
 
 function useDebounce<T>(value: T, delay: number): T {
   const [debounced, setDebounced] = useState(value);
@@ -204,7 +213,7 @@ export default function AdminProductsPage() {
       header: 'Created',
       render: (row) => (
         <button className="text-xs text-slate-500" onClick={() => toggleSort('createdAt')}>
-          {format(new Date(row.createdAt), 'dd MMM yyyy')}
+          {fmtDate(row.createdAt)}
           <SortIcon col="createdAt" />
         </button>
       ),

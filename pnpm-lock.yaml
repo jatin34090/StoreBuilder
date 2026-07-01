@@ -144,6 +144,9 @@ importers:
       '@prisma/client':
         specifier: 5.22.0
         version: 5.22.0(prisma@5.22.0)
+      '@sentry/node':
+        specifier: ^10.62.0
+        version: 10.62.0(@opentelemetry/core@2.8.0(@opentelemetry/api@1.9.1))
       bcrypt:
         specifier: ^5.1.1
         version: 5.1.1
@@ -479,6 +482,9 @@ importers:
       framer-motion:
         specifier: ^11.5.6
         version: 11.18.2(react-dom@18.3.1(react@18.3.1))(react@18.3.1)
+      import-in-the-middle:
+        specifier: ^3.2.0
+        version: 3.2.0
       leaflet:
         specifier: ^1.9.4
         version: 1.9.4
@@ -515,6 +521,9 @@ importers:
       recharts:
         specifier: ^2.12.7
         version: 2.15.4(react-dom@18.3.1(react@18.3.1))(react@18.3.1)
+      require-in-the-middle:
+        specifier: ^8.0.1
+        version: 8.0.1
       socket.io-client:
         specifier: ^4.7.5
         version: 4.8.3
@@ -13744,7 +13753,7 @@ snapshots:
       '@apm-js-collab/tracing-hooks': 0.10.0
       '@sentry/conventions': 0.12.0
       '@sentry/core': 10.62.0
-      magic-string: 0.30.8
+      magic-string: 0.30.21
     transitivePeerDependencies:
       - supports-color
 

@@ -5,7 +5,7 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { z } from 'zod';
-import { format } from 'date-fns';
+import { fmtDate } from '../../../../lib/formatters';
 import { Plus, Truck, MapPin, Edit2, Trash2, Package, CheckCircle2, Clock } from 'lucide-react';
 import { toast } from 'sonner';
 import { Button } from '../../../../components/ui/button';
@@ -333,7 +333,7 @@ export default function DeliveryPage() {
                         </td>
                         <td className="px-4 py-3 text-slate-500 text-xs">
                           {d.estimatedAt
-                            ? format(new Date(d.estimatedAt), 'dd MMM yyyy')
+                            ? fmtDate(d.estimatedAt)
                             : '—'}
                         </td>
                       </tr>

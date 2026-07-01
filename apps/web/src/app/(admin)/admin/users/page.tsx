@@ -2,7 +2,7 @@
 
 import { useState } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { format } from 'date-fns';
+import { fmtDate } from '../../../../lib/formatters';
 import {
   Search,
   UserCheck,
@@ -162,7 +162,7 @@ export default function UsersPage() {
                       )}
                     </td>
                     <td className="px-4 py-3 text-slate-500 text-xs">
-                      {user.createdAt ? format(new Date(user.createdAt), 'dd MMM yyyy') : '—'}
+                      {user.createdAt ? fmtDate(user.createdAt) : '—'}
                     </td>
                     <td className="px-4 py-3">
                       {user.isBlocked ? (

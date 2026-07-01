@@ -1,5 +1,4 @@
 import type { NextConfig } from 'next';
-import { withSentryConfig } from '@sentry/nextjs';
 
 const nextConfig: NextConfig = {
   // Emit a self-contained server bundle for small, fast Docker images.
@@ -8,6 +7,10 @@ const nextConfig: NextConfig = {
   // the root eslint.config.mjs @eslint/js resolution issue in the build worker.
   eslint: { ignoreDuringBuilds: true },
   typedRoutes: false,
+  // Turbopack + @sentry/nextjs: these OpenTelemetry packages use dynamic
+  // require() and cannot be bundled — mark them external so Node resolves them
+  // at runtime from the monorepo node_modules instead.
+  serverExternalPackages: ['import-in-the-middle', 'require-in-the-middle'],
   images: {
     remotePatterns: [
       {
@@ -33,15 +36,24 @@ const nextConfig: NextConfig = {
   },
 };
 
-export default withSentryConfig(nextConfig, {
-  // Sentry build-time options — safe no-op when SENTRY_AUTH_TOKEN is unset.
+const sentryConfig = {
   org: process.env.SENTRY_ORG,
   project: process.env.SENTRY_PROJECT,
   authToken: process.env.SENTRY_AUTH_TOKEN,
-
-  // Upload source maps only when auth token is present (i.e. production CI).
   sourcemaps: { disable: !process.env.SENTRY_AUTH_TOKEN },
-
-  // Suppress noisy Sentry CLI output outside CI.
   silent: !process.env.CI,
-});
+  // Skip all Sentry instrumentation in dev — no DSN configured and it adds
+  // ~10s to every first-compile via OpenTelemetry/import-in-the-middle.
+  disableLogger: true,
+  automaticVercelMonitors: false,
+};
+
+// In dev: export nextConfig directly — @sentry/nextjs is never imported,
+// so Node.js doesn't load the entire OTel chain at startup (saves ~2-3s).
+// In production: dynamically import withSentryConfig and wrap.
+export default process.env.NODE_ENV === 'development'
+  ? nextConfig
+  : (async () => {
+      const { withSentryConfig } = await import('@sentry/nextjs');
+      return withSentryConfig(nextConfig, sentryConfig);
+    })();

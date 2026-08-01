@@ -99,12 +99,12 @@ export class AuthService {
     const { accessToken, refreshToken } = await this.generateTokens(user.id, user.role);
     await this.storeRefreshToken(user.id, refreshToken);
 
-    return { accessToken, user };
+    return { accessToken, refreshToken, user };
   }
 
   // ─── Email/Password (Admin fallback) ─────────────────────────────────────
 
-  async login(dto: LoginDto): Promise<{ accessToken: string; user: Record<string, unknown> }> {
+  async login(dto: LoginDto): Promise<{ accessToken: string; refreshToken: string; user: Record<string, unknown> }> {
     const user = await this.prisma.user.findUnique({
       where: { email: dto.email },
       select: { id: true, name: true, email: true, phone: true, role: true, passwordHash: true, isBlocked: true, avatar: true },
@@ -127,7 +127,7 @@ export class AuthService {
     await this.storeRefreshToken(user.id, refreshToken);
 
     const { passwordHash: _h, ...safeUser } = user;
-    return { accessToken, user: safeUser };
+    return { accessToken, refreshToken, user: safeUser };
   }
 
   // ─── Google OAuth ─────────────────────────────────────────────────────────
@@ -165,8 +165,7 @@ export class AuthService {
   // ─── Token Rotation ───────────────────────────────────────────────────────
 
   async refresh(refreshToken: string): Promise<{ accessToken: string }> {
-    // Find all tokens for comparison (rotation family detection)
-    const tokenHash = await this.findAndValidateRefreshToken(refreshToken);
+    const tokenHash = this.tokenHash(refreshToken);
 
     const dbToken = await this.prisma.refreshToken.findFirst({
       where: { tokenHash },
@@ -198,7 +197,7 @@ export class AuthService {
   }
 
   async logout(userId: string, refreshToken: string): Promise<void> {
-    const tokenHash = await this.findAndValidateRefreshToken(refreshToken);
+    const tokenHash = this.tokenHash(refreshToken);
     await this.prisma.refreshToken.deleteMany({
       where: { userId, tokenHash },
     });
@@ -226,7 +225,7 @@ export class AuthService {
   }
 
   private async storeRefreshToken(userId: string, token: string): Promise<void> {
-    const tokenHash = await bcrypt.hash(token, BCRYPT_ROUNDS);
+    const tokenHash = this.tokenHash(token);
     const expiresInDays = 30;
     const expiresAt = new Date(Date.now() + expiresInDays * 24 * 60 * 60 * 1000);
 
@@ -235,11 +234,11 @@ export class AuthService {
     });
   }
 
-  private async findAndValidateRefreshToken(plainToken: string): Promise<string> {
-    // We can't do a direct lookup by hash without knowing the userId.
-    // In a real rotation scenario we use the cookie value as a family ID.
-    // Here we return the hash of the provided token for comparison.
-    return bcrypt.hash(plainToken, BCRYPT_ROUNDS);
+  private tokenHash(plainToken: string): string {
+    // SHA-256 is deterministic — same input always gives same output, suitable
+    // for DB lookup. bcrypt can't be used for lookup because it generates a new
+    // random salt on every call, so bcrypt.hash(x) !== bcrypt.hash(x).
+    return crypto.createHash('sha256').update(plainToken).digest('hex');
   }
 
   private async sendOtpSms(phone: string, otp: string): Promise<void> {

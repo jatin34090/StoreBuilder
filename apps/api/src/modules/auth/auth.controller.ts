@@ -53,8 +53,7 @@ export class AuthController {
   @ApiOperation({ summary: 'Verify OTP and receive access token' })
   async verifyOtp(@Body() dto: VerifyOtpDto, @Res({ passthrough: true }) res: Response) {
     const result = await this.authService.verifyOtp(dto);
-    // Refresh token set as HttpOnly cookie
-    res.cookie(COOKIE_NAME, result.accessToken, COOKIE_OPTIONS);
+    res.cookie(COOKIE_NAME, result.refreshToken, COOKIE_OPTIONS);
     return { accessToken: result.accessToken, user: result.user };
   }
 
@@ -64,7 +63,7 @@ export class AuthController {
   @ApiOperation({ summary: 'Email + password login (admin)' })
   async login(@Body() dto: LoginDto, @Res({ passthrough: true }) res: Response) {
     const result = await this.authService.login(dto);
-    res.cookie(COOKIE_NAME, result.accessToken, COOKIE_OPTIONS);
+    res.cookie(COOKIE_NAME, result.refreshToken, COOKIE_OPTIONS);
     return { accessToken: result.accessToken, user: result.user };
   }
 

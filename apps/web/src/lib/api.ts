@@ -64,7 +64,13 @@ api.interceptors.response.use(
         return api(original);
       } catch (refreshError) {
         processQueue(refreshError);
-        if (typeof window !== 'undefined') window.location.href = '/auth/login';
+        // Clear persisted auth state — protected pages will redirect via useAuthGuard.
+        // Hard window.location redirect removed: it interrupts in-progress navigations
+        // and fires even when the original 401 was transient (e.g. during login flow).
+        try {
+          const { useAuthStore } = await import('../store/authStore');
+          useAuthStore.getState().clearUser();
+        } catch { /* ignore — store may not be mounted */ }
         return Promise.reject(refreshError);
       } finally {
         isRefreshing = false;

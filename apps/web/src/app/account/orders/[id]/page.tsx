@@ -1,7 +1,7 @@
 'use client';
 
 import { Suspense, useEffect } from 'react';
-import { useRouter, useSearchParams, useParams } from 'next/navigation';
+import { useSearchParams, useParams } from 'next/navigation';
 import Image from 'next/image';
 import Link from 'next/link';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
@@ -12,7 +12,7 @@ import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Separator } from '@/components/ui/separator';
 import { Skeleton } from '@/components/ui/skeleton';
-import { useAuthStore } from '@/store/authStore';
+import { useAuthGuard } from '@/hooks/useAuthGuard';
 import { ordersApi } from '@/lib/api';
 import { formatPrice, formatDate, cn } from '@/lib/utils';
 
@@ -23,12 +23,8 @@ function OrderDetailPageContent() {
   const searchParams = useSearchParams();
   const params = useParams<{ id: string }>();
   const isSuccess = searchParams.get('success') === 'true';
-  const { isAuthenticated } = useAuthStore();
+  const { isAuthenticated, hydrated } = useAuthGuard('/auth/login');
   const queryClient = useQueryClient();
-
-  useEffect(() => {
-    if (!isAuthenticated) router.replace('/auth/login');
-  }, [isAuthenticated, router]);
 
   useEffect(() => {
     if (isSuccess) toast.success('🎉 Order placed successfully!');
@@ -77,6 +73,8 @@ function OrderDetailPageContent() {
   const currentStepIdx = STATUS_STEPS.indexOf(order.status);
   const isCancellable  = ['PENDING', 'CONFIRMED'].includes(order.status);
   const isDelivered    = order.status === 'DELIVERED';
+
+  if (!hydrated || !isAuthenticated) return null;
 
   return (
     <MainLayout>

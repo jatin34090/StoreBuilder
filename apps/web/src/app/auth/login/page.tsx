@@ -12,7 +12,7 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
-import { authApi, cartApi } from '@/lib/api';
+import { api, authApi, cartApi } from '@/lib/api';
 import { useAuthStore } from '@/store/authStore';
 import { useCartStore } from '@/store/cartStore';
 
@@ -56,8 +56,13 @@ function LoginPageContent() {
     }
   };
 
-  const onLoginSuccess = async (user: { id: string; name: string; email?: string; phone?: string; role: 'CUSTOMER' | 'ADMIN' | 'DELIVERY_AGENT' }) => {
-    setUser(user);
+  const onLoginSuccess = async (user: { id: string; name: string; email?: string; phone?: string; role: 'CUSTOMER' | 'ADMIN' | 'DELIVERY_AGENT' }, token?: string) => {
+    setUser(user, token);
+    // Set header immediately so requests made before Zustand persist flushes
+    // to localStorage (async) still carry the token.
+    if (token) {
+      api.defaults.headers.common['Authorization'] = `Bearer ${token}`;
+    }
     await mergeGuestCart();
     toast.success(`Welcome back, ${user.name.split(' ')[0]}!`);
     router.push(redirectTo);
@@ -81,7 +86,7 @@ function LoginPageContent() {
   const handleVerifyOtp = otpVerifyForm.handleSubmit(async (data) => {
     try {
       const res = await authApi.verifyOtp(phone, data.otp);
-      await onLoginSuccess(res.data.data?.user);
+      await onLoginSuccess(res.data.data?.user, res.data.data?.accessToken);
     } catch (err: unknown) {
       const msg = (err as { response?: { data?: { message?: string } } })?.response?.data?.message;
       toast.error(msg ?? 'Invalid OTP. Please try again.');
@@ -93,7 +98,7 @@ function LoginPageContent() {
   const handleLogin = loginForm.handleSubmit(async (data) => {
     try {
       const res = await authApi.login(data.identifier, data.password);
-      await onLoginSuccess(res.data.data?.user);
+      await onLoginSuccess(res.data.data?.user, res.data.data?.accessToken);
     } catch (err: unknown) {
       const msg = (err as { response?: { data?: { message?: string } } })?.response?.data?.message;
       toast.error(msg ?? 'Invalid credentials. Please try again.');

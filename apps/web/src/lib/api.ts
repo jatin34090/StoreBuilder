@@ -8,15 +8,20 @@ export const api = axios.create({
   headers: { 'Content-Type': 'application/json' },
 });
 
-// ─── Attach admin bearer token on every request ──────────────────────────────
-// The admin dashboard authenticates with a JWT stored in localStorage (Zustand
-// persist). Reading it per-request guarantees the header is present even before
-// the store's rehydration callback has run, eliminating an auth-timing race.
+// ─── Attach bearer token on every request ────────────────────────────────────
+// Reads from localStorage per-request (not from React state) so the header is
+// present even before Zustand's rehydration callback has fired.
+// Priority: admin token > customer token.
 api.interceptors.request.use((config) => {
   if (typeof window !== 'undefined') {
     try {
-      const raw = window.localStorage.getItem('jewellery-admin-auth');
-      const token = raw ? JSON.parse(raw)?.state?.adminToken : null;
+      const adminRaw = window.localStorage.getItem('jewellery-admin-auth');
+      const adminToken = adminRaw ? JSON.parse(adminRaw)?.state?.adminToken : null;
+
+      const userRaw = window.localStorage.getItem('jewellery-auth');
+      const userToken = userRaw ? JSON.parse(userRaw)?.state?.token : null;
+
+      const token = adminToken ?? userToken;
       if (token) {
         config.headers = config.headers ?? {};
         (config.headers as Record<string, string>)['Authorization'] = `Bearer ${token}`;
@@ -42,7 +47,8 @@ api.interceptors.response.use(
   (res) => res,
   async (error) => {
     const original = error.config;
-    if (error.response?.status === 401 && !original._retry) {
+    const isAuthEndpoint = original?.url?.includes('/auth/');
+    if (error.response?.status === 401 && !original._retry && !isAuthEndpoint) {
       if (isRefreshing) {
         return new Promise((resolve, reject) => {
           failedQueue.push({ resolve, reject });
@@ -133,10 +139,10 @@ export const ordersApi = {
 export const usersApi = {
   profile: () => api.get('/users/profile'),
   updateProfile: (data: unknown) => api.patch('/users/profile', data),
-  addresses: () => api.get('/users/addresses'),
-  addAddress: (data: unknown) => api.post('/users/addresses', data),
-  updateAddress: (id: string, data: unknown) => api.patch(`/users/addresses/${id}`, data),
-  deleteAddress: (id: string) => api.delete(`/users/addresses/${id}`),
+  addresses: () => api.get('/users/me/addresses'),
+  addAddress: (data: unknown) => api.post('/users/me/addresses', data),
+  updateAddress: (id: string, data: unknown) => api.patch(`/users/me/addresses/${id}`, data),
+  deleteAddress: (id: string) => api.delete(`/users/me/addresses/${id}`),
 };
 
 // ─── Reviews ─────────────────────────────────────────────────────────────────

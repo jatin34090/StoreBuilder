@@ -64,7 +64,7 @@ export class AuthService {
     return { message: 'OTP sent successfully' };
   }
 
-  async verifyOtp(dto: VerifyOtpDto): Promise<{ accessToken: string; user: Record<string, unknown> }> {
+  async verifyOtp(dto: VerifyOtpDto): Promise<{ accessToken: string; refreshToken: string; user: Record<string, unknown> }> {
     const attemptsKey = `otp_attempts:${dto.phone}`;
     const attempts = await this.redis.incr(attemptsKey);
     await this.redis.expire(attemptsKey, OTP_TTL_SECONDS);

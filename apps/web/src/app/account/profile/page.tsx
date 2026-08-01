@@ -1,7 +1,6 @@
 'use client';
 
-import { useState, useEffect } from 'react';
-import { useRouter } from 'next/navigation';
+import { useState } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
@@ -14,6 +13,7 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Separator } from '@/components/ui/separator';
 import { useAuthStore } from '@/store/authStore';
+import { useAuthGuard } from '@/hooks/useAuthGuard';
 import { usersApi } from '@/lib/api';
 
 const profileSchema = z.object({
@@ -35,13 +35,9 @@ type ProfileForm  = z.infer<typeof profileSchema>;
 type AddressForm  = z.infer<typeof addressSchema>;
 
 export default function ProfilePage() {
-  const router = useRouter();
-  const { isAuthenticated, user, setUser } = useAuthStore();
+  const { isAuthenticated, hydrated } = useAuthGuard('/auth/login?redirect=/account/profile');
+  const { setUser } = useAuthStore();
   const queryClient = useQueryClient();
-
-  useEffect(() => {
-    if (!isAuthenticated) router.replace('/auth/login?redirect=/account/profile');
-  }, [isAuthenticated, router]);
 
   const { data: profileData } = useQuery({
     queryKey: ['profile'],
@@ -97,6 +93,8 @@ export default function ProfilePage() {
       queryClient.invalidateQueries({ queryKey: ['addresses'] });
     },
   });
+
+  if (!hydrated || !isAuthenticated) return null;
 
   return (
     <MainLayout>

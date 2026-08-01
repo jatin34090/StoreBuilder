@@ -1,7 +1,5 @@
 'use client';
 
-import { useEffect } from 'react';
-import { useRouter } from 'next/navigation';
 import Link from 'next/link';
 import { useQuery } from '@tanstack/react-query';
 import { Package, ChevronRight, Loader2 } from 'lucide-react';
@@ -9,7 +7,7 @@ import { MainLayout } from '@/components/layout/MainLayout';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Skeleton } from '@/components/ui/skeleton';
-import { useAuthStore } from '@/store/authStore';
+import { useAuthGuard } from '@/hooks/useAuthGuard';
 import { ordersApi } from '@/lib/api';
 import { formatPrice, formatDate } from '@/lib/utils';
 
@@ -27,12 +25,7 @@ const STATUS_COLORS: Record<string, 'default' | 'secondary' | 'success' | 'warni
 };
 
 export default function OrdersPage() {
-  const router = useRouter();
-  const { isAuthenticated } = useAuthStore();
-
-  useEffect(() => {
-    if (!isAuthenticated) router.replace('/auth/login?redirect=/account/orders');
-  }, [isAuthenticated, router]);
+  const { isAuthenticated, hydrated } = useAuthGuard('/auth/login?redirect=/account/orders');
 
   const { data, isLoading } = useQuery({
     queryKey: ['orders'],
@@ -48,6 +41,8 @@ export default function OrdersPage() {
     createdAt: string;
     items: { name: string; quantity: number; image: string }[];
   }> = data?.data?.data?.orders ?? [];
+
+  if (!hydrated || !isAuthenticated) return null;
 
   return (
     <MainLayout>

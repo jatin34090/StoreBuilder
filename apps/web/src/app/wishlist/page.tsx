@@ -1,7 +1,5 @@
 'use client';
 
-import { useEffect } from 'react';
-import { useRouter } from 'next/navigation';
 import Link from 'next/link';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { Heart, Trash2, Loader2 } from 'lucide-react';
@@ -10,20 +8,15 @@ import Image from 'next/image';
 import { MainLayout } from '@/components/layout/MainLayout';
 import { Button } from '@/components/ui/button';
 import { Skeleton } from '@/components/ui/skeleton';
-import { useAuthStore } from '@/store/authStore';
+import { useAuthGuard } from '@/hooks/useAuthGuard';
 import { useCartStore } from '@/store/cartStore';
 import { wishlistApi } from '@/lib/api';
 import { formatPrice } from '@/lib/utils';
 
 export default function WishlistPage() {
-  const router = useRouter();
-  const { isAuthenticated } = useAuthStore();
+  const { isAuthenticated, hydrated } = useAuthGuard('/auth/login?redirect=/wishlist');
   const addItem = useCartStore((s) => s.addItem);
   const queryClient = useQueryClient();
-
-  useEffect(() => {
-    if (!isAuthenticated) router.replace('/auth/login?redirect=/wishlist');
-  }, [isAuthenticated, router]);
 
   const { data, isLoading } = useQuery({
     queryKey: ['wishlist'],
@@ -51,6 +44,8 @@ export default function WishlistPage() {
       toast.success('Removed from wishlist');
     },
   });
+
+  if (!hydrated || !isAuthenticated) return null;
 
   return (
     <MainLayout>

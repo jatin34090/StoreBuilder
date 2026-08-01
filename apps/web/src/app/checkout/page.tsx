@@ -16,7 +16,7 @@ import { Separator } from '@/components/ui/separator';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog';
 import { MainLayout } from '@/components/layout/MainLayout';
 import { useCartStore } from '@/store/cartStore';
-import { useAuthStore } from '@/store/authStore';
+import { useAuthGuard } from '@/hooks/useAuthGuard';
 import { usersApi, ordersApi, couponsApi } from '@/lib/api';
 import { formatPrice } from '@/lib/utils';
 import { cn } from '@/lib/utils';
@@ -48,7 +48,7 @@ type AddressForm = z.infer<typeof addressSchema>;
 
 export default function CheckoutPage() {
   const router = useRouter();
-  const { isAuthenticated } = useAuthStore();
+  const { isAuthenticated, hydrated } = useAuthGuard('/auth/login?redirect=/checkout');
   const { items, subtotal, clearCart } = useCartStore();
 
   const [selectedAddressId, setSelectedAddressId] = useState<string>('');
@@ -64,11 +64,10 @@ export default function CheckoutPage() {
   const discountAmount = couponData?.discountAmount ?? 0;
   const total = Math.max(0, sub + shippingCharge - discountAmount);
 
-  // Redirect if not authenticated or cart is empty
+  // Redirect to cart if empty (auth redirect is handled by useAuthGuard)
   useEffect(() => {
-    if (!isAuthenticated) { router.replace('/auth/login?redirect=/checkout'); return; }
-    if (items.length === 0) { router.replace('/cart'); }
-  }, [isAuthenticated, items, router]);
+    if (hydrated && isAuthenticated && items.length === 0) router.replace('/cart');
+  }, [hydrated, isAuthenticated, items, router]);
 
   const { data: addressesData, refetch: refetchAddresses } = useQuery({
     queryKey: ['addresses'],
@@ -180,6 +179,8 @@ export default function CheckoutPage() {
   if (!isAuthenticated || items.length === 0) {
     return <MainLayout><div className="container py-20 text-center"><Loader2 className="h-8 w-8 animate-spin mx-auto" /></div></MainLayout>;
   }
+
+  if (!hydrated || !isAuthenticated) return null;
 
   return (
     <MainLayout>

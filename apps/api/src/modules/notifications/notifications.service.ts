@@ -4,8 +4,13 @@ import {
   ForbiddenException,
   Logger,
 } from '@nestjs/common';
+import { InjectQueue } from '@nestjs/bull';
+import type { Queue } from 'bull';
 import { Prisma, NotificationType, Role, OrderStatus } from '@prisma/client';
 import { PrismaService } from '../../prisma/prisma.service';
+import { QUEUE_NOTIFICATIONS, JOB_SEND_PUSH, JOB_BROADCAST } from '../queues/queue.constants';
+import { IsolatedQueueService } from '../queues/isolated-queue.service';
+import type { SendPushJobData, BroadcastJobData } from './notifications.processor';
 import type { CreateNotificationDto } from './dto/create-notification.dto';
 import type { BroadcastNotificationDto } from './dto/broadcast-notification.dto';
 import type { QueryNotificationsDto } from './dto/query-notifications.dto';
@@ -19,11 +24,17 @@ interface NotifyOptions {
   data?: Record<string, unknown>;
 }
 
+const DEFAULT_STORE_ID = '00000000-0000-0000-0000-000000000001';
+
 @Injectable()
 export class NotificationsService {
   private readonly logger = new Logger(NotificationsService.name);
 
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(
+    private readonly prisma: PrismaService,
+    @InjectQueue(QUEUE_NOTIFICATIONS) private readonly notifQueue: Queue,
+    private readonly isolatedQueue: IsolatedQueueService,
+  ) {}
 
   // ─── Customer: List Notifications ─────────────────────────────────────────
 
@@ -114,6 +125,7 @@ export class NotificationsService {
 
     const notification = await this.prisma.notification.create({
       data: {
+        storeId: DEFAULT_STORE_ID,
         userId: dto.userId,
         type: dto.type,
         title: dto.title,
@@ -162,6 +174,7 @@ export class NotificationsService {
     // Batch-insert notifications
     await this.prisma.notification.createMany({
       data: userIds.map((userId) => ({
+        storeId: DEFAULT_STORE_ID,
         userId,
         type: dto.type,
         title: dto.title,
@@ -208,6 +221,7 @@ export class NotificationsService {
 
       await this.prisma.notification.create({
         data: {
+          storeId: DEFAULT_STORE_ID,
           userId,
           type: options.type,
           title: options.title,
@@ -230,6 +244,7 @@ export class NotificationsService {
     try {
       await this.prisma.notification.createMany({
         data: userIds.map((userId) => ({
+          storeId: DEFAULT_STORE_ID,
           userId,
           type: options.type,
           title: options.title,
@@ -327,6 +342,7 @@ export class NotificationsService {
           select: { id: true },
         })
       ).map((u) => ({
+        storeId: DEFAULT_STORE_ID,
         userId: u.id,
         type: NotificationType.OFFER,
         title: `New Offer: ${couponCode}`,
@@ -369,31 +385,38 @@ export class NotificationsService {
     title: string,
     body: string,
     data?: Record<string, unknown>,
+    storeId = DEFAULT_STORE_ID,
   ): void {
-    // Fire all async — never block the caller
     this.emitWebSocket(userId, title, body, data);
     if (expoPushToken) {
-      this.sendExpoPush(expoPushToken, title, body, data).catch((e) =>
-        this.logger.error(`Push failed for user ${userId}`, e),
-      );
+      const jobData: SendPushJobData = { token: expoPushToken, title, body, data };
+      this.isolatedQueue
+        .add(storeId, 'notifications', JOB_SEND_PUSH, jobData, {
+          attempts: 3,
+          backoff:  { type: 'exponential', delay: 5000 },
+          removeOnComplete: true,
+          removeOnFail:     50,
+        })
+        .catch((e) => this.logger.error(`Failed to enqueue push for user ${userId}`, e));
     }
   }
 
-  /**
-   * Phase 2: Replace with actual Expo Push Notifications SDK call.
-   * Expo push token stored at User.expoPushToken (set from mobile app).
-   * Ref: https://docs.expo.dev/push-notifications/sending-notifications/
-   */
-  private async sendExpoPush(
-    token: string,
+  /** Enqueue a push broadcast to many tokens (called from adminBroadcast). */
+  async enqueueBroadcastPush(
+    tokens: string[],
     title: string,
     body: string,
     data?: Record<string, unknown>,
+    storeId = DEFAULT_STORE_ID,
   ): Promise<void> {
-    // TODO (Phase 2):
-    // const message: ExpoPushMessage = { to: token, title, body, data, sound: 'default' };
-    // await expo.sendPushNotificationsAsync([message]);
-    this.logger.debug(`[PUSH:EXPO] to=${token} title="${title}" data=${JSON.stringify(data)}`);
+    if (tokens.length === 0) return;
+    const jobData: BroadcastJobData = { tokens, title, body, data };
+    await this.isolatedQueue.add(storeId, 'notifications', JOB_BROADCAST, jobData, {
+      attempts: 2,
+      backoff:  { type: 'fixed', delay: 10_000 },
+      removeOnComplete: true,
+      removeOnFail:     20,
+    });
   }
 
   /**

@@ -68,7 +68,7 @@ export function Header({ brand }: HeaderProps) {
     staleTime: 5 * 60 * 1000,
   });
 
-  const navLinks = [
+  const navLinks: { label: string; href: string; highlight?: boolean }[] = [
     ...categoryTree.map((c) => ({ label: c.name, href: `/products?category=${c.slug}` })),
     SALE_LINK,
   ];

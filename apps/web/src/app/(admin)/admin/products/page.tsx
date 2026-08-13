@@ -5,7 +5,7 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import dynamic from 'next/dynamic';
 import { toast } from 'sonner';
 import { fmtDate } from '../../../../lib/formatters';
-import { Plus, Search, Pencil, Trash2, ChevronUp, ChevronDown } from 'lucide-react';
+import { Plus, Search, Pencil, Trash2, ChevronUp, ChevronDown, ImageIcon } from 'lucide-react';
 import { Button } from '../../../../components/ui/button';
 import { Input } from '../../../../components/ui/input';
 import {
@@ -37,6 +37,10 @@ const VariantManager = dynamic(
   () => import('../../../../components/admin/products/VariantManager').then((m) => ({ default: m.VariantManager })),
   { ssr: false },
 );
+const ProductImageManager = dynamic(
+  () => import('../../../../components/admin/products/ProductImageManager').then((m) => ({ default: m.ProductImageManager })),
+  { ssr: false },
+);
 
 function useDebounce<T>(value: T, delay: number): T {
   const [debounced, setDebounced] = useState(value);
@@ -58,6 +62,7 @@ export default function AdminProductsPage() {
   const [modalOpen, setModalOpen] = useState(false);
   const [editProduct, setEditProduct] = useState<AdminProduct | null>(null);
   const [variantProduct, setVariantProduct] = useState<AdminProduct | null>(null);
+  const [imageProduct, setImageProduct] = useState<AdminProduct | null>(null);
   const [deleteTarget, setDeleteTarget] = useState<AdminProduct | null>(null);
 
   const debouncedSearch = useDebounce(search, 300);
@@ -238,6 +243,16 @@ export default function AdminProductsPage() {
             variant="ghost"
             size="sm"
             className="h-8 px-2 text-xs"
+            onClick={() => setImageProduct(row)}
+            title="Manage images"
+          >
+            <ImageIcon className="w-3.5 h-3.5 mr-1" />
+            Images
+          </Button>
+          <Button
+            variant="ghost"
+            size="sm"
+            className="h-8 px-2 text-xs"
             onClick={() => setVariantProduct(row)}
           >
             Variants
@@ -374,6 +389,16 @@ export default function AdminProductsPage() {
             </DialogFooter>
           </DialogContent>
         </Dialog>
+      )}
+
+      {/* Image Manager */}
+      {imageProduct && (
+        <ProductImageManager
+          productId={imageProduct.id}
+          productName={imageProduct.name}
+          open={!!imageProduct}
+          onClose={() => setImageProduct(null)}
+        />
       )}
 
       {/* Delete Confirmation */}

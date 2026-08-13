@@ -1,4 +1,4 @@
-'use client';
+﻿'use client';
 
 import { useState } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
@@ -25,7 +25,7 @@ function StarRating({ rating }: { rating: number }) {
       {Array.from({ length: 5 }).map((_, i) => (
         <Star
           key={i}
-          className={`w-3.5 h-3.5 ${i < rating ? 'text-[#D4A853] fill-[#D4A853]' : 'text-slate-300'}`}
+          className={`w-3.5 h-3.5 ${i < rating ? 'text-primary fill-current' : 'text-slate-300'}`}
         />
       ))}
       <span className="text-xs text-slate-500 ml-1">{rating}/5</span>
@@ -242,3 +242,4 @@ export default function ReviewsPage() {
     </div>
   );
 }
+

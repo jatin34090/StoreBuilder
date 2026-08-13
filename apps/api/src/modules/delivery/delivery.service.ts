@@ -87,7 +87,7 @@ export class DeliveryService {
 
   // ─── Admin: Agent Management ───────────────────────────────────────────────
 
-  async createAgent(dto: CreateAgentDto) {
+  async createAgent(dto: CreateAgentDto, storeId = DEFAULT_STORE_ID) {
     const user = await this.prisma.user.findUnique({
       where: { id: dto.userId },
       select: { id: true, name: true, role: true },
@@ -103,7 +103,7 @@ export class DeliveryService {
     const [agent] = await this.prisma.$transaction([
       this.prisma.deliveryAgent.create({
         data: {
-          storeId:     DEFAULT_STORE_ID,
+          storeId,
           userId:      dto.userId,
           vehicleType: dto.vehicleType,
           zones:       dto.zones,
@@ -119,12 +119,13 @@ export class DeliveryService {
     return agent;
   }
 
-  async adminListAgents(query: QueryDeliveriesDto) {
+  async adminListAgents(query: QueryDeliveriesDto, storeId?: string) {
     const page  = query.page  ?? 1;
     const limit = Math.min(query.limit ?? 20, 100);
     const skip  = (page - 1) * limit;
 
     const where: Prisma.DeliveryAgentWhereInput = {};
+    if (storeId) where.storeId = storeId;
     if (query.search) {
       where.user = {
         OR: [

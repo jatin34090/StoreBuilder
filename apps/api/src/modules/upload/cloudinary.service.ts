@@ -29,16 +29,20 @@ export class CloudinaryService {
     });
   }
 
+  // ─── Product images — stored under stores/{storeSlug}/products/{productId}/ ──
+
   async uploadProductImage(
     file: Express.Multer.File,
     productId: string,
+    storeSlug = 'shared',
   ): Promise<CloudinaryUploadResult> {
     this.validateFile(file);
 
     return new Promise((resolve, reject) => {
       const stream = cloudinary.uploader.upload_stream(
         {
-          folder: `jewellery/products/${productId}`,
+          // Tenant-isolated path: stores/mystore/products/uuid/
+          folder: `stores/${storeSlug}/products/${productId}`,
           transformation: [
             { width: 1200, height: 1200, crop: 'limit' },
             { quality: 'auto:good', fetch_format: 'auto' },
@@ -48,7 +52,7 @@ export class CloudinaryService {
         },
         (error, result) => {
           if (error || !result) {
-            this.logger.error('Cloudinary upload failed', error);
+            this.logger.error('Cloudinary product image upload failed', error);
             reject(new BadRequestException('Image upload failed. Please try again.'));
             return;
           }
@@ -59,6 +63,8 @@ export class CloudinaryService {
     });
   }
 
+  // ─── Avatar — stored under users/{userId}/ (platform-level, not per-store) ──
+
   async uploadAvatar(
     file: Express.Multer.File,
     userId: string,
@@ -68,7 +74,7 @@ export class CloudinaryService {
     return new Promise((resolve, reject) => {
       const stream = cloudinary.uploader.upload_stream(
         {
-          folder: `jewellery/avatars`,
+          folder: `users/avatars`,
           public_id: `user_${userId}`,
           overwrite: true,
           transformation: [
@@ -90,26 +96,62 @@ export class CloudinaryService {
     });
   }
 
+  // ─── Category image — stored under stores/{storeSlug}/categories/ ────────────
+
   async uploadCategoryImage(
     file: Express.Multer.File,
     categorySlug: string,
+    storeSlug = 'shared',
   ): Promise<CloudinaryUploadResult> {
     this.validateFile(file);
 
     return new Promise((resolve, reject) => {
       const stream = cloudinary.uploader.upload_stream(
         {
-          folder: `jewellery/categories`,
-          public_id: `cat_${categorySlug}`,
-          overwrite: true,
-          transformation: [
-            { width: 800, height: 600, crop: 'fill' },
-            { quality: 'auto:good', fetch_format: 'auto' },
-          ],
+          folder: `stores/${storeSlug}/categories`,
+          resource_type: 'image',
+          width: 800,
+          height: 1067,
+          crop: 'fill',
+          quality: 'auto:good',
         },
         (error, result) => {
           if (error || !result) {
-            reject(new BadRequestException('Category image upload failed.'));
+            this.logger.error('Category image upload failed', error);
+            reject(new BadRequestException(`Category image upload failed: ${error?.message ?? 'unknown'}`));
+            return;
+          }
+          resolve(this.mapResult(result));
+        },
+      );
+      stream.end(file.buffer);
+    });
+  }
+
+  // ─── Store logo/favicon ───────────────────────────────────────────────────
+
+  async uploadStoreLogo(
+    file: Express.Multer.File,
+    storeSlug: string,
+  ): Promise<CloudinaryUploadResult> {
+    this.validateFile(file);
+
+    return new Promise((resolve, reject) => {
+      const stream = cloudinary.uploader.upload_stream(
+        {
+          folder: `stores/${storeSlug}/branding`,
+          public_id: `logo`,
+          overwrite: true,
+          transformation: [
+            { width: 400, height: 400, crop: 'limit' },
+            { quality: 'auto:good', fetch_format: 'auto' },
+          ],
+          resource_type: 'image',
+        },
+        (error, result) => {
+          if (error || !result) {
+            this.logger.error('Store logo upload failed', error);
+            reject(new BadRequestException('Logo upload failed. Please try again.'));
             return;
           }
           resolve(this.mapResult(result));

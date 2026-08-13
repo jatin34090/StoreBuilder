@@ -9,6 +9,7 @@ import { SearchProductsDto, SearchSortBy } from './dto/search-products.dto';
 
 export interface ProductDocument {
   id: string;
+  storeId: string;
   name: string;
   slug: string;
   description: string;
@@ -42,6 +43,7 @@ const COLLECTION_SCHEMA: CollectionCreateSchema = {
   name: COLLECTION_NAME,
   fields: [
     { name: 'id',           type: 'string' },
+    { name: 'storeId',      type: 'string', facet: true },
     { name: 'name',         type: 'string' },
     { name: 'slug',         type: 'string',    index: false },
     { name: 'description',  type: 'string' },
@@ -132,16 +134,27 @@ export class SearchService implements OnModuleInit {
 
   // ─── Public: Search ───────────────────────────────────────────────────────
 
-  async search(dto: SearchProductsDto, isAdmin = false) {
+  private readonly DEFAULT_STORE_ID = '00000000-0000-0000-0000-000000000001';
+
+  async search(dto: SearchProductsDto, isAdmin = false, storeId = this.DEFAULT_STORE_ID) {
     const page  = dto.page  ?? 1;
     const limit = dto.limit ?? 20;
 
+    // Resolve categorySlug → categoryId if slug provided instead of UUID
+    if (dto.categorySlug && !dto.categoryId) {
+      const cat = await this.prisma.category.findFirst({
+        where: { slug: dto.categorySlug, storeId },
+        select: { id: true },
+      });
+      if (cat) dto.categoryId = cat.id;
+    }
+
     if (!this.client) {
-      return this.dbFallbackSearch(dto, isAdmin, page, limit);
+      return this.dbFallbackSearch(dto, isAdmin, page, limit, storeId);
     }
 
     // Build filter string
-    const filters = this.buildFilters(dto, isAdmin);
+    const filters = this.buildFilters(dto, isAdmin, storeId);
     const sortBy  = SORT_MAP[dto.sortBy ?? SearchSortBy.NEWEST];
 
     const searchParams = {
@@ -184,7 +197,7 @@ export class SearchService implements OnModuleInit {
       };
     } catch (error) {
       this.logger.error('Typesense search failed — falling back to DB', error);
-      return this.dbFallbackSearch(dto, isAdmin, page, limit);
+      return this.dbFallbackSearch(dto, isAdmin, page, limit, storeId);
     }
   }
 
@@ -291,8 +304,8 @@ export class SearchService implements OnModuleInit {
 
   // ─── Private: DB Fallback Search ─────────────────────────────────────────
 
-  private async dbFallbackSearch(dto: SearchProductsDto, isAdmin: boolean, page: number, limit: number) {
-    const where: Record<string, unknown> = {};
+  private async dbFallbackSearch(dto: SearchProductsDto, isAdmin: boolean, page: number, limit: number, storeId = this.DEFAULT_STORE_ID) {
+    const where: Record<string, unknown> = { storeId };
     if (!isAdmin) where['isActive'] = true;
     if (dto.q)          where['name'] = { contains: dto.q, mode: 'insensitive' };
     if (dto.categoryId) where['categoryId'] = dto.categoryId;
@@ -339,7 +352,7 @@ export class SearchService implements OnModuleInit {
   private async buildDocument(productId: string): Promise<ProductDocument | null> {
     const product = await this.prisma.product.findUnique({
       where: { id: productId },
-      include: PRODUCT_FOR_INDEX_INCLUDE,
+      include: { ...PRODUCT_FOR_INDEX_INCLUDE },
     });
     if (!product) return null;
     return this.productToDocument(product);
@@ -348,6 +361,7 @@ export class SearchService implements OnModuleInit {
   private productToDocument(
     product: {
       id: string;
+      storeId: string;
       name: string;
       slug: string;
       description: string;
@@ -373,6 +387,7 @@ export class SearchService implements OnModuleInit {
 
     return {
       id:             product.id,
+      storeId:        product.storeId,
       name:           product.name,
       slug:           product.slug,
       description:    product.description,
@@ -401,9 +416,10 @@ export class SearchService implements OnModuleInit {
 
   // ─── Private: Filter Builder ──────────────────────────────────────────────
 
-  private buildFilters(dto: SearchProductsDto, isAdmin: boolean): string {
+  private buildFilters(dto: SearchProductsDto, isAdmin: boolean, storeId?: string): string {
     const parts: string[] = [];
 
+    if (storeId) parts.push(`storeId:=${storeId}`);
     // Customers always see only active products
     if (!isAdmin) parts.push('isActive:=true');
 

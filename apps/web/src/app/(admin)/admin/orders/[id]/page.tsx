@@ -5,7 +5,7 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { useParams, useRouter } from 'next/navigation';
 import { fmtDate } from '../../../../../lib/formatters';
 import { toast } from 'sonner';
-import { ArrowLeft, RefreshCw } from 'lucide-react';
+import { ArrowLeft, RefreshCw, Package, ExternalLink } from 'lucide-react';
 import { Button } from '../../../../../components/ui/button';
 import {
   Select,
@@ -28,15 +28,18 @@ import { StatusBadge } from '../../../../../components/admin/StatusBadge';
 import { TableSkeleton } from '../../../../../components/admin/LoadingSkeleton';
 import { adminApi, OrderStatus } from '../../../../../lib/admin-api';
 
-const ORDER_STATUSES: OrderStatus[] = [
-  'PENDING',
-  'CONFIRMED',
-  'PROCESSING',
-  'SHIPPED',
-  'DELIVERED',
-  'CANCELLED',
-  'RETURNED',
-];
+const VALID_NEXT_STATUSES: Partial<Record<OrderStatus, OrderStatus[]>> = {
+  PENDING:          ['CONFIRMED', 'CANCELLED'],
+  CONFIRMED:        ['PROCESSING', 'CANCELLED'],
+  PROCESSING:       ['SHIPPED', 'CANCELLED'],
+  SHIPPED:          ['OUT_FOR_DELIVERY'],
+  OUT_FOR_DELIVERY: ['DELIVERED', 'CANCELLED'],
+  DELIVERED:        [],
+  CANCELLED:        [],
+  RETURN_REQUESTED: ['RETURNED'],
+  RETURNED:         ['REFUNDED'],
+  REFUNDED:         [],
+};
 
 export default function AdminOrderDetailPage() {
   const params = useParams();
@@ -84,7 +87,7 @@ export default function AdminOrderDetailPage() {
     mutationFn: () =>
       adminApi.orders.updateDelivery(id, {
         ...(agentId ? { agentId } : {}),
-        ...(trackingNumber ? { trackingNumber } : {}),
+        ...(trackingNumber ? { awbCode: trackingNumber } : {}),
       }),
     onSuccess: () => {
       invalidate();
@@ -93,6 +96,15 @@ export default function AdminOrderDetailPage() {
       setTrackingNumber('');
     },
     onError: () => toast.error('Failed to update delivery info'),
+  });
+
+  const shiprocketMutation = useMutation({
+    mutationFn: () => adminApi.orders.shipViaShiprocket(id),
+    onSuccess: (result) => {
+      invalidate();
+      toast.success(`Shiprocket shipment created — AWB: ${result.awbCode} (${result.courierName})`);
+    },
+    onError: () => toast.error('Failed to create Shiprocket shipment'),
   });
 
   const refundMutation = useMutation({
@@ -247,14 +259,31 @@ export default function AdminOrderDetailPage() {
           </div>
 
           {/* Delivery Info */}
-          {order.delivery?.agent && (
+          {order.delivery && (order.delivery.agent || order.delivery.awbCode) && (
             <div className="bg-white rounded-xl border border-slate-200 p-5">
-              <h2 className="font-semibold text-slate-800 mb-3">Delivery Agent</h2>
-              <div className="text-sm text-slate-600 space-y-0.5">
-                <p className="font-medium text-slate-800">{order.delivery.agent.user?.name ?? '—'}</p>
-                {order.delivery.agent.user?.phone && <p>{order.delivery.agent.user.phone}</p>}
+              <h2 className="font-semibold text-slate-800 mb-3">
+                {order.delivery.type === 'THIRD_PARTY' ? 'Shiprocket Shipment' : 'Delivery Agent'}
+              </h2>
+              <div className="text-sm text-slate-600 space-y-1">
+                {order.delivery.agent?.user?.name && (
+                  <p className="font-medium text-slate-800">{order.delivery.agent.user.name}</p>
+                )}
+                {order.delivery.agent?.user?.phone && <p>{order.delivery.agent.user.phone}</p>}
+                {order.delivery.provider && (
+                  <p className="text-xs text-slate-500">Provider: {order.delivery.provider}</p>
+                )}
                 {order.delivery.awbCode && (
-                  <p className="font-mono text-xs">{order.delivery.awbCode}</p>
+                  <p className="font-mono text-xs bg-slate-50 rounded px-2 py-1">AWB: {order.delivery.awbCode}</p>
+                )}
+                {order.delivery.trackingUrl && (
+                  <a
+                    href={order.delivery.trackingUrl}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="inline-flex items-center gap-1 text-xs text-blue-600 hover:underline"
+                  >
+                    Track Shipment <ExternalLink className="w-3 h-3" />
+                  </a>
                 )}
                 {order.delivery.estimatedAt && (
                   <p>ETA: {fmtDate(order.delivery.estimatedAt)}</p>
@@ -271,7 +300,7 @@ export default function AdminOrderDetailPage() {
                 <SelectValue placeholder="Select new status" />
               </SelectTrigger>
               <SelectContent>
-                {ORDER_STATUSES.filter((s) => s !== order.status).map((s) => (
+                {(VALID_NEXT_STATUSES[order.status as OrderStatus] ?? []).map((s) => (
                   <SelectItem key={s} value={s}>
                     {s.charAt(0) + s.slice(1).toLowerCase()}
                   </SelectItem>
@@ -320,6 +349,24 @@ export default function AdminOrderDetailPage() {
               {deliveryMutation.isPending ? 'Saving...' : 'Save Delivery Info'}
             </Button>
           </div>
+
+          {/* Ship via Shiprocket */}
+          {!order.delivery?.awbCode && ['CONFIRMED', 'PROCESSING', 'SHIPPED'].includes(order.status) && (
+            <div className="bg-white rounded-xl border border-slate-200 p-5 space-y-3">
+              <h2 className="font-semibold text-slate-800">Ship via Shiprocket</h2>
+              <p className="text-xs text-slate-500">
+                Auto-assigns the best courier and generates a tracking AWB via Shiprocket.
+              </p>
+              <Button
+                className="w-full"
+                disabled={shiprocketMutation.isPending}
+                onClick={() => shiprocketMutation.mutate()}
+              >
+                <Package className="w-4 h-4 mr-2" />
+                {shiprocketMutation.isPending ? 'Creating Shipment...' : 'Create Shiprocket Shipment'}
+              </Button>
+            </div>
+          )}
 
           {/* Refund */}
           {['PAID', 'SUCCESS', 'PARTIALLY_REFUNDED'].includes(order.payment?.status ?? '') && (

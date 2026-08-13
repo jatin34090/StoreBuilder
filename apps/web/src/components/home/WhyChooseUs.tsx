@@ -1,37 +1,67 @@
-import { Shield, Truck, RefreshCw, Star, Headphones, Award } from 'lucide-react';
+import {
+  Shield, Truck, RefreshCw, Star, Headphones, Award,
+  Package, Heart, Zap, Globe, Clock, CheckCircle,
+} from 'lucide-react';
+import { fetchSiteConfig, DEFAULT_FEATURES } from '@/lib/site-config';
+import type { FeatureItem } from '@/lib/site-config';
 
-const FEATURES = [
-  { icon: Shield,     title: 'Hypoallergenic',      desc: 'Nickel-free, skin-safe materials for sensitive skin' },
-  { icon: Truck,      title: 'Free Shipping',        desc: 'Free delivery on orders above ₹999 anywhere in India' },
-  { icon: RefreshCw,  title: '7-Day Returns',        desc: 'Easy returns within 7 days of delivery, no questions asked' },
-  { icon: Star,       title: 'Premium Quality',      desc: 'Anti-tarnish coating ensures jewellery stays beautiful' },
-  { icon: Headphones, title: '24/7 Support',         desc: 'Real human support via WhatsApp, email or phone' },
-  { icon: Award,      title: 'Certified Products',   desc: 'All products tested for quality and safety standards' },
-];
+const ICON_MAP: Record<string, React.ComponentType<{ className?: string; style?: React.CSSProperties }>> = {
+  Shield, Truck, RefreshCw, Star, Headphones, Award,
+  Package, Heart, Zap, Globe, Clock, CheckCircle,
+};
 
-export function WhyChooseUs() {
+function FeatureIcon({ name, ...props }: { name: string } & React.SVGProps<SVGSVGElement>) {
+  const Icon = ICON_MAP[name] ?? Shield;
+  return <Icon {...(props as object)} />;
+}
+
+export async function WhyChooseUs() {
+  const config = await fetchSiteConfig();
+  const items: FeatureItem[] = (config.features?.length ?? 0) > 0 ? config.features : DEFAULT_FEATURES;
+
   return (
-    <section className="bg-muted/30 py-14">
+    <section className="py-20" style={{ backgroundColor: 'hsl(var(--muted) / 0.5)' }}>
       <div className="container">
-        <div className="text-center mb-10">
-          <h2 className="text-2xl md:text-3xl font-bold text-foreground">Why Shop With Us?</h2>
-          <p className="text-muted-foreground mt-2 max-w-xl mx-auto">
-            We're more than just a jewellery store — we're committed to making you feel beautiful every day
+        <div className="text-center mb-14">
+          <p
+            className="text-primary font-medium mb-3"
+            style={{ fontSize: '0.7rem', letterSpacing: '0.3em', textTransform: 'uppercase' }}
+          >
+            Our Promise
           </p>
+          <h2 className="font-display font-normal text-foreground text-3xl md:text-4xl mb-4">
+            Why Shop With Us?
+          </h2>
+          <div className="flex items-center justify-center gap-3">
+            <div className="h-px w-8 bg-primary/40" />
+            <div className="w-1.5 h-1.5 rounded-full bg-primary/60" />
+            <div className="h-px w-8 bg-primary/40" />
+          </div>
         </div>
 
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6">
-          {FEATURES.map(({ icon: Icon, title, desc }) => (
-            <div
-              key={title}
-              className="flex gap-4 p-5 rounded-xl bg-card border hover:shadow-md transition-shadow"
-            >
-              <div className="shrink-0 w-11 h-11 rounded-lg bg-primary/10 flex items-center justify-center">
-                <Icon className="h-5 w-5 text-primary" />
-              </div>
-              <div>
-                <h3 className="font-semibold text-sm text-foreground">{title}</h3>
-                <p className="text-xs text-muted-foreground mt-1 leading-relaxed">{desc}</p>
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-px bg-border/40 rounded overflow-hidden">
+          {items.map(({ icon, title, desc }, i) => (
+            <div key={i} className="group bg-background hover:bg-card transition-colors duration-300 p-8">
+              <div className="flex flex-col gap-4">
+                <div
+                  className="w-10 h-10 rounded flex items-center justify-center"
+                  style={{ backgroundColor: 'hsl(var(--primary) / 0.08)' }}
+                >
+                  <FeatureIcon
+                    name={icon}
+                    className="h-5 w-5"
+                    style={{ color: 'hsl(var(--primary))' }}
+                  />
+                </div>
+                <div>
+                  <h3
+                    className="font-display font-normal text-foreground mb-2"
+                    style={{ fontSize: '1.0625rem' }}
+                  >
+                    {title}
+                  </h3>
+                  <p className="text-sm text-muted-foreground leading-relaxed">{desc}</p>
+                </div>
               </div>
             </div>
           ))}

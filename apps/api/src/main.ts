@@ -9,6 +9,12 @@ import { AllExceptionsFilter } from './common/filters/all-exceptions.filter';
 import { ResponseInterceptor } from './common/interceptors/response.interceptor';
 import { initErrorTracking } from './common/monitoring/error-tracker';
 
+// BigInt → number serialization: Prisma returns BigInt for certain columns
+// (e.g. storageBytes). Express JSON serializer throws by default — patch globally.
+(BigInt.prototype as unknown as { toJSON: () => number }).toJSON = function () {
+  return Number(this);
+};
+
 async function bootstrap() {
   // Initialise optional error tracking (Sentry) before the app starts.
   initErrorTracking();

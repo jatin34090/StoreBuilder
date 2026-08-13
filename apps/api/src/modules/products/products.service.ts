@@ -16,6 +16,9 @@ import type { CreateVariantDto } from './dto/product-variant.dto';
 import type { ReorderImagesDto } from './dto/reorder-images.dto';
 import { ProductSortBy } from './dto/query-products.dto';
 import type { SearchService } from '../search/search.service';
+import type { TenantService } from '../tenant/tenant.service';
+
+const DEFAULT_STORE_ID = '00000000-0000-0000-0000-000000000001';
 
 const PRODUCT_LIST_SELECT = {
   id: true,
@@ -30,9 +33,9 @@ const PRODUCT_LIST_SELECT = {
   createdAt: true,
   category: { select: { id: true, name: true, slug: true } },
   images: {
-    where: { isPrimary: true },
-    select: { id: true, url: true, publicId: true },
-    take: 1,
+    orderBy: [{ isPrimary: 'desc' }, { sortOrder: 'asc' }] as Prisma.ProductImageOrderByWithRelationInput[],
+    select: { id: true, url: true },
+    take: 2, // primary + one hover image for card display
   },
   variants: {
     select: { id: true, sku: true, price: true, stock: true, size: true, color: true },
@@ -47,22 +50,24 @@ export class ProductsService {
   constructor(
     private prisma: PrismaService,
     @Optional() private readonly search: SearchService,
+    @Optional() private readonly tenant: TenantService,
   ) {}
 
   // ─── Public listing ───────────────────────────────────────────────────────
 
-  async findAll(dto: QueryProductsDto) {
+  async findAll(dto: QueryProductsDto, storeId = DEFAULT_STORE_ID) {
     const page = dto.page ?? 1;
-    const limit = dto.limit ?? 20;
+    const limit = Math.min(dto.limit ?? 20, 100); // cap at 100 per request
     const skip = (page - 1) * limit;
 
-    const where: Prisma.ProductWhereInput = { isActive: true };
+    // storeId is ALWAYS applied — never omitted
+    const where: Prisma.ProductWhereInput = { storeId, isActive: true };
 
-    // Category filter — accept UUID or slug
+    // Category filter — accept UUID or slug (scoped to same store)
     if (dto.category) {
       const isUuid = /^[0-9a-f-]{36}$/.test(dto.category);
       const category = await this.prisma.category.findFirst({
-        where: isUuid ? { id: dto.category } : { slug: dto.category },
+        where: isUuid ? { id: dto.category, storeId } : { slug: dto.category, storeId },
         select: { id: true },
       });
       if (category) where['categoryId'] = category.id;
@@ -119,9 +124,9 @@ export class ProductsService {
     return { products, pagination: { page, limit, total } };
   }
 
-  async findBySlug(slug: string) {
-    const product = await this.prisma.product.findUnique({
-      where: { slug, isActive: true },
+  async findBySlug(slug: string, storeId = DEFAULT_STORE_ID) {
+    const product = await this.prisma.product.findFirst({
+      where: { storeId, slug, isActive: true },
       include: {
         category: { select: { id: true, name: true, slug: true } },
         images: { orderBy: [{ isPrimary: 'desc' }, { sortOrder: 'asc' }] },
@@ -159,12 +164,12 @@ export class ProductsService {
 
   // ─── Admin CRUD ───────────────────────────────────────────────────────────
 
-  async adminFindAll(dto: QueryProductsDto) {
+  async adminFindAll(dto: QueryProductsDto, storeId = DEFAULT_STORE_ID) {
     const page = dto.page ?? 1;
-    const limit = dto.limit ?? 20;
+    const limit = Math.min(dto.limit ?? 20, 100);
     const skip = (page - 1) * limit;
 
-    const where: Prisma.ProductWhereInput = {};
+    const where: Prisma.ProductWhereInput = { storeId };
     if (dto.category) where['categoryId'] = dto.category;
     if (dto.featured !== undefined) where['isFeatured'] = dto.featured;
 
@@ -182,9 +187,9 @@ export class ProductsService {
     return { products, pagination: { page, limit, total } };
   }
 
-  async adminFindOne(id: string) {
-    const product = await this.prisma.product.findUnique({
-      where: { id },
+  async adminFindOne(id: string, storeId = DEFAULT_STORE_ID) {
+    const product = await this.prisma.product.findFirst({
+      where: { id, storeId },
       include: {
         category: { select: { id: true, name: true, slug: true } },
         images: { orderBy: [{ isPrimary: 'desc' }, { sortOrder: 'asc' }] },
@@ -196,16 +201,17 @@ export class ProductsService {
     return product;
   }
 
-  async create(dto: CreateProductDto) {
-    const slug = await this.generateUniqueSlug(dto.name);
+  async create(dto: CreateProductDto, storeId = DEFAULT_STORE_ID) {
+    await this.tenant?.checkProductQuota(storeId);
 
-    const category = await this.prisma.category.findUnique({
-      where: { id: dto.categoryId },
+    const slug = await this.generateUniqueSlug(dto.name, storeId);
+
+    const category = await this.prisma.category.findFirst({
+      where: { id: dto.categoryId, storeId },
       select: { id: true },
     });
     if (!category) throw new NotFoundException('Category not found');
 
-    // Check SKU uniqueness upfront
     for (const variant of dto.variants) {
       const existing = await this.prisma.productVariant.findUnique({
         where: { sku: variant.sku },
@@ -216,6 +222,7 @@ export class ProductsService {
 
     const product = await this.prisma.product.create({
       data: {
+        storeId,
         name: dto.name.trim(),
         slug,
         description: dto.description,
@@ -247,21 +254,22 @@ export class ProductsService {
     });
 
     this.logger.log(`Product created: ${product.id} (${product.slug})`);
+    this.tenant?.incrementProductCount(storeId).catch((e) => this.logger.error('Quota increment after create failed', e));
     this.search?.indexProduct(product.id).catch((e) => this.logger.error('Search index after create failed', e));
     return product;
   }
 
-  async update(id: string, dto: UpdateProductDto) {
-    const product = await this.findProductOrThrow(id);
+  async update(id: string, dto: UpdateProductDto, storeId = DEFAULT_STORE_ID) {
+    const product = await this.findProductOrThrow(id, storeId);
 
     let slug = product.slug;
     if (dto.name && dto.name.trim() !== product.name) {
-      slug = await this.generateUniqueSlug(dto.name, id);
+      slug = await this.generateUniqueSlug(dto.name, storeId, id);
     }
 
     if (dto.categoryId) {
-      const category = await this.prisma.category.findUnique({
-        where: { id: dto.categoryId },
+      const category = await this.prisma.category.findFirst({
+        where: { id: dto.categoryId, storeId },
         select: { id: true },
       });
       if (!category) throw new NotFoundException('Category not found');
@@ -292,8 +300,8 @@ export class ProductsService {
     return updated;
   }
 
-  async softDelete(id: string) {
-    await this.findProductOrThrow(id);
+  async softDelete(id: string, storeId = DEFAULT_STORE_ID) {
+    await this.findProductOrThrow(id, storeId);
     await this.prisma.product.update({
       where: { id },
       data: { isActive: false },
@@ -377,7 +385,7 @@ export class ProductsService {
 
   // ─── Images ───────────────────────────────────────────────────────────────
 
-  async addImage(productId: string, publicId: string, url: string, isPrimary = false) {
+  async addImage(productId: string, publicId: string, url: string, isPrimary = false, variantId?: string) {
     await this.findProductOrThrow(productId);
 
     const imageCount = await this.prisma.productImage.count({ where: { productId } });
@@ -401,6 +409,7 @@ export class ProductsService {
         url,
         isPrimary: isPrimary || isFirst,
         sortOrder: imageCount,
+        ...(variantId ? { variantId } : {}),
       },
     });
     this.search?.indexProduct(productId).catch((e) => this.logger.error('Search index after addImage failed', e));
@@ -451,6 +460,21 @@ export class ProductsService {
     });
   }
 
+  async assignImageVariant(productId: string, imageId: string, variantId: string | null) {
+    const image = await this.prisma.productImage.findFirst({ where: { id: imageId, productId } });
+    if (!image) throw new NotFoundException('Image not found');
+
+    if (variantId) {
+      const variant = await this.prisma.productVariant.findFirst({ where: { id: variantId, productId } });
+      if (!variant) throw new NotFoundException('Variant not found');
+    }
+
+    return this.prisma.productImage.update({
+      where: { id: imageId },
+      data: { variantId: variantId ?? null },
+    });
+  }
+
   // ─── Cart operations ──────────────────────────────────────────────────────
 
   async getCart(userId: string) {
@@ -487,14 +511,14 @@ export class ProductsService {
     if (variant.stock < 1) throw new BadRequestException('This item is out of stock');
 
     const existing = await this.prisma.cartItem.findUnique({
-      where: { userId_variantId: { userId, variantId } },
+      where: { storeId_userId_variantId: { storeId: DEFAULT_STORE_ID, userId, variantId } },
     });
 
     const newQty = Math.min((existing?.quantity ?? 0) + quantity, variant.stock);
 
     return this.prisma.cartItem.upsert({
-      where: { userId_variantId: { userId, variantId } },
-      create: { userId, variantId, quantity: newQty },
+      where: { storeId_userId_variantId: { storeId: DEFAULT_STORE_ID, userId, variantId } },
+      create: { storeId: DEFAULT_STORE_ID, userId, variantId, quantity: newQty },
       update: { quantity: newQty },
     });
   }
@@ -514,7 +538,7 @@ export class ProductsService {
     const safeQty = Math.min(quantity, variant.stock);
 
     return this.prisma.cartItem.update({
-      where: { userId_variantId: { userId, variantId } },
+      where: { storeId_userId_variantId: { storeId: DEFAULT_STORE_ID, userId, variantId } },
       data: { quantity: safeQty },
     });
   }
@@ -534,23 +558,24 @@ export class ProductsService {
     return image;
   }
 
-  async findProductOrThrow(id: string) {
-    const product = await this.prisma.product.findUnique({
-      where: { id },
-      select: { id: true, name: true, slug: true },
+  async findProductOrThrow(id: string, storeId?: string) {
+    const where = storeId ? { id, storeId } : { id };
+    const product = await this.prisma.product.findFirst({
+      where,
+      select: { id: true, name: true, slug: true, storeId: true },
     });
     if (!product) throw new NotFoundException('Product not found');
     return product;
   }
 
-  private async generateUniqueSlug(name: string, excludeId?: string): Promise<string> {
+  private async generateUniqueSlug(name: string, storeId: string, excludeId?: string): Promise<string> {
     const base = slugify(name);
     let slug = base;
     let attempt = 0;
 
     while (true) {
-      const existing = await this.prisma.product.findUnique({
-        where: { slug },
+      const existing = await this.prisma.product.findFirst({
+        where: { storeId, slug },
         select: { id: true },
       });
       if (!existing || existing.id === excludeId) return slug;

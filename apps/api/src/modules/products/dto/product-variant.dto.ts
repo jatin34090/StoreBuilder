@@ -37,4 +37,6 @@ export class CreateVariantDto {
   weight: number;
 }
 
-export class UpdateVariantDto extends CreateVariantDto {}
+import { PartialType } from '@nestjs/mapped-types';
+
+export class UpdateVariantDto extends PartialType(CreateVariantDto) {}

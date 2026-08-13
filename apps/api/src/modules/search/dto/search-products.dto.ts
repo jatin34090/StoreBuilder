@@ -47,6 +47,11 @@ export class SearchProductsDto {
   @IsString()
   categoryId?: string;
 
+  @ApiPropertyOptional({ description: 'Filter by category slug (alternative to categoryId)' })
+  @IsOptional()
+  @IsString()
+  categorySlug?: string;
+
   @ApiPropertyOptional({ description: 'Minimum effective price (rupees)', minimum: 0 })
   @IsOptional()
   @Type(() => Number)
@@ -99,6 +104,7 @@ export class SearchProductsDto {
 
   @ApiPropertyOptional({ enum: SearchSortBy, default: SearchSortBy.NEWEST })
   @IsOptional()
+  @Transform(({ value }) => (typeof value === 'string' ? value.toUpperCase() : value))
   @IsEnum(SearchSortBy)
   sortBy?: SearchSortBy = SearchSortBy.NEWEST;
 }

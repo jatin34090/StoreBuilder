@@ -22,6 +22,10 @@ const pageTitles: Record<string, string> = {
   '/admin/notifications': 'Notifications',
   '/admin/delivery': 'Delivery',
   '/admin/reviews': 'Reviews',
+  '/admin/theme': 'Website Theme',
+  '/admin/profile': 'My Profile',
+  '/admin/settings': 'Site Settings',
+  '/admin/remittances': 'Remittances',
 };
 
 function getPageTitle(pathname: string): string {
@@ -83,7 +87,7 @@ export function AdminTopbar({ onMobileMenuToggle }: AdminTopbarProps) {
             onClick={() => setDropdownOpen(!dropdownOpen)}
             className="flex items-center gap-2 pl-2 pr-3 py-1.5 rounded-lg hover:bg-slate-100 transition-colors"
           >
-            <div className="w-8 h-8 bg-gradient-to-br from-[#4A0E8F] to-[#7B2FBE] rounded-full flex items-center justify-center text-white text-xs font-bold">
+            <div className="w-8 h-8 bg-primary rounded-full flex items-center justify-center text-primary-foreground text-xs font-bold">
               {adminUser?.avatar ? (
                 <img
                   src={adminUser.avatar}

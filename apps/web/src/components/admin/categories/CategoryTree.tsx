@@ -1,10 +1,12 @@
 'use client';
 
 import React, { useState } from 'react';
-import { ChevronRight, ChevronDown, Pencil, Trash2 } from 'lucide-react';
+import { ChevronRight, ChevronDown, Pencil, Trash2, ToggleLeft, ToggleRight } from 'lucide-react';
 import { Button } from '../../ui/button';
 import { Badge } from '../../ui/badge';
-import { AdminCategory } from '../../../lib/admin-api';
+import { AdminCategory, adminApi } from '../../../lib/admin-api';
+import { useMutation, useQueryClient } from '@tanstack/react-query';
+import { toast } from 'sonner';
 
 interface CategoryTreeProps {
   categories: AdminCategory[];
@@ -25,6 +27,16 @@ function CategoryNode({
 }) {
   const [expanded, setExpanded] = useState(true);
   const hasChildren = children.length > 0;
+  const qc = useQueryClient();
+
+  const toggleMutation = useMutation({
+    mutationFn: () => adminApi.categories.update(category.id, { isActive: !category.isActive }),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['admin', 'categories'] });
+      toast.success(`Category ${category.isActive ? 'deactivated' : 'activated'}`);
+    },
+    onError: () => toast.error('Failed to update category'),
+  });
 
   return (
     <div className="select-none">
@@ -53,6 +65,18 @@ function CategoryNode({
           <Badge className="bg-red-100 text-red-600 text-xs border-red-200 border">Inactive</Badge>
         )}
         <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
+          <Button
+            variant="ghost"
+            size="sm"
+            className={`h-7 w-7 p-0 ${category.isActive ? 'text-green-600 hover:text-green-800' : 'text-slate-400 hover:text-slate-600'}`}
+            onClick={() => toggleMutation.mutate()}
+            disabled={toggleMutation.isPending}
+            title={category.isActive ? 'Deactivate' : 'Activate'}
+          >
+            {category.isActive
+              ? <ToggleRight className="w-4 h-4" />
+              : <ToggleLeft className="w-4 h-4" />}
+          </Button>
           <Button
             variant="ghost"
             size="sm"

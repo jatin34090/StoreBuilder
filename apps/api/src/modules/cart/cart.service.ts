@@ -8,6 +8,8 @@ import { PrismaService } from '../../prisma/prisma.service';
 import type { UpsertCartItemDto } from './dto/upsert-cart-item.dto';
 import type { MergeCartDto } from './dto/merge-cart.dto';
 
+const DEFAULT_STORE_ID = '00000000-0000-0000-0000-000000000001';
+
 // ─── Select shape ─────────────────────────────────────────────────────────────
 
 const CART_ITEM_SELECT = {
@@ -84,9 +86,9 @@ export class CartService {
     }
 
     const item = await this.prisma.cartItem.upsert({
-      where: { userId_variantId: { userId, variantId: dto.variantId } },
+      where: { storeId_userId_variantId: { storeId: DEFAULT_STORE_ID, userId, variantId: dto.variantId } },
       update: { quantity: dto.quantity },
-      create: { userId, variantId: dto.variantId, quantity: dto.quantity },
+      create: { storeId: DEFAULT_STORE_ID, userId, variantId: dto.variantId, quantity: dto.quantity },
       select: CART_ITEM_SELECT,
     });
 
@@ -97,12 +99,12 @@ export class CartService {
 
   async removeItem(userId: string, variantId: string) {
     const existing = await this.prisma.cartItem.findUnique({
-      where: { userId_variantId: { userId, variantId } },
+      where: { storeId_userId_variantId: { storeId: DEFAULT_STORE_ID, userId, variantId } },
     });
     if (!existing) throw new NotFoundException('Cart item not found');
 
     await this.prisma.cartItem.delete({
-      where: { userId_variantId: { userId, variantId } },
+      where: { storeId_userId_variantId: { storeId: DEFAULT_STORE_ID, userId, variantId } },
     });
 
     return { message: 'Item removed from cart' };
@@ -144,9 +146,9 @@ export class CartService {
 
         // Only insert if not already in cart — server cart takes priority
         await this.prisma.cartItem.upsert({
-          where: { userId_variantId: { userId, variantId: guestItem.variantId } },
+          where: { storeId_userId_variantId: { storeId: DEFAULT_STORE_ID, userId, variantId: guestItem.variantId } },
           update: {}, // keep server quantity if exists
-          create: { userId, variantId: guestItem.variantId, quantity: safeQty },
+          create: { storeId: DEFAULT_STORE_ID, userId, variantId: guestItem.variantId, quantity: safeQty },
         });
 
         results.added++;

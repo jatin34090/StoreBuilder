@@ -11,6 +11,7 @@ import {
   HttpCode,
   HttpStatus,
 } from '@nestjs/common';
+import { Public } from '../../common/decorators/public.decorator';
 import {
   ApiTags,
   ApiOperation,
@@ -19,7 +20,7 @@ import {
   ApiOkResponse,
   ApiCreatedResponse,
 } from '@nestjs/swagger';
-import { Role, DeliveryStatus } from '@prisma/client';
+import { Role, DeliveryStatus, RemittanceStatus } from '@prisma/client';
 import { DeliveryService } from './delivery.service';
 import { CreateAgentDto } from './dto/create-agent.dto';
 import { UpdateAgentDto } from './dto/update-agent.dto';
@@ -30,6 +31,7 @@ import { UpdateDeliveryStatusDto } from '../orders/dto/update-delivery-status.dt
 import { CurrentUser } from '../../common/decorators/current-user.decorator';
 import { Roles } from '../../common/decorators/roles.decorator';
 import { type AuthUser } from '../../common/decorators/current-user.decorator';
+import { CurrentStoreId } from '../../common/decorators/current-store.decorator';
 
 @ApiTags('Delivery')
 @ApiBearerAuth()
@@ -49,16 +51,16 @@ export class DeliveryController {
       'The user must already exist and must not have an agent profile.',
   })
   @ApiCreatedResponse({ description: 'Delivery agent profile created' })
-  createAgent(@Body() dto: CreateAgentDto) {
-    return this.deliveryService.createAgent(dto);
+  createAgent(@Body() dto: CreateAgentDto, @CurrentStoreId() storeId: string) {
+    return this.deliveryService.createAgent(dto, storeId);
   }
 
   @Get('admin/agents')
   @Roles(Role.ADMIN)
   @ApiOperation({ summary: 'Admin: list all delivery agents with pagination and search' })
   @ApiOkResponse({ description: 'Paginated list of delivery agents' })
-  listAgents(@Query() query: QueryDeliveriesDto) {
-    return this.deliveryService.adminListAgents(query);
+  listAgents(@Query() query: QueryDeliveriesDto, @CurrentStoreId() storeId: string) {
+    return this.deliveryService.adminListAgents(query, storeId);
   }
 
   @Get('admin/agents/:id')
@@ -104,8 +106,8 @@ export class DeliveryController {
       'Filter by status, type (SELF / THIRD_PARTY), or search by order number / customer.',
   })
   @ApiOkResponse({ description: 'Paginated delivery list' })
-  adminListDeliveries(@Query() query: QueryDeliveriesDto) {
-    return this.deliveryService.adminListDeliveries(query);
+  adminListDeliveries(@Query() query: QueryDeliveriesDto, @CurrentStoreId() storeId: string) {
+    return this.deliveryService.adminListDeliveries(query, storeId);
   }
 
   @Get('admin/deliveries/:orderId')
@@ -235,6 +237,77 @@ export class DeliveryController {
     @Body() dto: VerifyOtpDto,
   ) {
     return this.deliveryService.agentVerifyOtp(user.id, orderId, dto);
+  }
+
+  // ─── Agent: COD Remittance ─────────────────────────────────────────────────
+
+  @Patch('agent/deliveries/:orderId/cod-collect')
+  @Roles(Role.DELIVERY_AGENT)
+  @ApiOperation({ summary: 'Agent: mark COD collected for a delivered order' })
+  @ApiParam({ name: 'orderId', format: 'uuid' })
+  agentMarkCodCollected(
+    @CurrentUser() user: AuthUser,
+    @Param('orderId') orderId: string,
+  ) {
+    return this.deliveryService.agentMarkCodCollected(user.id, orderId);
+  }
+
+  @Get('agent/remittances')
+  @Roles(Role.DELIVERY_AGENT)
+  @ApiOperation({ summary: 'Agent: get pending COD remittance summary' })
+  agentGetRemittances(@CurrentUser() user: AuthUser) {
+    return this.deliveryService.agentGetRemittanceSummary(user.id);
+  }
+
+  @Post('agent/remittances')
+  @Roles(Role.DELIVERY_AGENT)
+  @HttpCode(HttpStatus.CREATED)
+  @ApiOperation({ summary: 'Agent: submit COD batch to admin' })
+  agentSubmitRemittance(
+    @CurrentUser() user: AuthUser,
+    @Body('notes') notes?: string,
+  ) {
+    return this.deliveryService.agentSubmitRemittance(user.id, notes);
+  }
+
+  // ─── Admin: COD Remittance ─────────────────────────────────────────────────
+
+  @Get('admin/remittances')
+  @Roles(Role.ADMIN)
+  @ApiOperation({ summary: 'Admin: list COD remittance batches' })
+  adminListRemittances(@Query('status') status?: RemittanceStatus) {
+    return this.deliveryService.adminListRemittances(status);
+  }
+
+  @Patch('admin/remittances/:id/receive')
+  @Roles(Role.ADMIN)
+  @ApiOperation({ summary: 'Admin: confirm receipt of a remittance batch' })
+  adminConfirmRemittance(@Param('id') id: string) {
+    return this.deliveryService.adminConfirmRemittance(id);
+  }
+
+  // ─── Admin: Shiprocket / Third-Party Shipping ─────────────────────────────
+
+  @Post('admin/orders/:orderId/ship')
+  @Roles(Role.ADMIN)
+  @HttpCode(HttpStatus.OK)
+  @ApiOperation({
+    summary: 'Admin: create Shiprocket shipment for an order',
+    description:
+      'Calls Shiprocket API to create the order, auto-assigns the best courier, generates AWB, ' +
+      'and updates the Delivery record with type=THIRD_PARTY, provider, awbCode, trackingUrl.',
+  })
+  @ApiParam({ name: 'orderId', description: 'Order UUID', format: 'uuid' })
+  shipViaShiprocket(@Param('orderId') orderId: string) {
+    return this.deliveryService.createThirdPartyShipment(orderId);
+  }
+
+  @Public()
+  @Post('webhooks/shiprocket')
+  @HttpCode(HttpStatus.OK)
+  @ApiOperation({ summary: 'Shiprocket status webhook (public)' })
+  shiprocketWebhook(@Body() payload: Record<string, unknown>) {
+    return this.deliveryService.handleShiprocketWebhook(payload);
   }
 
   // ─── Customer: Delivery Tracking ───────────────────────────────────────────

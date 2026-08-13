@@ -1,12 +1,12 @@
 'use client';
 
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { z } from 'zod';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { toast } from 'sonner';
-import { Plus } from 'lucide-react';
+import { Plus, Upload, ImageIcon, X } from 'lucide-react';
 import { Button } from '../../../../components/ui/button';
 import { Input } from '../../../../components/ui/input';
 import { Label } from '../../../../components/ui/label';
@@ -51,6 +51,9 @@ export default function AdminCategoriesPage() {
   const [editTarget, setEditTarget] = useState<AdminCategory | null>(null);
   const [isCreating, setIsCreating] = useState(false);
   const [deleteTarget, setDeleteTarget] = useState<AdminCategory | null>(null);
+  const [imagePreview, setImagePreview] = useState<string | null>(null);
+  const [uploadingImage, setUploadingImage] = useState(false);
+  const fileInputRef = useRef<HTMLInputElement>(null);
 
   const { data: categoriesData, isLoading, isError, refetch } = useQuery({
     queryKey: ['admin', 'categories'],
@@ -88,8 +91,10 @@ export default function AdminCategoriesPage() {
         sortOrder: 0,
         description: editTarget.description ?? '',
       });
+      setImagePreview(editTarget.image ?? null);
     } else if (isCreating) {
       reset({ name: '', slug: '', parentId: '', sortOrder: 0, description: '' });
+      setImagePreview(null);
     }
   }, [editTarget, isCreating, reset]);
 
@@ -128,12 +133,44 @@ export default function AdminCategoriesPage() {
   const isPending = createMutation.isPending || updateMutation.isPending;
   const showForm = isCreating || !!editTarget;
 
+  async function handleImageUpload(e: React.ChangeEvent<HTMLInputElement>) {
+    const file = e.target.files?.[0];
+    if (!file || !editTarget) return;
+    setUploadingImage(true);
+    try {
+      const formData = new FormData();
+      formData.append('file', file);
+      const res = await adminApi.categories.uploadImage(editTarget.id, formData);
+      const url: string = (res.data as { imageUrl: string }).imageUrl;
+      setImagePreview(url);
+      queryClient.invalidateQueries({ queryKey: ['admin', 'categories'] });
+      toast.success('Image uploaded');
+    } catch {
+      toast.error('Image upload failed');
+    } finally {
+      setUploadingImage(false);
+      if (fileInputRef.current) fileInputRef.current.value = '';
+    }
+  }
+
+  async function handleRemoveImage() {
+    if (!editTarget) return;
+    try {
+      await adminApi.categories.update(editTarget.id, { image: null });
+      setImagePreview(null);
+      queryClient.invalidateQueries({ queryKey: ['admin', 'categories'] });
+      toast.success('Image removed');
+    } catch {
+      toast.error('Failed to remove image');
+    }
+  }
+
   function onSubmit(values: CategoryFormValues) {
     // The API derives the slug from the name; sending it is rejected by the
     // DTO whitelist, so it is intentionally omitted from the payload.
     const payload = {
       name: values.name,
-      ...(values.parentId ? { parentId: values.parentId } : {}),
+      parentId: values.parentId || null,  // '' → null clears the parent (top-level)
       sortOrder: values.sortOrder,
       ...(values.description ? { description: values.description } : {}),
     };
@@ -250,6 +287,68 @@ export default function AdminCategoriesPage() {
                   className="w-full rounded-md border border-input bg-background px-3 py-2 text-sm placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
                 />
               </div>
+
+              {/* Image — only available when editing (needs an existing ID) */}
+              {editTarget && (
+                <div className="space-y-2">
+                  <Label>Category Image</Label>
+                  {imagePreview ? (
+                    <div className="relative w-full aspect-[3/2] rounded-lg overflow-hidden border border-slate-200 group">
+                      {/* eslint-disable-next-line @next/next/no-img-element */}
+                      <img
+                        src={imagePreview}
+                        alt="Category image"
+                        className="w-full h-full object-cover"
+                      />
+                      <div className="absolute inset-0 bg-black/0 group-hover:bg-black/30 transition-colors duration-200 flex items-center justify-center gap-2 opacity-0 group-hover:opacity-100">
+                        <button
+                          type="button"
+                          onClick={() => fileInputRef.current?.click()}
+                          disabled={uploadingImage}
+                          className="bg-white text-slate-700 text-xs font-medium px-3 py-1.5 rounded-md shadow hover:bg-slate-100 flex items-center gap-1.5"
+                        >
+                          <Upload className="w-3.5 h-3.5" /> Replace
+                        </button>
+                        <button
+                          type="button"
+                          onClick={handleRemoveImage}
+                          className="bg-red-500 text-white text-xs font-medium px-3 py-1.5 rounded-md shadow hover:bg-red-600 flex items-center gap-1.5"
+                        >
+                          <X className="w-3.5 h-3.5" /> Remove
+                        </button>
+                      </div>
+                    </div>
+                  ) : (
+                    <button
+                      type="button"
+                      onClick={() => fileInputRef.current?.click()}
+                      disabled={uploadingImage}
+                      className="w-full aspect-[3/2] border-2 border-dashed border-slate-200 rounded-lg flex flex-col items-center justify-center gap-2 text-slate-400 hover:border-primary hover:text-primary transition-colors"
+                    >
+                      {uploadingImage ? (
+                        <span className="text-xs">Uploading…</span>
+                      ) : (
+                        <>
+                          <ImageIcon className="w-8 h-8" />
+                          <span className="text-xs font-medium">Upload image</span>
+                          <span className="text-[11px]">JPG, PNG, WebP · max 5 MB</span>
+                        </>
+                      )}
+                    </button>
+                  )}
+                  <input
+                    ref={fileInputRef}
+                    type="file"
+                    accept="image/jpeg,image/png,image/webp"
+                    className="hidden"
+                    onChange={handleImageUpload}
+                  />
+                  <p className="text-xs text-slate-400">
+                    This image is used as the background on the category card on the homepage.
+                  </p>
+                </div>
+              )}
+
               <div className="flex gap-2 pt-1">
                 <Button
                   type="button"

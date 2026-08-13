@@ -10,18 +10,19 @@ import { slugify } from '@jewellery/utils';
 import type { CreateCategoryDto } from './dto/create-category.dto';
 import type { UpdateCategoryDto } from './dto/update-category.dto';
 
+const DEFAULT_STORE_ID = '00000000-0000-0000-0000-000000000001';
+
 @Injectable()
 export class CategoriesService {
   private readonly logger = new Logger(CategoriesService.name);
 
   constructor(private prisma: PrismaService) {}
 
-  // ─── Public ───────────────────────────────────────────────────────────────
+  // ─── Public (storefront) — always scoped to a specific store ──────────────
 
-  async getTree() {
-    // Fetch all active categories in a single query and assemble tree in memory
+  async getTree(storeId = DEFAULT_STORE_ID) {
     const categories = await this.prisma.category.findMany({
-      where: { isActive: true },
+      where: { storeId, isActive: true },
       orderBy: [{ sortOrder: 'asc' }, { name: 'asc' }],
       select: {
         id: true,
@@ -30,16 +31,16 @@ export class CategoriesService {
         image: true,
         parentId: true,
         sortOrder: true,
-        _count: { select: { products: { where: { isActive: true } } } },
+        _count: { select: { products: { where: { isActive: true, storeId } } } },
       },
     });
 
     return this.buildTree(categories);
   }
 
-  async getCategoryBySlug(slug: string) {
-    const category = await this.prisma.category.findUnique({
-      where: { slug, isActive: true },
+  async getCategoryBySlug(slug: string, storeId = DEFAULT_STORE_ID) {
+    const category = await this.prisma.category.findFirst({
+      where: { storeId, slug, isActive: true },
       select: {
         id: true,
         name: true,
@@ -58,10 +59,11 @@ export class CategoriesService {
     return category;
   }
 
-  // ─── Admin ────────────────────────────────────────────────────────────────
+  // ─── Admin — always scoped to the caller's store ──────────────────────────
 
-  async adminListAll() {
+  async adminListAll(storeId = DEFAULT_STORE_ID) {
     return this.prisma.category.findMany({
+      where: { storeId },
       orderBy: [{ sortOrder: 'asc' }, { name: 'asc' }],
       include: {
         parent: { select: { id: true, name: true } },
@@ -70,18 +72,19 @@ export class CategoriesService {
     });
   }
 
-  async create(dto: CreateCategoryDto) {
-    const slug = await this.generateUniqueSlug(dto.name);
+  async create(dto: CreateCategoryDto, storeId = DEFAULT_STORE_ID) {
+    const slug = await this.generateUniqueSlug(dto.name, storeId);
 
     if (dto.parentId) {
-      const parent = await this.prisma.category.findUnique({
-        where: { id: dto.parentId },
+      const parent = await this.prisma.category.findFirst({
+        where: { id: dto.parentId, storeId },
       });
       if (!parent) throw new NotFoundException('Parent category not found');
     }
 
     return this.prisma.category.create({
       data: {
+        storeId,
         name: dto.name.trim(),
         slug,
         image: dto.image,
@@ -92,27 +95,24 @@ export class CategoriesService {
     });
   }
 
-  async update(id: string, dto: UpdateCategoryDto) {
-    const category = await this.findOrThrow(id);
+  async update(id: string, dto: UpdateCategoryDto, storeId = DEFAULT_STORE_ID) {
+    const category = await this.findOrThrow(id, storeId);
 
-    // If renaming, regenerate slug only if name changed
     let slug = category.slug;
     if (dto.name && dto.name.trim() !== category.name) {
-      slug = await this.generateUniqueSlug(dto.name, id);
+      slug = await this.generateUniqueSlug(dto.name, storeId, id);
     }
 
-    // Guard against circular parent reference
     if (dto.parentId && dto.parentId === id) {
       throw new BadRequestException('Category cannot be its own parent');
     }
 
     if (dto.parentId) {
-      const parent = await this.prisma.category.findUnique({
-        where: { id: dto.parentId },
+      const parent = await this.prisma.category.findFirst({
+        where: { id: dto.parentId, storeId },
       });
       if (!parent) throw new NotFoundException('Parent category not found');
 
-      // Prevent assigning a descendant as parent (circular tree)
       const isDescendant = await this.isDescendant(dto.parentId, id);
       if (isDescendant) {
         throw new BadRequestException('Cannot assign a child category as parent (circular reference)');
@@ -131,19 +131,27 @@ export class CategoriesService {
     });
   }
 
-  async softDelete(id: string) {
-    await this.findOrThrow(id);
+  async delete(id: string, storeId = DEFAULT_STORE_ID) {
+    await this.findOrThrow(id, storeId);
 
-    // Soft delete: deactivate category and all its children
-    const descendantIds = await this.getAllDescendantIds(id);
+    const descendantIds = await this.getAllDescendantIds(id, storeId);
+    const allIds = [id, ...descendantIds];
 
-    await this.prisma.category.updateMany({
-      where: { id: { in: [id, ...descendantIds] } },
-      data: { isActive: false },
+    const productCount = await this.prisma.product.count({
+      where: { storeId, categoryId: { in: allIds } },
     });
 
-    this.logger.log(`Category ${id} and ${descendantIds.length} descendants deactivated`);
-    return { deactivated: descendantIds.length + 1 };
+    if (productCount > 0) {
+      throw new BadRequestException(
+        `Cannot delete: ${productCount} product(s) are assigned to this category or its sub-categories. Reassign them first.`,
+      );
+    }
+
+    await this.prisma.category.deleteMany({ where: { id: { in: descendantIds }, storeId } });
+    await this.prisma.category.delete({ where: { id } });
+
+    this.logger.log(`Category ${id} and ${descendantIds.length} descendants deleted`);
+    return { deleted: allIds.length };
   }
 
   // ─── Helpers ──────────────────────────────────────────────────────────────
@@ -154,20 +162,17 @@ export class CategoriesService {
   ): unknown[] {
     return categories
       .filter((c) => c.parentId === parentId)
-      .map((c) => ({
-        ...c,
-        children: this.buildTree(categories, c.id),
-      }));
+      .map((c) => ({ ...c, children: this.buildTree(categories, c.id) }));
   }
 
-  private async generateUniqueSlug(name: string, excludeId?: string): Promise<string> {
+  private async generateUniqueSlug(name: string, storeId: string, excludeId?: string): Promise<string> {
     const base = slugify(name);
     let slug = base;
     let attempt = 0;
 
     while (true) {
-      const existing = await this.prisma.category.findUnique({
-        where: { slug },
+      const existing = await this.prisma.category.findFirst({
+        where: { storeId, slug },
         select: { id: true },
       });
 
@@ -178,10 +183,11 @@ export class CategoriesService {
     }
   }
 
-  async findById(id: string) {
-    const category = await this.prisma.category.findUnique({
-      where: { id },
-      select: { id: true, name: true, slug: true, image: true, isActive: true },
+  async findById(id: string, storeId?: string) {
+    const where = storeId ? { id, storeId } : { id };
+    const category = await this.prisma.category.findFirst({
+      where,
+      select: { id: true, name: true, slug: true, image: true, isActive: true, storeId: true },
     });
     if (!category) throw new NotFoundException('Category not found');
     return category;
@@ -191,8 +197,8 @@ export class CategoriesService {
     await this.prisma.category.update({ where: { id }, data: { image: imageUrl } });
   }
 
-  private async findOrThrow(id: string) {
-    const category = await this.prisma.category.findUnique({ where: { id } });
+  private async findOrThrow(id: string, storeId: string) {
+    const category = await this.prisma.category.findFirst({ where: { id, storeId } });
     if (!category) throw new NotFoundException('Category not found');
     return category;
   }
@@ -207,16 +213,16 @@ export class CategoriesService {
     return this.isDescendant(category.parentId, ancestorId);
   }
 
-  private async getAllDescendantIds(categoryId: string): Promise<string[]> {
+  private async getAllDescendantIds(categoryId: string, storeId: string): Promise<string[]> {
     const children = await this.prisma.category.findMany({
-      where: { parentId: categoryId },
+      where: { parentId: categoryId, storeId },
       select: { id: true },
     });
 
     const ids: string[] = [];
     for (const child of children) {
       ids.push(child.id);
-      const nested = await this.getAllDescendantIds(child.id);
+      const nested = await this.getAllDescendantIds(child.id, storeId);
       ids.push(...nested);
     }
     return ids;

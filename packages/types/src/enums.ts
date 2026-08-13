@@ -2,6 +2,7 @@ export enum Role {
   CUSTOMER = 'CUSTOMER',
   ADMIN = 'ADMIN',
   DELIVERY_AGENT = 'DELIVERY_AGENT',
+  SUPER_ADMIN = 'SUPER_ADMIN',
 }
 
 export enum OrderStatus {

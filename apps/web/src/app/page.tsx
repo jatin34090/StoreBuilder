@@ -6,12 +6,15 @@ import { CategoryGrid } from '@/components/home/CategoryGrid';
 import { FeaturedProducts } from '@/components/home/FeaturedProducts';
 import { WhyChooseUs } from '@/components/home/WhyChooseUs';
 import { ProductGridSkeleton } from '@/components/product/ProductCardSkeleton';
+import { fetchSiteConfig } from '@/lib/site-config';
 
-export const metadata: Metadata = {
-  title: 'YourBrand Jewellery — Artificial Jewellery Online India',
-  description:
-    'Shop stunning artificial jewellery online. Rings, necklaces, earrings, bangles and more — hypoallergenic, affordable, and beautifully crafted.',
-};
+export async function generateMetadata(): Promise<Metadata> {
+  const config = await fetchSiteConfig();
+  return {
+    title: `${config.brandName} Jewellery — Artificial Jewellery Online`,
+    description: config.tagline,
+  };
+}
 
 export default function HomePage() {
   return (

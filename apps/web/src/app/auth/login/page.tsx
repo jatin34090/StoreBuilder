@@ -1,18 +1,18 @@
 'use client';
 
-import { Suspense, useState } from 'react';
+import { Suspense, useState, useEffect } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import Link from 'next/link';
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { z } from 'zod';
 import { toast } from 'sonner';
-import { Loader2, Phone, Lock, ArrowRight } from 'lucide-react';
+import { Loader2, Phone, Lock, ArrowRight, Eye, EyeOff } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
-import { api, authApi, cartApi } from '@/lib/api';
+import { authApi, cartApi, api } from '@/lib/api';
 import { useAuthStore } from '@/store/authStore';
 import { useCartStore } from '@/store/cartStore';
 
@@ -45,6 +45,17 @@ function LoginPageContent() {
   const { items, clearCart } = useCartStore();
   const [otpSent, setOtpSent] = useState(false);
   const [phone, setPhone] = useState('');
+  const [showPassword, setShowPassword] = useState(false);
+  const [brandName, setBrandName] = useState('YourBrand');
+
+  useEffect(() => {
+    api.get('/settings/site')
+      .then((r) => {
+        const d = r.data?.data ?? r.data;
+        if (d?.brandName) setBrandName(d.brandName as string);
+      })
+      .catch(() => {});
+  }, []);
 
   const mergeGuestCart = async () => {
     if (items.length === 0) return;
@@ -56,13 +67,8 @@ function LoginPageContent() {
     }
   };
 
-  const onLoginSuccess = async (user: { id: string; name: string; email?: string; phone?: string; role: 'CUSTOMER' | 'ADMIN' | 'DELIVERY_AGENT' }, token?: string) => {
-    setUser(user, token);
-    // Set header immediately so requests made before Zustand persist flushes
-    // to localStorage (async) still carry the token.
-    if (token) {
-      api.defaults.headers.common['Authorization'] = `Bearer ${token}`;
-    }
+  const onLoginSuccess = async (user: { id: string; name: string; email?: string; phone?: string; role: 'CUSTOMER' | 'ADMIN' | 'DELIVERY_AGENT' }) => {
+    setUser(user);
     await mergeGuestCart();
     toast.success(`Welcome back, ${user.name.split(' ')[0]}!`);
     router.push(redirectTo);
@@ -86,7 +92,7 @@ function LoginPageContent() {
   const handleVerifyOtp = otpVerifyForm.handleSubmit(async (data) => {
     try {
       const res = await authApi.verifyOtp(phone, data.otp);
-      await onLoginSuccess(res.data.data?.user, res.data.data?.accessToken);
+      await onLoginSuccess(res.data.data?.user);
     } catch (err: unknown) {
       const msg = (err as { response?: { data?: { message?: string } } })?.response?.data?.message;
       toast.error(msg ?? 'Invalid OTP. Please try again.');
@@ -98,7 +104,7 @@ function LoginPageContent() {
   const handleLogin = loginForm.handleSubmit(async (data) => {
     try {
       const res = await authApi.login(data.identifier, data.password);
-      await onLoginSuccess(res.data.data?.user, res.data.data?.accessToken);
+      await onLoginSuccess(res.data.data?.user);
     } catch (err: unknown) {
       const msg = (err as { response?: { data?: { message?: string } } })?.response?.data?.message;
       toast.error(msg ?? 'Invalid credentials. Please try again.');
@@ -113,7 +119,7 @@ function LoginPageContent() {
             <span className="text-2xl">💎</span>
           </div>
           <h1 className="text-2xl font-bold text-foreground">Welcome back</h1>
-          <p className="text-muted-foreground mt-1">Sign in to your YourBrand account</p>
+          <p className="text-muted-foreground mt-1">Sign in to your {brandName} account</p>
         </div>
 
         <div className="bg-card border rounded-xl p-6 shadow-sm">
@@ -216,11 +222,19 @@ function LoginPageContent() {
                     <Lock className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
                     <Input
                       id="password"
-                      type="password"
+                      type={showPassword ? 'text' : 'password'}
                       placeholder="••••••••"
-                      className="pl-9"
+                      className="pl-9 pr-10"
                       {...loginForm.register('password')}
                     />
+                    <button
+                      type="button"
+                      onClick={() => setShowPassword((v) => !v)}
+                      className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground transition-colors"
+                      tabIndex={-1}
+                    >
+                      {showPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+                    </button>
                   </div>
                   {loginForm.formState.errors.password && (
                     <p className="text-destructive text-xs mt-1">{loginForm.formState.errors.password.message}</p>
@@ -255,7 +269,7 @@ function LoginPageContent() {
         </div>
 
         <p className="text-center text-sm text-muted-foreground mt-6">
-          New to YourBrand?{' '}
+          New to {brandName}?{' '}
           <Link href="/auth/login" className="text-primary font-medium hover:underline">
             Create an account
           </Link>

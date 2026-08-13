@@ -2,6 +2,8 @@ import { Injectable, NotFoundException, Logger } from '@nestjs/common';
 import { PrismaService } from '../../prisma/prisma.service';
 import type { ToggleWishlistDto } from './dto/toggle-wishlist.dto';
 
+const DEFAULT_STORE_ID = '00000000-0000-0000-0000-000000000001';
+
 // ─── Select shape ─────────────────────────────────────────────────────────────
 
 const WISHLIST_ITEM_SELECT = {
@@ -58,19 +60,19 @@ export class WishlistService {
     if (!product) throw new NotFoundException('Product not found');
 
     const existing = await this.prisma.wishlistItem.findUnique({
-      where: { userId_productId: { userId, productId: dto.productId } },
+      where: { storeId_userId_productId: { storeId: DEFAULT_STORE_ID, userId, productId: dto.productId } },
     });
 
     if (existing) {
       await this.prisma.wishlistItem.delete({
-        where: { userId_productId: { userId, productId: dto.productId } },
+        where: { storeId_userId_productId: { storeId: DEFAULT_STORE_ID, userId, productId: dto.productId } },
       });
       this.logger.debug(`Wishlist: removed product ${dto.productId} for user ${userId}`);
       return { action: 'removed', productId: dto.productId, wishlisted: false };
     }
 
     await this.prisma.wishlistItem.create({
-      data: { userId, productId: dto.productId },
+      data: { storeId: DEFAULT_STORE_ID, userId, productId: dto.productId },
     });
     this.logger.debug(`Wishlist: added product ${dto.productId} for user ${userId}`);
     return { action: 'added', productId: dto.productId, wishlisted: true };
@@ -80,7 +82,7 @@ export class WishlistService {
 
   async check(userId: string, productId: string) {
     const item = await this.prisma.wishlistItem.findUnique({
-      where: { userId_productId: { userId, productId } },
+      where: { storeId_userId_productId: { storeId: DEFAULT_STORE_ID, userId, productId } },
       select: { id: true },
     });
     return { productId, wishlisted: !!item };
@@ -90,12 +92,12 @@ export class WishlistService {
 
   async remove(userId: string, productId: string) {
     const existing = await this.prisma.wishlistItem.findUnique({
-      where: { userId_productId: { userId, productId } },
+      where: { storeId_userId_productId: { storeId: DEFAULT_STORE_ID, userId, productId } },
     });
     if (!existing) throw new NotFoundException('Wishlist item not found');
 
     await this.prisma.wishlistItem.delete({
-      where: { userId_productId: { userId, productId } },
+      where: { storeId_userId_productId: { storeId: DEFAULT_STORE_ID, userId, productId } },
     });
     return { message: 'Removed from wishlist', productId, wishlisted: false };
   }

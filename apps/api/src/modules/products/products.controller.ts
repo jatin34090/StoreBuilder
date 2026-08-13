@@ -21,6 +21,7 @@ import { ReorderImagesDto } from './dto/reorder-images.dto';
 import { Public } from '../../common/decorators/public.decorator';
 import { Roles } from '../../common/decorators/roles.decorator';
 import { CurrentUser, type AuthUser } from '../../common/decorators/current-user.decorator';
+import { CurrentStoreId } from '../../common/decorators/current-store.decorator';
 import { Role } from '@jewellery/types';
 
 @ApiTags('Products')
@@ -32,17 +33,17 @@ export class ProductsController {
 
   @Public()
   @Get('products')
-  @ApiOperation({ summary: 'List products with filters, sort, and pagination' })
-  findAll(@Query() query: QueryProductsDto) {
-    return this.productsService.findAll(query);
+  @ApiOperation({ summary: 'List products with filters, sort, and pagination (store-scoped)' })
+  findAll(@Query() query: QueryProductsDto, @CurrentStoreId() storeId: string) {
+    return this.productsService.findAll(query, storeId);
   }
 
   @Public()
   @Get('products/:slug')
-  @ApiOperation({ summary: 'Get full product details by slug (with variants, images, reviews)' })
+  @ApiOperation({ summary: 'Get full product details by slug (store-scoped)' })
   @ApiParam({ name: 'slug', example: 'gold-plated-kundan-necklace-set' })
-  findBySlug(@Param('slug') slug: string) {
-    return this.productsService.findBySlug(slug);
+  findBySlug(@Param('slug') slug: string, @CurrentStoreId() storeId: string) {
+    return this.productsService.findBySlug(slug, storeId);
   }
 
   // ─── Customer — Cart ─────────────────────────────────────────────────────
@@ -93,48 +94,49 @@ export class ProductsController {
   @Get('admin/products')
   @Roles(Role.ADMIN)
   @ApiBearerAuth('access-token')
-  @ApiOperation({ summary: '[Admin] List all products including inactive' })
-  adminFindAll(@Query() query: QueryProductsDto) {
-    return this.productsService.adminFindAll(query);
+  @ApiOperation({ summary: '[Admin] List all products for this store' })
+  adminFindAll(@Query() query: QueryProductsDto, @CurrentStoreId() storeId: string) {
+    return this.productsService.adminFindAll(query, storeId);
   }
 
   @Get('admin/products/:id')
   @Roles(Role.ADMIN)
   @ApiBearerAuth('access-token')
-  @ApiOperation({ summary: '[Admin] Get a single product by ID with variants and images' })
+  @ApiOperation({ summary: '[Admin] Get product by ID (store-scoped)' })
   @ApiParam({ name: 'id', description: 'Product UUID' })
-  adminFindOne(@Param('id') id: string) {
-    return this.productsService.adminFindOne(id);
+  adminFindOne(@Param('id') id: string, @CurrentStoreId() storeId: string) {
+    return this.productsService.adminFindOne(id, storeId);
   }
 
   @Post('admin/products')
   @Roles(Role.ADMIN)
   @ApiBearerAuth('access-token')
-  @ApiOperation({ summary: '[Admin] Create product with variants' })
-  create(@Body() dto: CreateProductDto) {
-    return this.productsService.create(dto);
+  @ApiOperation({ summary: '[Admin] Create product for this store' })
+  create(@Body() dto: CreateProductDto, @CurrentStoreId() storeId: string) {
+    return this.productsService.create(dto, storeId);
   }
 
   @Patch('admin/products/:id')
   @Roles(Role.ADMIN)
   @ApiBearerAuth('access-token')
-  @ApiOperation({ summary: '[Admin] Update product fields' })
+  @ApiOperation({ summary: '[Admin] Update product (store-scoped)' })
   @ApiParam({ name: 'id', description: 'Product UUID' })
   update(
     @Param('id') id: string,
     @Body() dto: UpdateProductDto,
+    @CurrentStoreId() storeId: string,
   ) {
-    return this.productsService.update(id, dto);
+    return this.productsService.update(id, dto, storeId);
   }
 
   @Delete('admin/products/:id')
   @Roles(Role.ADMIN)
   @ApiBearerAuth('access-token')
   @HttpCode(HttpStatus.OK)
-  @ApiOperation({ summary: '[Admin] Soft-delete product (deactivates it)' })
+  @ApiOperation({ summary: '[Admin] Soft-delete product (store-scoped)' })
   @ApiParam({ name: 'id', description: 'Product UUID' })
-  softDelete(@Param('id') id: string) {
-    return this.productsService.softDelete(id);
+  softDelete(@Param('id') id: string, @CurrentStoreId() storeId: string) {
+    return this.productsService.softDelete(id, storeId);
   }
 
   // ─── Admin — Variants ─────────────────────────────────────────────────────
@@ -193,6 +195,20 @@ export class ProductsController {
     @Param('imgId') imgId: string,
   ) {
     return this.productsService.removeImage(id, imgId);
+  }
+
+  @Patch('admin/products/:id/images/:imgId/variant')
+  @Roles(Role.ADMIN)
+  @ApiBearerAuth('access-token')
+  @ApiOperation({ summary: '[Admin] Assign (or unassign) a product image to a variant' })
+  @ApiParam({ name: 'id', description: 'Product UUID' })
+  @ApiParam({ name: 'imgId', description: 'Image UUID' })
+  assignImageVariant(
+    @Param('id') id: string,
+    @Param('imgId') imgId: string,
+    @Body('variantId') variantId: string | null,
+  ) {
+    return this.productsService.assignImageVariant(id, imgId, variantId ?? null);
   }
 
   @Patch('admin/products/:id/images/reorder')

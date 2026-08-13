@@ -13,6 +13,7 @@ import { AdjustStockDto } from './dto/adjust-stock.dto';
 import { QueryInventoryDto } from './dto/query-inventory.dto';
 import { Roles } from '../../common/decorators/roles.decorator';
 import { CurrentUser, type AuthUser } from '../../common/decorators/current-user.decorator';
+import { CurrentStoreId } from '../../common/decorators/current-store.decorator';
 import { Role } from '@jewellery/types';
 
 @ApiTags('Inventory')
@@ -24,22 +25,22 @@ export class InventoryController {
 
   @Get()
   @ApiOperation({ summary: '[Admin] List all variants with stock levels, search, and filters' })
-  findAll(@Query() query: QueryInventoryDto) {
-    return this.inventoryService.findAll(query);
+  findAll(@Query() query: QueryInventoryDto, @CurrentStoreId() storeId: string) {
+    return this.inventoryService.findAll(query, storeId);
   }
 
   @Get('low-stock')
   @ApiOperation({ summary: '[Admin] Get variants at or below stock threshold' })
   @ApiQuery({ name: 'threshold', required: false, type: Number, description: `Default: 5` })
-  getLowStock(@Query('threshold') threshold?: number) {
-    return this.inventoryService.getLowStock(threshold ? Number(threshold) : undefined);
+  getLowStock(@Query('threshold') threshold?: number, @CurrentStoreId() storeId?: string) {
+    return this.inventoryService.getLowStock(threshold ? Number(threshold) : undefined, storeId);
   }
 
   @Get(':variantId')
   @ApiOperation({ summary: '[Admin] Get single variant details with product info' })
   @ApiParam({ name: 'variantId', description: 'Variant UUID' })
-  getVariant(@Param('variantId') variantId: string) {
-    return this.inventoryService.getVariantById(variantId);
+  getVariant(@Param('variantId') variantId: string, @CurrentStoreId() storeId: string) {
+    return this.inventoryService.getVariantById(variantId, storeId);
   }
 
   @Patch(':variantId')
@@ -49,7 +50,8 @@ export class InventoryController {
     @Param('variantId') variantId: string,
     @Body() dto: AdjustStockDto,
     @CurrentUser() admin: AuthUser,
+    @CurrentStoreId() storeId: string,
   ) {
-    return this.inventoryService.adjustStock(variantId, dto, admin.id);
+    return this.inventoryService.adjustStock(variantId, dto, admin.id, storeId);
   }
 }

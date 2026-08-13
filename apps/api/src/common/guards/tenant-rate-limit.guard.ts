@@ -56,9 +56,19 @@ export class TenantRateLimitGuard implements CanActivate {
   async canActivate(ctx: ExecutionContext): Promise<boolean> {
     if (this.reflector.get<boolean>(SKIP_TENANT_RATE_LIMIT, ctx.getHandler())) return true;
 
-    const req = ctx.switchToHttp().getRequest<Request>();
+    const req = ctx.switchToHttp().getRequest<Request & { user?: { role?: string; storeId?: string } }>();
     const storeId = req.storeId;
     if (!storeId) return true; // no tenant context — skip
+
+    // Store ownership check: ADMIN users may only access their own store context.
+    // SUPER_ADMIN is exempt. Unauthenticated requests fall through to JWT guard.
+    const user = req.user;
+    if (user && user.role === 'ADMIN' && user.storeId && user.storeId !== storeId) {
+      throw new HttpException(
+        { message: 'You are not authorized to access this store.', storeId },
+        HttpStatus.FORBIDDEN,
+      );
+    }
 
     // Allow explicit per-route override (legacy / special cases)
     const explicit = this.reflector.get<{ limit: number; windowSec: number } | undefined>(

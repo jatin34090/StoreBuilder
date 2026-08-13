@@ -16,22 +16,23 @@ export class InventoryService {
 
   constructor(private prisma: PrismaService) {}
 
-  async findAll(dto: QueryInventoryDto) {
+  async findAll(dto: QueryInventoryDto, storeId?: string) {
     const page = dto.page ?? 1;
     const limit = Math.min(dto.limit ?? 50, 200);
     const skip = (page - 1) * limit;
 
     const where: Record<string, unknown> = {};
 
+    const productFilter: Record<string, unknown> = {};
+    if (storeId) productFilter['storeId'] = storeId;
+    if (dto.categoryId) productFilter['categoryId'] = dto.categoryId;
+    if (Object.keys(productFilter).length) where['product'] = productFilter;
+
     if (dto.search) {
       where['OR'] = [
         { sku: { contains: dto.search, mode: 'insensitive' } },
         { product: { name: { contains: dto.search, mode: 'insensitive' } } },
       ];
-    }
-
-    if (dto.categoryId) {
-      where['product'] = { categoryId: dto.categoryId };
     }
 
     if (dto.threshold !== undefined) {
@@ -80,9 +81,9 @@ export class InventoryService {
     };
   }
 
-  async getLowStock(threshold = LOW_STOCK_DEFAULT_THRESHOLD) {
+  async getLowStock(threshold = LOW_STOCK_DEFAULT_THRESHOLD, storeId?: string) {
     const variants = await this.prisma.productVariant.findMany({
-      where: { stock: { lte: threshold }, product: { isActive: true } },
+      where: { stock: { lte: threshold }, product: { isActive: true, ...(storeId ? { storeId } : {}) } },
       select: {
         id: true,
         sku: true,
@@ -105,12 +106,13 @@ export class InventoryService {
     return { variants, threshold };
   }
 
-  async adjustStock(variantId: string, dto: AdjustStockDto, adminId: string) {
+  async adjustStock(variantId: string, dto: AdjustStockDto, adminId: string, storeId?: string) {
     const variant = await this.prisma.productVariant.findUnique({
       where: { id: variantId },
-      select: { id: true, sku: true, stock: true },
+      select: { id: true, sku: true, stock: true, product: { select: { storeId: true } } },
     });
     if (!variant) throw new NotFoundException('Variant not found');
+    if (storeId && variant.product.storeId !== storeId) throw new NotFoundException('Variant not found');
 
     const newStock = variant.stock + dto.delta;
     if (newStock < 0) {
@@ -142,7 +144,7 @@ export class InventoryService {
     };
   }
 
-  async getVariantById(variantId: string) {
+  async getVariantById(variantId: string, storeId?: string) {
     const variant = await this.prisma.productVariant.findUnique({
       where: { id: variantId },
       include: {
@@ -152,12 +154,14 @@ export class InventoryService {
             name: true,
             slug: true,
             isActive: true,
+            storeId: true,
             category: { select: { id: true, name: true } },
           },
         },
       },
     });
     if (!variant) throw new NotFoundException('Variant not found');
+    if (storeId && variant.product.storeId !== storeId) throw new NotFoundException('Variant not found');
     return variant;
   }
 

@@ -25,6 +25,7 @@ import { UpdateAddressDto } from './dto/update-address.dto';
 import { PushTokenDto } from './dto/push-token.dto';
 import { AdminQueryUsersDto } from './dto/admin-query-users.dto';
 import { CurrentUser, type AuthUser } from '../../common/decorators/current-user.decorator';
+import { CurrentStoreId } from '../../common/decorators/current-store.decorator';
 import { Roles } from '../../common/decorators/roles.decorator';
 import { Role } from '@jewellery/types';
 
@@ -46,6 +47,16 @@ export class UsersController {
   @ApiOperation({ summary: 'Update name, avatar, or date of birth' })
   updateProfile(@CurrentUser() user: AuthUser, @Body() dto: UpdateProfileDto) {
     return this.usersService.updateProfile(user.id, dto);
+  }
+
+  @Patch('users/me/password')
+  @HttpCode(HttpStatus.NO_CONTENT)
+  @ApiOperation({ summary: 'Change password' })
+  changePassword(
+    @CurrentUser() user: AuthUser,
+    @Body() body: { currentPassword: string; newPassword: string },
+  ) {
+    return this.usersService.changePassword(user.id, body.currentPassword, body.newPassword);
   }
 
   @Post('users/me/push-token')
@@ -96,8 +107,8 @@ export class UsersController {
   @Get('admin/users')
   @Roles(Role.ADMIN)
   @ApiOperation({ summary: '[Admin] List all users with filters and pagination' })
-  adminListUsers(@Query() query: AdminQueryUsersDto) {
-    return this.usersService.adminListUsers(query);
+  adminListUsers(@Query() query: AdminQueryUsersDto, @CurrentStoreId() storeId: string) {
+    return this.usersService.adminListUsers(query, storeId);
   }
 
   @Patch('admin/users/:id/block')

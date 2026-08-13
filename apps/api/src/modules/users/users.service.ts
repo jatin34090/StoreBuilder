@@ -173,12 +173,20 @@ export class UsersService {
 
   // ─── Admin ────────────────────────────────────────────────────────────────
 
-  async adminListUsers(dto: AdminQueryUsersDto) {
+  async adminListUsers(dto: AdminQueryUsersDto, storeId?: string) {
     const page = dto.page ?? 1;
     const limit = Math.min(dto.limit ?? 20, 100);
     const skip = (page - 1) * limit;
 
     const where: Record<string, unknown> = {};
+
+    // Scope to users who have placed orders in this store or are StoreUsers of it
+    if (storeId) {
+      where['OR'] = [
+        { orders: { some: { storeId } } },
+        { storeUsers: { some: { storeId } } },
+      ];
+    }
 
     if (dto.search) {
       const s = dto.search.trim();

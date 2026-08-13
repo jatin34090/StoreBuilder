@@ -3,9 +3,13 @@ import {
   NotFoundException,
   BadRequestException,
   ForbiddenException,
+  UnauthorizedException,
   Logger,
 } from '@nestjs/common';
+import * as bcrypt from 'bcrypt';
 import { PrismaService } from '../../prisma/prisma.service';
+
+const DEFAULT_STORE_ID = '00000000-0000-0000-0000-000000000001';
 import type { UpdateProfileDto } from './dto/update-profile.dto';
 import type { CreateAddressDto } from './dto/create-address.dto';
 import type { UpdateAddressDto } from './dto/update-address.dto';
@@ -57,6 +61,21 @@ export class UsersService {
     });
 
     return user;
+  }
+
+  async changePassword(userId: string, currentPassword: string, newPassword: string): Promise<void> {
+    const user = await this.prisma.user.findUnique({
+      where: { id: userId },
+      select: { passwordHash: true },
+    });
+    if (!user) throw new NotFoundException('User not found');
+    if (!user.passwordHash) throw new BadRequestException('This account uses social login and has no password.');
+
+    const valid = await bcrypt.compare(currentPassword, user.passwordHash);
+    if (!valid) throw new UnauthorizedException('Current password is incorrect');
+
+    const hash = await bcrypt.hash(newPassword, 10);
+    await this.prisma.user.update({ where: { id: userId }, data: { passwordHash: hash } });
   }
 
   async updatePushToken(userId: string, token: string): Promise<void> {
@@ -156,7 +175,7 @@ export class UsersService {
 
   async adminListUsers(dto: AdminQueryUsersDto) {
     const page = dto.page ?? 1;
-    const limit = dto.limit ?? 20;
+    const limit = Math.min(dto.limit ?? 20, 100);
     const skip = (page - 1) * limit;
 
     const where: Record<string, unknown> = {};
@@ -249,8 +268,8 @@ export class UsersService {
     if (!product) throw new NotFoundException('Product not found');
 
     return this.prisma.wishlistItem.upsert({
-      where: { userId_productId: { userId, productId } },
-      create: { userId, productId },
+      where: { storeId_userId_productId: { storeId: DEFAULT_STORE_ID, userId, productId } },
+      create: { storeId: DEFAULT_STORE_ID, userId, productId },
       update: {},
     });
   }

@@ -9,7 +9,7 @@ import type { Queue } from 'bull';
 import { Prisma, NotificationType, Role, OrderStatus } from '@prisma/client';
 import { PrismaService } from '../../prisma/prisma.service';
 import { QUEUE_NOTIFICATIONS, JOB_SEND_PUSH, JOB_BROADCAST } from '../queues/queue.constants';
-import { IsolatedQueueService } from '../queues/isolated-queue.service';
+import { IsolatedQueueService, type JobCriticality } from '../queues/isolated-queue.service';
 import type { SendPushJobData, BroadcastJobData } from './notifications.processor';
 import type { CreateNotificationDto } from './dto/create-notification.dto';
 import type { BroadcastNotificationDto } from './dto/broadcast-notification.dto';
@@ -40,7 +40,7 @@ export class NotificationsService {
 
   async getUserNotifications(userId: string, dto: QueryNotificationsDto) {
     const page  = dto.page  ?? 1;
-    const limit = dto.limit ?? 20;
+    const limit = Math.min(dto.limit ?? 20, 50);
     const skip  = (page - 1) * limit;
 
     const where: Prisma.NotificationWhereInput = {
@@ -148,15 +148,16 @@ export class NotificationsService {
     let pushTokens: Map<string, string | null>;
 
     if (dto.userIds && dto.userIds.length > 0) {
-      // Explicit user list
+      // Explicit user list — cap at 5000 to prevent memory blowout
       const users = await this.prisma.user.findMany({
         where: { id: { in: dto.userIds }, isBlocked: false },
         select: { id: true, expoPushToken: true },
+        take: 5000,
       });
-      userIds   = users.map((u) => u.id);
+      userIds    = users.map((u) => u.id);
       pushTokens = new Map(users.map((u) => [u.id, u.expoPushToken ?? null]));
     } else {
-      // Target by role (or all if no role given)
+      // Target by role (or all if no role given) — cap at 5000
       const where: Prisma.UserWhereInput = {
         isBlocked: false,
         ...(dto.targetRole && { role: dto.targetRole }),
@@ -164,8 +165,9 @@ export class NotificationsService {
       const users = await this.prisma.user.findMany({
         where,
         select: { id: true, expoPushToken: true },
+        take: 5000,
       });
-      userIds   = users.map((u) => u.id);
+      userIds    = users.map((u) => u.id);
       pushTokens = new Map(users.map((u) => [u.id, u.expoPushToken ?? null]));
     }
 
@@ -340,6 +342,7 @@ export class NotificationsService {
         await this.prisma.user.findMany({
           where: { role: Role.CUSTOMER, isBlocked: false },
           select: { id: true },
+          take: 5000,
         })
       ).map((u) => ({
         storeId: DEFAULT_STORE_ID,
@@ -386,6 +389,7 @@ export class NotificationsService {
     body: string,
     data?: Record<string, unknown>,
     storeId = DEFAULT_STORE_ID,
+    criticality: JobCriticality = 'NORMAL',
   ): void {
     this.emitWebSocket(userId, title, body, data);
     if (expoPushToken) {
@@ -396,6 +400,13 @@ export class NotificationsService {
           backoff:  { type: 'exponential', delay: 5000 },
           removeOnComplete: true,
           removeOnFail:     50,
+        }, criticality)
+        .then((result) => {
+          if (result.dropped) {
+            this.logger.warn(
+              `Push dropped — user=${userId} reason=${result.reason} criticality=${criticality}`,
+            );
+          }
         })
         .catch((e) => this.logger.error(`Failed to enqueue push for user ${userId}`, e));
     }
@@ -411,12 +422,17 @@ export class NotificationsService {
   ): Promise<void> {
     if (tokens.length === 0) return;
     const jobData: BroadcastJobData = { tokens, title, body, data };
-    await this.isolatedQueue.add(storeId, 'notifications', JOB_BROADCAST, jobData, {
-      attempts: 2,
-      backoff:  { type: 'fixed', delay: 10_000 },
-      removeOnComplete: true,
-      removeOnFail:     20,
-    });
+    const result = await this.isolatedQueue.add(
+      storeId,
+      'notifications',
+      JOB_BROADCAST,
+      jobData,
+      { attempts: 2, backoff: { type: 'fixed', delay: 10_000 }, removeOnComplete: true, removeOnFail: 20 },
+      'LOW',
+    );
+    if (result.dropped) {
+      this.logger.warn(`Broadcast push dropped — store=${storeId} reason=${result.reason}`);
+    }
   }
 
   /**

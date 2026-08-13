@@ -18,7 +18,7 @@ export class InventoryService {
 
   async findAll(dto: QueryInventoryDto) {
     const page = dto.page ?? 1;
-    const limit = dto.limit ?? 50;
+    const limit = Math.min(dto.limit ?? 50, 200);
     const skip = (page - 1) * limit;
 
     const where: Record<string, unknown> = {};

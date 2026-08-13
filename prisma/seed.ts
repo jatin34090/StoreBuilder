@@ -1,4 +1,4 @@
-/**
+﻿/**
  * prisma/seed.ts — Jewellery Platform
  *
  * Idempotent: safe to run multiple times.
@@ -111,9 +111,30 @@ export const SEED_OTP = '482910';
 
 // ─── Main ─────────────────────────────────────────────────────────────────────
 
+const DEFAULT_STORE_ID = '00000000-0000-0000-0000-000000000001';
+
+async function seedDefaultStore() {
+  console.log('  → Default Store');
+  await prisma.store.upsert({
+    where:  { id: DEFAULT_STORE_ID },
+    update: {},
+    create: {
+      id:       DEFAULT_STORE_ID,
+      name:     'Jewellery Demo Store',
+      slug:     'jewellery-demo',
+      plan:     'FREE',
+      isActive: true,
+      quota: {
+        create: { productCount: 0, orderCount: 0, storageBytes: BigInt(0), apiCallsToday: 0 },
+      },
+    },
+  });
+}
+
 async function main() {
   console.log('\n🌱  Starting seed...\n');
 
+  await seedDefaultStore();
   await seedUsers();
   await seedDeliveryAgent();
   await seedAddresses();
@@ -192,6 +213,7 @@ async function seedDeliveryAgent() {
     update: { isOnline: true },
     create: {
       id:          ID.agentProfile,
+      storeId:       DEFAULT_STORE_ID,
       userId:      ID.agentUser,
       vehicleType: 'bike',
       zones:       ['400001', '400002', '400003', '400004', '400005'],
@@ -242,7 +264,7 @@ async function seedCategories() {
     await prisma.category.upsert({
       where:  { id: cat.id },
       update: { name: cat.name },
-      create: { ...cat, isActive: true },
+      create: { ...cat, storeId: DEFAULT_STORE_ID, isActive: true },
     });
   }
 }
@@ -258,6 +280,7 @@ async function seedProducts() {
     update: {},
     create: {
       id:          ID.prodRing,
+      storeId:       DEFAULT_STORE_ID,
       name:        'Royal Gold Zirconia Ring',
       slug:        'royal-gold-zirconia-ring',
       description: 'Elegant gold-plated ring adorned with sparkling cubic zirconia stones. Perfect for weddings and festive occasions. Hypoallergenic, nickel-free.',
@@ -288,6 +311,7 @@ async function seedProducts() {
     update: {},
     create: {
       id:          ID.prodNecklace,
+      storeId:       DEFAULT_STORE_ID,
       name:        'Pearl Elegance Choker Necklace',
       slug:        'pearl-elegance-choker-necklace',
       description: 'Timeless pearl choker necklace with a rhodium-plated silver finish. Double-strand freshwater pearl design with a secure lobster clasp.',
@@ -317,6 +341,7 @@ async function seedProducts() {
     update: {},
     create: {
       id:          ID.prodEarrings,
+      storeId:       DEFAULT_STORE_ID,
       name:        'Diamond Drop Dangle Earrings',
       slug:        'diamond-drop-dangle-earrings',
       description: 'Stunning solitaire diamond-cut crystal drop earrings. White gold plated with anti-tarnish coating. Suitable for sensitive ears.',
@@ -342,6 +367,7 @@ async function seedProducts() {
     update: {},
     create: {
       id:          ID.prodBangle,
+      storeId:       DEFAULT_STORE_ID,
       name:        'Silver Filigree Ethnic Bangle',
       slug:        'silver-filigree-ethnic-bangle',
       description: '925 sterling silver bangle with intricate filigree work. Lightweight and comfortable for daily wear. Comes in a gift box.',
@@ -367,6 +393,7 @@ async function seedProducts() {
     update: {},
     create: {
       id:          ID.prodPendant,
+      storeId:       DEFAULT_STORE_ID,
       name:        'Kundan Floral Statement Pendant',
       slug:        'kundan-floral-statement-pendant',
       description: 'Traditional Kundan floral pendant with meenakari back. Gold-plated brass with hand-set Kundan stones. Includes a matching chain.',
@@ -419,6 +446,7 @@ async function seedCoupons() {
     update: {},
     create: {
       id:            ID.couponWelcome,
+      storeId:       DEFAULT_STORE_ID,
       code:          'WELCOME10',
       type:          CouponType.PERCENT,
       value:         new Prisma.Decimal('10'),
@@ -436,6 +464,7 @@ async function seedCoupons() {
     update: {},
     create: {
       id:            ID.couponFlat,
+      storeId:       DEFAULT_STORE_ID,
       code:          'FLAT100',
       type:          CouponType.FLAT,
       value:         new Prisma.Decimal('100'),
@@ -453,6 +482,7 @@ async function seedCoupons() {
     update: {},
     create: {
       id:            ID.couponExpired,
+      storeId:       DEFAULT_STORE_ID,
       code:          'EXPIRED50',
       type:          CouponType.PERCENT,
       value:         new Prisma.Decimal('50'),
@@ -480,6 +510,7 @@ async function seedOrders() {
     update: { status: OrderStatus.DELIVERED },
     create: {
       id:            ID.order1Delivered,
+      storeId:       DEFAULT_STORE_ID,
       orderNumber:   'ORD-SEED-001',
       userId:        ID.customerUser,
       addressId:     ID.customerAddress,
@@ -550,6 +581,7 @@ async function seedOrders() {
     update: { status: OrderStatus.OUT_FOR_DELIVERY },
     create: {
       id:            ID.order2OutForDelivery,
+      storeId:       DEFAULT_STORE_ID,
       orderNumber:   'ORD-SEED-002',
       userId:        ID.customerUser,
       addressId:     ID.customerAddress,
@@ -616,6 +648,7 @@ async function seedOrders() {
     update: { status: OrderStatus.CONFIRMED },
     create: {
       id:            ID.order3Assigned,
+      storeId:       DEFAULT_STORE_ID,
       orderNumber:   'ORD-SEED-003',
       userId:        ID.customerUser,
       addressId:     ID.customerAddress,
@@ -677,6 +710,7 @@ async function seedOrders() {
     update: { status: OrderStatus.DELIVERED },
     create: {
       id:            ID.order4ThirdParty,
+      storeId:       DEFAULT_STORE_ID,
       orderNumber:   'ORD-SEED-004',
       userId:        ID.customerUser,
       addressId:     ID.customerAddress,
@@ -743,6 +777,7 @@ async function seedOrders() {
     update: { status: OrderStatus.PENDING },
     create: {
       id:            ID.order5Pending,
+      storeId:       DEFAULT_STORE_ID,
       orderNumber:   'ORD-SEED-005',
       userId:        ID.customerUser,
       addressId:     ID.customerAddress,
@@ -812,6 +847,7 @@ async function seedReviews() {
     update: {},
     create: {
       id:        ID.review1,
+      storeId:       DEFAULT_STORE_ID,
       productId: ID.prodRing,
       userId:    ID.customerUser,
       orderId:   ID.order1Delivered,
@@ -831,35 +867,39 @@ async function seedNotifications() {
 
   const notifications = [
     {
-      id:     ID.notif1,
-      userId: ID.customerUser,
-      type:   NotificationType.ORDER,
+      id:      ID.notif1,
+      storeId: DEFAULT_STORE_ID,
+      userId:  ID.customerUser,
+      type:    NotificationType.ORDER,
       title:  'Order Placed Successfully!',
       body:   'Your order ORD-SEED-003 for ₹948.00 has been placed. We\'ll confirm it shortly.',
       data:   { orderId: ID.order3Assigned, orderNumber: 'ORD-SEED-003' } as Prisma.InputJsonValue,
       isRead: false,
     },
     {
-      id:     ID.notif2,
-      userId: ID.customerUser,
-      type:   NotificationType.DELIVERY,
+      id:      ID.notif2,
+      storeId: DEFAULT_STORE_ID,
+      userId:  ID.customerUser,
+      type:    NotificationType.DELIVERY,
       title:  'Your Delivery is Here!',
       body:   `Order ORD-SEED-002 is out for delivery. Your OTP is: ${SEED_OTP}. Share only with the agent.`,
       data:   { orderId: ID.order2OutForDelivery, otp: SEED_OTP } as Prisma.InputJsonValue,
       isRead: false,
     },
     {
-      id:     ID.notif3,
-      userId: ID.customerUser,
-      type:   NotificationType.ORDER,
+      id:      ID.notif3,
+      storeId: DEFAULT_STORE_ID,
+      userId:  ID.customerUser,
+      type:    NotificationType.ORDER,
       title:  'Order ORD-SEED-001: DELIVERED',
       body:   'Your order has been delivered. Enjoy your jewellery!',
       data:   { orderId: ID.order1Delivered, status: 'DELIVERED' } as Prisma.InputJsonValue,
       isRead: true,
     },
     {
-      id:     ID.notif4,
-      userId: ID.customerUser,
+      id:      ID.notif4,
+      storeId: DEFAULT_STORE_ID,
+      userId:  ID.customerUser,
       type:   NotificationType.OFFER,
       title:  'New Offer: WELCOME10',
       body:   '10% off on your first order. Valid until Dec 2027.',

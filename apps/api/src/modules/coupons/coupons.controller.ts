@@ -5,6 +5,7 @@ import {
   Patch,
   Body,
   Param,
+  Query,
   ParseUUIDPipe,
   HttpCode,
   HttpStatus,
@@ -13,8 +14,10 @@ import { ApiTags, ApiBearerAuth, ApiOperation, ApiParam } from '@nestjs/swagger'
 import { CouponsService } from './coupons.service';
 import { CreateCouponDto } from './dto/create-coupon.dto';
 import { ValidateCouponDto } from './dto/validate-coupon.dto';
+import { QueryCouponsDto } from './dto/query-coupons.dto';
 import { Roles } from '../../common/decorators/roles.decorator';
 import { Role } from '@jewellery/types';
+import { CurrentStoreId } from '../../common/decorators/current-store.decorator';
 
 @ApiTags('Coupons')
 @Controller()
@@ -27,8 +30,8 @@ export class CouponsController {
   @ApiBearerAuth('access-token')
   @HttpCode(HttpStatus.OK)
   @ApiOperation({ summary: 'Validate coupon code and compute discount at checkout' })
-  validate(@Body() dto: ValidateCouponDto) {
-    return this.couponsService.validate(dto);
+  validate(@Body() dto: ValidateCouponDto, @CurrentStoreId() storeId: string) {
+    return this.couponsService.validate(dto, storeId);
   }
 
   // ─── Admin ────────────────────────────────────────────────────────────────
@@ -37,16 +40,16 @@ export class CouponsController {
   @Roles(Role.ADMIN)
   @ApiBearerAuth('access-token')
   @ApiOperation({ summary: '[Admin] List all coupons with usage stats' })
-  adminFindAll() {
-    return this.couponsService.adminFindAll();
+  adminFindAll(@CurrentStoreId() storeId: string, @Query() query: QueryCouponsDto) {
+    return this.couponsService.adminFindAll(storeId, query.limit);
   }
 
   @Post('admin/coupons')
   @Roles(Role.ADMIN)
   @ApiBearerAuth('access-token')
   @ApiOperation({ summary: '[Admin] Create a new coupon code' })
-  create(@Body() dto: CreateCouponDto) {
-    return this.couponsService.create(dto);
+  create(@Body() dto: CreateCouponDto, @CurrentStoreId() storeId: string) {
+    return this.couponsService.create(dto, storeId);
   }
 
   @Patch('admin/coupons/:id')
@@ -57,7 +60,8 @@ export class CouponsController {
   update(
     @Param('id') id: string,
     @Body() dto: Partial<CreateCouponDto>,
+    @CurrentStoreId() storeId: string,
   ) {
-    return this.couponsService.update(id, dto);
+    return this.couponsService.update(id, dto, storeId);
   }
 }

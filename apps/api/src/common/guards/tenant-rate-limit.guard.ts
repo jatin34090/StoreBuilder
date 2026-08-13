@@ -79,6 +79,11 @@ export class TenantRateLimitGuard implements CanActivate {
     let limit: number;
     let windowSec = 60;
 
+    const category = this.reflector.getAllAndOverride<RateCategoryKey>('rateCategory', [
+      ctx.getHandler(),
+      ctx.getClass(),
+    ]);
+
     if (explicit) {
       limit     = explicit.limit;
       windowSec = explicit.windowSec;
@@ -88,14 +93,14 @@ export class TenantRateLimitGuard implements CanActivate {
       const plan  = store?.plan ?? Plan.FREE;
       const base  = PLAN_API_LIMITS[plan];
 
-      // Apply category multiplier if decorator is present
-      const category = this.reflector.get<RateCategoryKey>('rateCategory', ctx.getHandler());
-      const mult      = category ? (CATEGORY_MULTIPLIERS[category] ?? 1.0) : 1.0;
+      // Apply category multiplier if a @RateCategory decorator is present
+      const mult = category ? (CATEGORY_MULTIPLIERS[category] ?? 1.0) : 1.0;
 
       limit = Math.max(1, Math.floor(base * mult));
     }
 
-    const allowed = await this.tenantService.checkAndIncrementApiRate(storeId, limit, windowSec);
+    const effectiveCategory = category ?? 'default';
+    const allowed = await this.tenantService.checkAndIncrementApiRate(storeId, limit, windowSec, effectiveCategory);
 
     if (!allowed) {
       this.logger.warn(

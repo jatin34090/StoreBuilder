@@ -1,6 +1,6 @@
-'use client';
+﻿'use client';
 
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
@@ -23,9 +23,25 @@ type LoginFormData = z.infer<typeof loginSchema>;
 
 export default function AdminLoginPage() {
   const router = useRouter();
-  const { setAdminAuth } = useAdminAuthStore();
+  const { setAdminAuth, isAdminAuthenticated } = useAdminAuthStore();
   const [showPassword, setShowPassword] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
+  const [brandName, setBrandName] = useState('YourBrand');
+
+  useEffect(() => {
+    if (isAdminAuthenticated) router.replace('/admin');
+  }, [isAdminAuthenticated, router]);
+
+  useEffect(() => {
+    import('../../../../lib/api').then(({ api }) => {
+      api.get('/settings/site')
+        .then((r) => {
+          const d = r.data?.data ?? r.data;
+          if (d?.brandName) setBrandName(d.brandName as string);
+        })
+        .catch(() => {});
+    });
+  }, []);
 
   const {
     register,
@@ -39,12 +55,10 @@ export default function AdminLoginPage() {
     setIsLoading(true);
     try {
       const response = await authApi.login(data.email, data.password);
-      // API wraps response: { success, data: { accessToken, user } }
-      const payload = (response.data as { data?: { accessToken?: string; user?: { id: string; name: string; email: string; role: string; avatar?: string } }; accessToken?: string; user?: { id: string; name: string; email: string; role: string; avatar?: string } });
-      const { user, accessToken } = payload.data ?? payload;
-      const resolvedToken = accessToken ?? '';
+      const payload = (response.data as { data?: { user?: { id: string; name: string; email: string; role: string; avatar?: string } }; user?: { id: string; name: string; email: string; role: string; avatar?: string } });
+      const user = payload.data?.user ?? payload.user;
 
-      if (!user || !resolvedToken) {
+      if (!user) {
         toast.error('Invalid response from server. Please try again.');
         return;
       }
@@ -54,10 +68,7 @@ export default function AdminLoginPage() {
         return;
       }
 
-      setAdminAuth(
-        { id: user.id, name: user.name, email: user.email, role: 'ADMIN', avatar: user.avatar },
-        resolvedToken,
-      );
+      setAdminAuth({ id: user.id, name: user.name, email: user.email, role: 'ADMIN', avatar: user.avatar });
 
       toast.success(`Welcome back, ${user.name}!`);
       router.push('/admin');
@@ -75,17 +86,17 @@ export default function AdminLoginPage() {
     <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-[#1a1a2e] via-[#16213e] to-[#0f3460] p-4">
       {/* Background decoration */}
       <div className="absolute inset-0 overflow-hidden pointer-events-none">
-        <div className="absolute -top-40 -right-40 w-80 h-80 bg-[#4A0E8F]/20 rounded-full blur-3xl" />
+        <div className="absolute -top-40 -right-40 w-80 h-80 bg-primary/20 rounded-full blur-3xl" />
         <div className="absolute -bottom-40 -left-40 w-80 h-80 bg-[#D4A853]/10 rounded-full blur-3xl" />
       </div>
 
       <div className="relative w-full max-w-md">
         {/* Logo */}
         <div className="flex flex-col items-center mb-8">
-          <div className="w-16 h-16 bg-gradient-to-br from-[#4A0E8F] to-[#7B2FBE] rounded-2xl flex items-center justify-center mb-4 shadow-lg shadow-purple-900/50">
-            <Gem className="w-8 h-8 text-[#D4A853]" />
+          <div className="w-16 h-16 bg-primary rounded-2xl flex items-center justify-center mb-4 shadow-lg shadow-black/20">
+            <Gem className="w-8 h-8 text-primary-foreground" />
           </div>
-          <h1 className="text-2xl font-bold text-white tracking-tight">YourBrand Admin</h1>
+          <h1 className="text-2xl font-bold text-white tracking-tight">{brandName} Admin</h1>
           <p className="text-slate-400 text-sm mt-1">Jewellery Management Portal</p>
         </div>
 
@@ -110,7 +121,7 @@ export default function AdminLoginPage() {
                     type="email"
                     placeholder="admin@yourbrand.com"
                     autoComplete="email"
-                    className="pl-10 bg-white/10 border-white/20 text-white placeholder:text-slate-500 focus:border-[#4A0E8F] focus:ring-[#4A0E8F]/30 h-11"
+                    className="pl-10 bg-white/10 border-white/20 text-white placeholder:text-slate-500 focus:border-primary focus:ring-primary/30 h-11"
                     {...register('email')}
                   />
                 </div>
@@ -131,7 +142,7 @@ export default function AdminLoginPage() {
                     type={showPassword ? 'text' : 'password'}
                     placeholder="••••••••"
                     autoComplete="current-password"
-                    className="pl-10 pr-10 bg-white/10 border-white/20 text-white placeholder:text-slate-500 focus:border-[#4A0E8F] focus:ring-[#4A0E8F]/30 h-11"
+                    className="pl-10 pr-10 bg-white/10 border-white/20 text-white placeholder:text-slate-500 focus:border-primary focus:ring-primary/30 h-11"
                     {...register('password')}
                   />
                   <button
@@ -152,7 +163,7 @@ export default function AdminLoginPage() {
               <Button
                 type="submit"
                 disabled={isLoading}
-                className="w-full h-11 bg-gradient-to-r from-[#4A0E8F] to-[#7B2FBE] hover:from-[#3d0b78] hover:to-[#6b28a8] text-white font-semibold shadow-lg shadow-purple-900/40 transition-all duration-200 mt-2"
+                className="w-full h-11 bg-gradient-to-r from-primary to-primary/70 hover:from-primary/90 hover:to-primary/60 text-white font-semibold shadow-lg shadow-black/20 transition-all duration-200 mt-2"
               >
                 {isLoading ? (
                   <span className="flex items-center gap-2">
@@ -182,9 +193,10 @@ export default function AdminLoginPage() {
         </Card>
 
         <p className="text-center text-slate-600 text-xs mt-6">
-          © {new Date().getFullYear()} YourBrand Jewellery. Admin Portal.
+          © {new Date().getFullYear()} {brandName} Jewellery. Admin Portal.
         </p>
       </div>
     </div>
   );
 }
+

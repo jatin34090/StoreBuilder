@@ -19,7 +19,7 @@ const variantSchema = z.object({
   color: z.string().optional(),
   price: z.coerce.number().positive('Price must be greater than 0'),
   stock: z.coerce.number().min(0),
-  isActive: z.boolean(),
+  weight: z.coerce.number().min(0.1, 'Weight must be at least 0.1g'),
 });
 
 type VariantFormValues = z.infer<typeof variantSchema>;
@@ -52,7 +52,7 @@ function VariantForm({
       color: '',
       price: 0,
       stock: 0,
-      isActive: true,
+      weight: 10,
       ...defaultValues,
     },
   });
@@ -94,11 +94,17 @@ function VariantForm({
             className="h-8 text-sm"
           />
         </div>
-        <div className="flex items-end gap-2 pb-0.5">
-          <input type="checkbox" id="variantIsActive" {...register('isActive')} className="h-4 w-4" />
-          <Label htmlFor="variantIsActive" className="text-xs cursor-pointer">
-            Active
-          </Label>
+        <div className="space-y-1">
+          <Label className="text-xs">Weight (g) *</Label>
+          <Input
+            type="number"
+            step="0.1"
+            min="0.1"
+            {...register('weight')}
+            placeholder="10"
+            className="h-8 text-sm"
+          />
+          {errors.weight && <p className="text-xs text-red-500">{errors.weight.message}</p>}
         </div>
       </div>
       <div className="flex gap-2 justify-end">
@@ -189,11 +195,11 @@ export function VariantManager({ productId, variants }: VariantManagerProps) {
               key={variant.id}
               defaultValues={{
                 sku: variant.sku,
-                size: variant.size,
-                color: variant.color,
+                size: variant.size ?? '',
+                color: variant.color ?? '',
                 price: Number(variant.price ?? 0),
                 stock: variant.stock,
-                isActive: variant.isActive,
+                weight: Number(variant.weight ?? 10),
               }}
               onSubmit={(v) => updateMutation.mutate({ variantId: variant.id, data: v })}
               onCancel={() => setEditingId(null)}
@@ -220,8 +226,8 @@ export function VariantManager({ productId, variants }: VariantManagerProps) {
                   ₹{variant.price.toLocaleString('en-IN')}
                 </span>
                 <span className="text-xs text-slate-500">Stock: {variant.stock}</span>
-                {!variant.isActive && (
-                  <Badge className="bg-red-100 text-red-700 text-xs">Inactive</Badge>
+                {variant.weight && (
+                  <span className="text-xs text-slate-400">{variant.weight}g</span>
                 )}
               </div>
               <div className="flex items-center gap-1">

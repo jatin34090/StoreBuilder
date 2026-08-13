@@ -1,4 +1,4 @@
-'use client';
+﻿'use client';
 
 import {
   AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer,
@@ -31,8 +31,8 @@ export function RevenueTrendChart({ data, loading }: { data?: TrendItem[]; loadi
       <AreaChart data={data ?? []} margin={{ top: 4, right: 8, left: 0, bottom: 0 }}>
         <defs>
           <linearGradient id="revenueGrad" x1="0" y1="0" x2="0" y2="1">
-            <stop offset="5%" stopColor="#4A0E8F" stopOpacity={0.3} />
-            <stop offset="95%" stopColor="#4A0E8F" stopOpacity={0} />
+            <stop offset="5%" stopColor="hsl(var(--primary))" stopOpacity={0.3} />
+            <stop offset="95%" stopColor="hsl(var(--primary))" stopOpacity={0} />
           </linearGradient>
         </defs>
         <CartesianGrid strokeDasharray="3 3" stroke="#f1f5f9" />
@@ -43,7 +43,7 @@ export function RevenueTrendChart({ data, loading }: { data?: TrendItem[]; loadi
           labelFormatter={(l) => formatDate(String(l))}
           contentStyle={{ border: 'none', borderRadius: '8px', boxShadow: '0 4px 6px -1px rgb(0 0 0 / 0.1)', fontSize: '12px' }}
         />
-        <Area type="monotone" dataKey="revenue" stroke="#4A0E8F" strokeWidth={2} fill="url(#revenueGrad)" />
+        <Area type="monotone" dataKey="revenue" stroke="hsl(var(--primary))" strokeWidth={2} fill="url(#revenueGrad)" />
       </AreaChart>
     </ResponsiveContainer>
   );
@@ -70,3 +70,4 @@ export function OrderStatusChart({ data, loading }: { data?: StatusItem[]; loadi
     </ResponsiveContainer>
   );
 }
+

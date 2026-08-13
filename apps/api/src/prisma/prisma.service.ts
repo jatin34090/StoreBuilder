@@ -22,8 +22,21 @@ export class PrismaService extends PrismaClient implements OnModuleInit, OnModul
   }
 
   async onModuleInit() {
-    await this.$connect();
-    this.logger.log('Prisma connected to PostgreSQL');
+    // Retry connect up to 5 times — Neon free tier can be slow to wake from cold start
+    for (let attempt = 1; attempt <= 5; attempt++) {
+      try {
+        await this.$connect();
+        this.logger.log('Prisma connected to PostgreSQL');
+        break;
+      } catch (err) {
+        if (attempt === 5) {
+          this.logger.warn('Prisma could not connect on startup — will retry on first query');
+        } else {
+          this.logger.warn(`DB connect attempt ${attempt} failed — retrying in 3s…`);
+          await new Promise((r) => setTimeout(r, 3000));
+        }
+      }
+    }
     this.keepAliveTimer = setInterval(async () => {
       try {
         await this.$queryRaw`SELECT 1`;

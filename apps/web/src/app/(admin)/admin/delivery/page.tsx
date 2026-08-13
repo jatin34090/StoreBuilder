@@ -1,4 +1,4 @@
-'use client';
+﻿'use client';
 
 import { useState } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
@@ -149,7 +149,7 @@ export default function DeliveryPage() {
         title="Delivery"
         description={`${agents.length} delivery agents`}
         action={
-          <Button onClick={openCreate} className="bg-[#4A0E8F] hover:bg-[#3d0b78]">
+          <Button onClick={openCreate} className="bg-primary hover:bg-primary/90">
             <Plus className="w-4 h-4 mr-2" />
             Add Agent
           </Button>
@@ -193,7 +193,7 @@ export default function DeliveryPage() {
         </Card>
         <Card className="border-0 shadow-sm">
           <CardContent className="p-4 flex items-center gap-3">
-            <div className="w-9 h-9 rounded-lg bg-purple-50 flex items-center justify-center">
+            <div className="w-9 h-9 rounded-lg bg-primary/10 flex items-center justify-center">
               <Package className="w-4 h-4 text-purple-600" />
             </div>
             <div>
@@ -315,7 +315,7 @@ export default function DeliveryPage() {
                       </tr>
                     ) : deliveries.map((d) => (
                       <tr key={d.id} className="hover:bg-slate-50">
-                        <td className="px-4 py-3 font-mono text-xs text-[#4A0E8F]">
+                        <td className="px-4 py-3 font-mono text-xs text-primary">
                           {d.order?.orderNumber ?? d.orderId ?? '—'}
                         </td>
                         <td className="px-4 py-3">
@@ -397,7 +397,7 @@ export default function DeliveryPage() {
             </div>
             <DialogFooter>
               <Button type="button" variant="outline" onClick={() => { setAgentModal(false); setEditAgent(null); reset(); }}>Cancel</Button>
-              <Button type="submit" disabled={createMutation.isPending || updateMutation.isPending} className="bg-[#4A0E8F] hover:bg-[#3d0b78]">
+              <Button type="submit" disabled={createMutation.isPending || updateMutation.isPending} className="bg-primary hover:bg-primary/90">
                 {createMutation.isPending || updateMutation.isPending ? 'Saving...' : editAgent ? 'Update' : 'Add Agent'}
               </Button>
             </DialogFooter>
@@ -429,3 +429,4 @@ export default function DeliveryPage() {
     </div>
   );
 }
+

@@ -5,31 +5,28 @@ import { useRouter } from 'next/navigation';
 import { useAuthStore } from '@/store/authStore';
 
 /**
- * Waits for Zustand's persist middleware to finish reading from localStorage
- * before checking auth state. Without this, the redirect fires during the
- * initial render when isAuthenticated is still the default (false), even if
- * the user just logged in.
+ * Guards a page behind authentication.
+ *
+ * localStorage persist is synchronous, so by the time any useEffect runs
+ * on the client Zustand has already restored state. We just need to skip
+ * the very first SSR render (where window/localStorage don't exist) before
+ * we check auth and potentially redirect.
  */
 export function useAuthGuard(redirectPath: string) {
   const router = useRouter();
   const { isAuthenticated } = useAuthStore();
-  const [hydrated, setHydrated] = useState(
-    () => useAuthStore.persist.hasHydrated(),
-  );
+  const [mounted, setMounted] = useState(false);
 
   useEffect(() => {
-    if (hydrated) return;
-    const unsub = useAuthStore.persist.onFinishHydration(() => setHydrated(true));
-    // Re-check in case hydration finished between render and this effect
-    if (useAuthStore.persist.hasHydrated()) setHydrated(true);
-    return unsub;
-  }, [hydrated]);
+    setMounted(true);
+  }, []);
 
   useEffect(() => {
-    if (hydrated && !isAuthenticated) {
+    if (!mounted) return;
+    if (!isAuthenticated) {
       router.replace(redirectPath);
     }
-  }, [hydrated, isAuthenticated, redirectPath, router]);
+  }, [mounted, isAuthenticated, redirectPath, router]);
 
-  return { isAuthenticated, hydrated };
+  return { isAuthenticated, hydrated: mounted };
 }

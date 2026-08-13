@@ -3,14 +3,14 @@
 import { useState, useCallback } from 'react';
 import { useRouter, useSearchParams, usePathname } from 'next/navigation';
 import { useQuery } from '@tanstack/react-query';
-import { SlidersHorizontal, X, ChevronDown } from 'lucide-react';
+import { SlidersHorizontal, X } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetTrigger } from '@/components/ui/sheet';
 import { ProductCard } from '@/components/product/ProductCard';
 import { ProductGridSkeleton } from '@/components/product/ProductCardSkeleton';
-import { searchApi } from '@/lib/api';
+import { searchApi, api } from '@/lib/api';
 
 const SORT_OPTIONS = [
   { value: 'newest',     label: 'Newest First' },
@@ -21,52 +21,90 @@ const SORT_OPTIONS = [
 ];
 
 const PRICE_RANGES = [
-  { label: 'Under ₹500',      min: 0,    max: 500  },
-  { label: '₹500 – ₹1,000',  min: 500,  max: 1000 },
+  { label: 'Under ₹500',       min: 0,    max: 500  },
+  { label: '₹500 – ₹1,000',   min: 500,  max: 1000 },
   { label: '₹1,000 – ₹2,000', min: 1000, max: 2000 },
-  { label: 'Above ₹2,000',    min: 2000, max: undefined },
+  { label: 'Above ₹2,000',     min: 2000, max: undefined },
 ];
+
+interface CategoryNode {
+  id: string;
+  name: string;
+  slug: string;
+  children?: CategoryNode[];
+}
 
 interface ProductsClientProps {
   searchParams: Record<string, string | string[] | undefined>;
+  columns?: '2' | '3' | '4';
 }
 
-export function ProductsClient({ searchParams: initialParams }: ProductsClientProps) {
-  const router = useRouter();
-  const pathname = usePathname();
-  const sp = useSearchParams();
+export function ProductsClient({ searchParams: initialParams, columns = '4' }: ProductsClientProps) {
+  const router    = useRouter();
+  const pathname  = usePathname();
+  const sp        = useSearchParams();
   const [filtersOpen, setFiltersOpen] = useState(false);
 
-  const q          = sp.get('q') ?? '';
+  const q          = sp.get('q')        ?? '';
   const category   = sp.get('category') ?? '';
-  const sortBy     = sp.get('sort') ?? 'newest';
+  const sortBy     = sp.get('sort')     ?? 'newest';
   const minPrice   = sp.get('minPrice') ? Number(sp.get('minPrice')) : undefined;
   const maxPrice   = sp.get('maxPrice') ? Number(sp.get('maxPrice')) : undefined;
   const material   = sp.get('material') ?? '';
-  const inStock    = sp.get('inStock') === 'true';
+  const inStock    = sp.get('inStock')  === 'true';
   const isFeatured = sp.get('featured') === 'true';
   const page       = Number(sp.get('page') ?? 1);
 
-  const queryParams = { q, categoryId: category, sortBy, minPrice, maxPrice, material, inStock: inStock || undefined, isFeatured: isFeatured || undefined, page, limit: 24 };
+  const queryParams = {
+    q, categorySlug: category || undefined, sortBy: sortBy.toUpperCase(),
+    minPrice, maxPrice, material,
+    inStock: inStock || undefined, isFeatured: isFeatured || undefined,
+    page, limit: 24,
+  };
 
   const { data, isLoading, isError } = useQuery({
     queryKey: ['products-search', queryParams],
-    queryFn: () => searchApi.search(Object.fromEntries(Object.entries(queryParams).filter(([, v]) => v !== undefined && v !== ''))),
+    queryFn:  () => searchApi.search(Object.fromEntries(Object.entries(queryParams).filter(([, v]) => v !== undefined && v !== ''))),
     placeholderData: (prev) => prev,
   });
 
-  const results    = data?.data?.data?.results ?? [];
+  // Fetch live category tree for filter sidebar
+  const { data: categoryTree = [] } = useQuery<CategoryNode[]>({
+    queryKey: ['categories', 'tree'],
+    queryFn:  () => api.get('/categories').then((r) => r.data?.data ?? r.data ?? []),
+    staleTime: 5 * 60 * 1000,
+  });
+
+  // Flatten tree to a single-level list (all categories regardless of depth)
+  const flatCategories = flattenTree(categoryTree);
+
+  const rawResults  = data?.data?.data?.results ?? [];
+  const results = rawResults.map((doc: {
+    id: string; name: string; slug: string; basePrice: number; effectivePrice: number;
+    discountPct: number; isFeatured: boolean; imageUrl: string; inStock: boolean;
+    minPrice: number; maxStock: number; rating: number; reviewCount: number;
+  }) => ({
+    id:          doc.id,
+    name:        doc.name,
+    slug:        doc.slug,
+    basePrice:   doc.basePrice,
+    discountPct: doc.discountPct,
+    isFeatured:  doc.isFeatured,
+    images:   doc.imageUrl ? [{ url: doc.imageUrl }] : [],
+    variants: doc.inStock
+      ? [{ id: `${doc.id}-v`, price: doc.minPrice ?? doc.effectivePrice, stock: doc.maxStock, sku: '', size: undefined, color: undefined }]
+      : [],
+    _count:    { reviews: doc.reviewCount ?? 0 },
+    avgRating: doc.rating ?? 0,
+  }));
+
   const pagination = data?.data?.data?.pagination;
   const facets     = data?.data?.data?.facets ?? {};
 
   const updateParam = useCallback(
     (key: string, value: string | undefined) => {
       const params = new URLSearchParams(sp.toString());
-      if (value) {
-        params.set(key, value);
-      } else {
-        params.delete(key);
-      }
+      if (value) params.set(key, value); else params.delete(key);
       params.delete('page');
       router.push(`${pathname}?${params.toString()}`);
     },
@@ -76,49 +114,48 @@ export function ProductsClient({ searchParams: initialParams }: ProductsClientPr
   const clearAll = () => router.push(pathname);
 
   const activeFilters = [
-    q && { key: 'q',        label: `"${q}"` },
-    category  && { key: 'category', label: category.replace(/-/g, ' ') },
-    material  && { key: 'material', label: material },
-    inStock   && { key: 'inStock',  label: 'In Stock' },
+    q          && { key: 'q',        label: `"${q}"` },
+    category   && { key: 'category', label: category.replace(/-/g, ' ') },
+    material   && { key: 'material', label: material },
+    inStock    && { key: 'inStock',  label: 'In Stock' },
     isFeatured && { key: 'featured', label: 'Featured' },
-    (minPrice || maxPrice) && {
-      key: 'price',
-      label: `₹${minPrice ?? 0}–${maxPrice ?? '∞'}`,
-    },
+    (minPrice || maxPrice) && { key: 'price', label: `₹${minPrice ?? 0}–${maxPrice ?? '∞'}` },
   ].filter(Boolean) as Array<{ key: string; label: string }>;
 
-  // ─── Filter Panel (shared between sidebar and sheet) ─────────────────────
+  // ── Filter Panel ─────────────────────────────────────────────────────────
 
   const FilterPanel = () => (
     <div className="space-y-6">
-      {/* Category */}
+      {/* Category — fully dynamic from API */}
       <div>
         <h3 className="font-semibold text-sm mb-3">Category</h3>
-        <div className="space-y-1">
-          {[
-            { slug: '',                    label: 'All' },
-            { slug: 'rings',               label: 'Rings' },
-            { slug: 'necklaces-pendants',  label: 'Necklaces & Pendants' },
-            { slug: 'earrings',            label: 'Earrings' },
-            { slug: 'bangles-bracelets',   label: 'Bangles & Bracelets' },
-          ].map((cat) => (
+        <div className="space-y-0.5 max-h-60 overflow-y-auto scrollbar-hide pr-1">
+          <button
+            onClick={() => { updateParam('category', undefined); setFiltersOpen(false); }}
+            className={`w-full text-left px-2 py-1.5 rounded text-sm transition-colors ${
+              category === '' ? 'bg-primary text-primary-foreground' : 'hover:bg-muted'
+            }`}
+          >
+            All
+          </button>
+          {flatCategories.map((cat) => (
             <button
               key={cat.slug}
-              onClick={() => { updateParam('category', cat.slug || undefined); setFiltersOpen(false); }}
+              onClick={() => { updateParam('category', cat.slug); setFiltersOpen(false); }}
               className={`w-full text-left px-2 py-1.5 rounded text-sm transition-colors ${
                 category === cat.slug ? 'bg-primary text-primary-foreground' : 'hover:bg-muted'
               }`}
             >
-              {cat.label}
+              {cat.name}
             </button>
           ))}
         </div>
       </div>
 
-      {/* Price */}
+      {/* Price Range */}
       <div>
         <h3 className="font-semibold text-sm mb-3">Price Range</h3>
-        <div className="space-y-1">
+        <div className="space-y-0.5">
           {PRICE_RANGES.map((range) => {
             const active = minPrice === range.min && maxPrice === range.max;
             return (
@@ -129,7 +166,9 @@ export function ProductsClient({ searchParams: initialParams }: ProductsClientPr
                   updateParam('maxPrice', range.max ? String(range.max) : undefined);
                   setFiltersOpen(false);
                 }}
-                className={`w-full text-left px-2 py-1.5 rounded text-sm transition-colors ${active ? 'bg-primary text-primary-foreground' : 'hover:bg-muted'}`}
+                className={`w-full text-left px-2 py-1.5 rounded text-sm transition-colors ${
+                  active ? 'bg-primary text-primary-foreground' : 'hover:bg-muted'
+                }`}
               >
                 {range.label}
               </button>
@@ -138,16 +177,18 @@ export function ProductsClient({ searchParams: initialParams }: ProductsClientPr
         </div>
       </div>
 
-      {/* Material facets */}
+      {/* Material facets — dynamic from search results */}
       {(facets.material?.length ?? 0) > 0 && (
         <div>
           <h3 className="font-semibold text-sm mb-3">Material</h3>
-          <div className="space-y-1">
+          <div className="space-y-0.5">
             {facets.material.map(({ value, count }: { value: string; count: number }) => (
               <button
                 key={value}
                 onClick={() => { updateParam('material', material === value ? undefined : value); setFiltersOpen(false); }}
-                className={`w-full text-left px-2 py-1.5 rounded text-sm flex justify-between transition-colors ${material === value ? 'bg-primary text-primary-foreground' : 'hover:bg-muted'}`}
+                className={`w-full text-left px-2 py-1.5 rounded text-sm flex justify-between transition-colors ${
+                  material === value ? 'bg-primary text-primary-foreground' : 'hover:bg-muted'
+                }`}
               >
                 <span>{value}</span>
                 <span className="text-xs opacity-70">({count})</span>
@@ -157,13 +198,17 @@ export function ProductsClient({ searchParams: initialParams }: ProductsClientPr
         </div>
       )}
 
-      {/* In stock toggle */}
+      {/* In Stock */}
       <div>
         <button
           onClick={() => updateParam('inStock', inStock ? undefined : 'true')}
-          className={`w-full text-left px-2 py-1.5 rounded text-sm flex items-center gap-2 transition-colors ${inStock ? 'bg-primary text-primary-foreground' : 'hover:bg-muted'}`}
+          className={`w-full text-left px-2 py-1.5 rounded text-sm flex items-center gap-2 transition-colors ${
+            inStock ? 'bg-primary text-primary-foreground' : 'hover:bg-muted'
+          }`}
         >
-          <span className={`w-4 h-4 rounded border-2 flex items-center justify-center ${inStock ? 'border-current bg-current' : 'border-muted-foreground'}`}>
+          <span className={`w-4 h-4 rounded border-2 flex items-center justify-center ${
+            inStock ? 'border-current bg-current' : 'border-muted-foreground'
+          }`}>
             {inStock && <span className="text-primary-foreground text-[10px]">✓</span>}
           </span>
           In Stock Only
@@ -178,7 +223,7 @@ export function ProductsClient({ searchParams: initialParams }: ProductsClientPr
 
   return (
     <div>
-      {/* Header */}
+      {/* Header row */}
       <div className="flex flex-wrap items-center justify-between gap-3 mb-6">
         <div>
           <h1 className="text-xl font-bold">
@@ -192,7 +237,6 @@ export function ProductsClient({ searchParams: initialParams }: ProductsClientPr
         </div>
 
         <div className="flex items-center gap-2">
-          {/* Mobile filter button */}
           <Sheet open={filtersOpen} onOpenChange={setFiltersOpen}>
             <SheetTrigger asChild>
               <Button variant="outline" size="sm" className="lg:hidden">
@@ -223,7 +267,7 @@ export function ProductsClient({ searchParams: initialParams }: ProductsClientPr
         </div>
       </div>
 
-      {/* Active filters chips */}
+      {/* Active filter chips */}
       {activeFilters.length > 0 && (
         <div className="flex flex-wrap gap-2 mb-4">
           {activeFilters.map((f) => (
@@ -251,7 +295,7 @@ export function ProductsClient({ searchParams: initialParams }: ProductsClientPr
           <FilterPanel />
         </aside>
 
-        {/* Results */}
+        {/* Results grid */}
         <div className="flex-1 min-w-0">
           {isLoading ? (
             <ProductGridSkeleton count={12} />
@@ -269,32 +313,27 @@ export function ProductsClient({ searchParams: initialParams }: ProductsClientPr
             </div>
           ) : (
             <>
-              <div className="grid grid-cols-2 sm:grid-cols-3 xl:grid-cols-4 gap-4">
+              <div className={`grid gap-4 ${
+              columns === '2' ? 'grid-cols-2' :
+              columns === '3' ? 'grid-cols-2 sm:grid-cols-3' :
+              'grid-cols-2 sm:grid-cols-3 xl:grid-cols-4'
+            }`}>
                 {results.map((product: Parameters<typeof ProductCard>[0]['product'] & { id: string }) => (
                   <ProductCard key={product.id} product={product} />
                 ))}
               </div>
 
-              {/* Pagination */}
               {pagination && pagination.pageCount > 1 && (
                 <div className="flex justify-center gap-2 mt-8">
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    disabled={page <= 1}
-                    onClick={() => updateParam('page', String(page - 1))}
-                  >
+                  <Button variant="outline" size="sm" disabled={page <= 1}
+                    onClick={() => updateParam('page', String(page - 1))}>
                     ← Previous
                   </Button>
                   <span className="flex items-center text-sm text-muted-foreground px-3">
                     Page {page} of {pagination.pageCount}
                   </span>
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    disabled={page >= pagination.pageCount}
-                    onClick={() => updateParam('page', String(page + 1))}
-                  >
+                  <Button variant="outline" size="sm" disabled={page >= pagination.pageCount}
+                    onClick={() => updateParam('page', String(page + 1))}>
                     Next →
                   </Button>
                 </div>
@@ -305,4 +344,16 @@ export function ProductsClient({ searchParams: initialParams }: ProductsClientPr
       </div>
     </div>
   );
+}
+
+// Flatten category tree (BFS) preserving display order
+function flattenTree(nodes: CategoryNode[]): CategoryNode[] {
+  const result: CategoryNode[] = [];
+  const queue = [...nodes];
+  while (queue.length > 0) {
+    const node = queue.shift()!;
+    result.push(node);
+    if (node.children?.length) queue.push(...node.children);
+  }
+  return result;
 }

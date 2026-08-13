@@ -18,6 +18,8 @@ import { SearchProductsDto } from './dto/search-products.dto';
 import { Public } from '../../common/decorators/public.decorator';
 import { Roles } from '../../common/decorators/roles.decorator';
 import { CurrentUser, type AuthUser } from '../../common/decorators/current-user.decorator';
+import { CurrentStoreId } from '../../common/decorators/current-store.decorator';
+import { RateCategory } from '../../common/decorators/rate-category.decorator';
 
 @ApiTags('Search')
 @Controller()
@@ -28,6 +30,7 @@ export class SearchController {
 
   @Get('search')
   @Public()
+  @RateCategory('search')
   @ApiOperation({
     summary: 'Typo-tolerant product search',
     description:
@@ -55,8 +58,8 @@ export class SearchController {
       },
     },
   })
-  search(@Query() dto: SearchProductsDto) {
-    return this.searchService.search(dto, false);
+  search(@Query() dto: SearchProductsDto, @CurrentStoreId() storeId: string) {
+    return this.searchService.search(dto, false, storeId);
   }
 
   // ─── Admin: Search with inactive products ─────────────────────────────────
@@ -68,8 +71,8 @@ export class SearchController {
     summary: 'Admin: search products including inactive',
     description: 'Same as public search but includes isActive:false products.',
   })
-  adminSearch(@Query() dto: SearchProductsDto) {
-    return this.searchService.search(dto, true);
+  adminSearch(@Query() dto: SearchProductsDto, @CurrentStoreId() storeId: string) {
+    return this.searchService.search(dto, true, storeId);
   }
 
   // ─── Admin: Full Reindex ───────────────────────────────────────────────────

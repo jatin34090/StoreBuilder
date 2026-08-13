@@ -163,8 +163,15 @@ export class TenantService {
 
   // ─── Per-tenant rate limiting ─────────────────────────────────────────────
 
-  async checkAndIncrementApiRate(storeId: string, limit: number, windowSec = 60): Promise<boolean> {
-    const key = `ratelimit:store:${storeId}:${Math.floor(Date.now() / (windowSec * 1000))}`;
+  async checkAndIncrementApiRate(
+    storeId: string,
+    limit: number,
+    windowSec = 60,
+    category = 'default',
+  ): Promise<boolean> {
+    // Per-category key: exhausting one category doesn't block another
+    const bucket = Math.floor(Date.now() / (windowSec * 1000));
+    const key = `ratelimit:store:${storeId}:${category}:${bucket}`;
     const count = await this.redis.incr(key);
     if (count === 1) await this.redis.expire(key, windowSec);
     return count <= limit;

@@ -1,4 +1,4 @@
-'use client';
+﻿'use client';
 
 import { useQuery } from '@tanstack/react-query';
 import Link from 'next/link';
@@ -27,7 +27,7 @@ export function RecentOrdersTable() {
     <Card className="border-0 shadow-sm bg-white">
       <CardHeader className="pb-3 flex flex-row items-center justify-between">
         <CardTitle className="text-base font-semibold text-slate-800">Recent Orders</CardTitle>
-        <Button variant="ghost" size="sm" asChild className="text-[#4A0E8F] h-8">
+        <Button variant="ghost" size="sm" asChild className="text-primary h-8">
           <Link href="/admin/orders">
             View all <ExternalLink className="w-3.5 h-3.5 ml-1" />
           </Link>
@@ -61,7 +61,7 @@ export function RecentOrdersTable() {
                       <td className="px-4 py-3">
                         <Link
                           href={`/admin/orders/${order.id}`}
-                          className="font-medium text-[#4A0E8F] hover:underline text-xs"
+                          className="font-medium text-primary hover:underline text-xs"
                         >
                           #{order.orderNumber}
                         </Link>
@@ -88,3 +88,4 @@ export function RecentOrdersTable() {
     </Card>
   );
 }
+

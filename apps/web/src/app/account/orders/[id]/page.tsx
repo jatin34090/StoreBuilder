@@ -1,11 +1,11 @@
 'use client';
 
 import { Suspense, useEffect } from 'react';
-import { useSearchParams, useParams } from 'next/navigation';
+import { useRouter, useSearchParams, useParams } from 'next/navigation';
 import Image from 'next/image';
 import Link from 'next/link';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { CheckCircle, Package, Truck, MapPin, ArrowLeft, Loader2, XCircle } from 'lucide-react';
+import { CheckCircle, Package, Truck, MapPin, ArrowLeft, Loader2, XCircle, KeyRound } from 'lucide-react';
 import { toast } from 'sonner';
 import { MainLayout } from '@/components/layout/MainLayout';
 import { Badge } from '@/components/ui/badge';
@@ -13,7 +13,7 @@ import { Button } from '@/components/ui/button';
 import { Separator } from '@/components/ui/separator';
 import { Skeleton } from '@/components/ui/skeleton';
 import { useAuthGuard } from '@/hooks/useAuthGuard';
-import { ordersApi } from '@/lib/api';
+import { ordersApi, notificationsApi } from '@/lib/api';
 import { formatPrice, formatDate, cn } from '@/lib/utils';
 
 const STATUS_STEPS = ['CONFIRMED', 'PROCESSING', 'SHIPPED', 'OUT_FOR_DELIVERY', 'DELIVERED'];
@@ -37,6 +37,23 @@ function OrderDetailPageContent() {
   });
 
   const order = data?.data?.data;
+
+  // Fetch delivery OTP notification when order is out for delivery
+  const { data: notifData } = useQuery({
+    queryKey: ['notifications', 'delivery-otp', params.id],
+    queryFn: () => notificationsApi.list({ limit: 50 }),
+    enabled: isAuthenticated && order?.status === 'OUT_FOR_DELIVERY',
+    refetchInterval: 15_000,
+  });
+
+  const deliveryOtp = (() => {
+    const notifs: Array<{ type: string; data?: Record<string, unknown> }> =
+      notifData?.data?.data?.notifications ?? [];
+    const match = notifs.find(
+      (n) => n.type === 'DELIVERY' && n.data?.orderId === params.id && n.data?.otp,
+    );
+    return match?.data?.otp as string | undefined;
+  })();
 
   const cancelMutation = useMutation({
     mutationFn: () => ordersApi.cancel(params.id, 'Customer requested cancellation'),
@@ -131,6 +148,108 @@ function OrderDetailPageContent() {
                 </span>
               ))}
             </div>
+          </div>
+        )}
+
+        {/* Third-party tracking (Shiprocket) — in-portal timeline */}
+        {order.delivery?.type === 'THIRD_PARTY' && order.delivery?.awbCode && (
+          <div className="border rounded-xl p-5 bg-card mb-4">
+            <h2 className="font-semibold text-sm mb-4 flex items-center gap-2">
+              <Truck className="h-4 w-4 text-primary" /> Shipment Tracking
+            </h2>
+
+            {/* Status timeline */}
+            {(() => {
+              const DELIVERY_STEPS = [
+                { key: 'ASSIGNED',         label: 'Shipment Booked',      icon: Package },
+                { key: 'PICKED_UP',        label: 'Picked Up',            icon: CheckCircle },
+                { key: 'IN_TRANSIT',       label: 'In Transit',           icon: Truck },
+                { key: 'OUT_FOR_DELIVERY', label: 'Out for Delivery',     icon: MapPin },
+                { key: 'DELIVERED',        label: 'Delivered',            icon: CheckCircle },
+              ];
+              const currentIdx = DELIVERY_STEPS.findIndex(s => s.key === order.delivery?.status);
+              return (
+                <div className="space-y-3 mb-4">
+                  {DELIVERY_STEPS.map((step, idx) => {
+                    const done    = currentIdx >= idx;
+                    const active  = currentIdx === idx;
+                    const Icon    = step.icon;
+                    return (
+                      <div key={step.key} className="flex items-start gap-3">
+                        <div className="flex flex-col items-center">
+                          <div className={cn(
+                            'w-7 h-7 rounded-full flex items-center justify-center shrink-0 transition-colors',
+                            done ? 'bg-primary text-primary-foreground' : 'bg-muted text-muted-foreground',
+                          )}>
+                            <Icon className="h-3.5 w-3.5" />
+                          </div>
+                          {idx < DELIVERY_STEPS.length - 1 && (
+                            <div className={cn('w-0.5 h-5 mt-1', idx < currentIdx ? 'bg-primary' : 'bg-muted')} />
+                          )}
+                        </div>
+                        <div className="pt-0.5">
+                          <p className={cn('text-sm font-medium', done ? 'text-foreground' : 'text-muted-foreground')}>
+                            {step.label}
+                          </p>
+                          {active && (
+                            <p className="text-xs text-primary font-medium">Current status</p>
+                          )}
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              );
+            })()}
+
+            {/* Shipment details */}
+            <div className="border-t pt-3 space-y-1.5 text-sm">
+              {order.delivery.provider && (
+                <div className="flex justify-between">
+                  <span className="text-muted-foreground">Courier</span>
+                  <span className="font-medium">{order.delivery.provider.replace('shiprocket:', '')}</span>
+                </div>
+              )}
+              <div className="flex justify-between">
+                <span className="text-muted-foreground">AWB Number</span>
+                <span className="font-mono text-xs">{order.delivery.awbCode}</span>
+              </div>
+              {order.delivery.estimatedAt && (
+                <div className="flex justify-between">
+                  <span className="text-muted-foreground">Est. Delivery</span>
+                  <span>{formatDate(order.delivery.estimatedAt)}</span>
+                </div>
+              )}
+            </div>
+          </div>
+        )}
+
+        {/* Delivery OTP box */}
+        {order.status === 'OUT_FOR_DELIVERY' && order.delivery?.type !== 'THIRD_PARTY' && (
+          <div className="border-2 border-orange-400 rounded-xl p-5 bg-orange-50 mb-4">
+            <div className="flex items-center gap-2 mb-3">
+              <KeyRound className="h-5 w-5 text-orange-600 shrink-0" />
+              <p className="font-semibold text-orange-800">Delivery OTP</p>
+            </div>
+            {deliveryOtp ? (
+              <>
+                <p className="text-sm text-orange-700 mb-3">
+                  Your delivery agent is at your door. Share this OTP to confirm delivery.
+                </p>
+                <div className="flex items-center justify-center bg-white border-2 border-orange-300 rounded-xl py-4 px-6">
+                  <span className="text-4xl font-bold tracking-[0.5em] text-orange-600 select-all">
+                    {deliveryOtp}
+                  </span>
+                </div>
+                <p className="text-xs text-orange-600 mt-2 text-center">
+                  Share only with the delivery agent. Do not share with anyone else.
+                </p>
+              </>
+            ) : (
+              <p className="text-sm text-orange-700">
+                Your order is out for delivery! Your OTP will appear here shortly.
+              </p>
+            )}
           </div>
         )}
 

@@ -1,4 +1,4 @@
-'use client';
+﻿'use client';
 
 import { useState } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
@@ -134,7 +134,7 @@ export default function CouponsPage() {
         title="Coupons"
         description={`${coupons.length} coupon codes`}
         action={
-          <Button onClick={openCreate} className="bg-[#4A0E8F] hover:bg-[#3d0b78]">
+          <Button onClick={openCreate} className="bg-primary hover:bg-primary/90">
             <Plus className="w-4 h-4 mr-2" />
             New Coupon
           </Button>
@@ -177,7 +177,7 @@ export default function CouponsPage() {
                   return (
                     <tr key={coupon.id} className="hover:bg-slate-50 transition-colors">
                       <td className="px-4 py-3">
-                        <code className="font-mono text-sm font-bold text-[#4A0E8F] bg-purple-50 px-2 py-0.5 rounded">
+                        <code className="font-mono text-sm font-bold text-primary bg-primary/10 px-2 py-0.5 rounded">
                           {coupon.code}
                         </code>
                       </td>
@@ -290,7 +290,7 @@ export default function CouponsPage() {
             </div>
             <DialogFooter>
               <Button type="button" variant="outline" onClick={() => { setModalOpen(false); setEditCoupon(null); reset(); }}>Cancel</Button>
-              <Button type="submit" disabled={createMutation.isPending || updateMutation.isPending} className="bg-[#4A0E8F] hover:bg-[#3d0b78]">
+              <Button type="submit" disabled={createMutation.isPending || updateMutation.isPending} className="bg-primary hover:bg-primary/90">
                 {createMutation.isPending || updateMutation.isPending ? 'Saving...' : editCoupon ? 'Update' : 'Create'}
               </Button>
             </DialogFooter>
@@ -300,3 +300,4 @@ export default function CouponsPage() {
     </div>
   );
 }
+

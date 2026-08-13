@@ -2,7 +2,6 @@
 
 import { create } from 'zustand';
 import { persist } from 'zustand/middleware';
-import { api } from '../lib/api';
 
 export interface AdminUser {
   id: string;
@@ -14,9 +13,8 @@ export interface AdminUser {
 
 interface AdminAuthState {
   adminUser: AdminUser | null;
-  adminToken: string | null;
   isAdminAuthenticated: boolean;
-  setAdminAuth: (user: AdminUser, token: string) => void;
+  setAdminAuth: (user: AdminUser) => void;
   clearAdminAuth: () => void;
 }
 
@@ -24,29 +22,10 @@ export const useAdminAuthStore = create<AdminAuthState>()(
   persist(
     (set) => ({
       adminUser: null,
-      adminToken: null,
       isAdminAuthenticated: false,
-
-      setAdminAuth: (user, token) => {
-        // Inject token into axios headers globally
-        api.defaults.headers.common['Authorization'] = `Bearer ${token}`;
-        set({ adminUser: user, adminToken: token, isAdminAuthenticated: true });
-      },
-
-      clearAdminAuth: () => {
-        // Remove token from axios headers
-        delete api.defaults.headers.common['Authorization'];
-        set({ adminUser: null, adminToken: null, isAdminAuthenticated: false });
-      },
+      setAdminAuth: (user) => set({ adminUser: user, isAdminAuthenticated: true }),
+      clearAdminAuth: () => set({ adminUser: null, isAdminAuthenticated: false }),
     }),
-    {
-      name: 'jewellery-admin-auth',
-      onRehydrateStorage: () => (state) => {
-        // Re-inject token on page reload
-        if (state?.adminToken) {
-          api.defaults.headers.common['Authorization'] = `Bearer ${state.adminToken}`;
-        }
-      },
-    },
+    { name: 'jewellery-admin-auth' },
   ),
 );

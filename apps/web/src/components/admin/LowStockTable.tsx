@@ -1,4 +1,4 @@
-'use client';
+﻿'use client';
 
 import { useQuery } from '@tanstack/react-query';
 import Link from 'next/link';
@@ -18,7 +18,7 @@ export function LowStockTable() {
     <Card className="border-0 shadow-sm bg-white">
       <CardHeader className="pb-3 flex flex-row items-center justify-between">
         <CardTitle className="text-base font-semibold text-slate-800">Low Stock Alerts</CardTitle>
-        <Button variant="ghost" size="sm" asChild className="text-[#4A0E8F] h-8">
+        <Button variant="ghost" size="sm" asChild className="text-primary h-8">
           <Link href="/admin/inventory">
             Manage <ExternalLink className="w-3.5 h-3.5 ml-1" />
           </Link>
@@ -84,7 +84,7 @@ export function LowStockTable() {
                           size="sm"
                           variant="outline"
                           asChild
-                          className="h-7 text-xs border-[#4A0E8F] text-[#4A0E8F] hover:bg-[#4A0E8F] hover:text-white"
+                          className="h-7 text-xs border-primary text-primary hover:bg-primary hover:text-white"
                         >
                           <Link href={`/admin/inventory?variant=${item.variantId}`}>Restock</Link>
                         </Button>
@@ -100,3 +100,4 @@ export function LowStockTable() {
     </Card>
   );
 }
+

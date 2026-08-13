@@ -1,4 +1,4 @@
-'use client';
+﻿'use client';
 
 import { useQuery } from '@tanstack/react-query';
 import dynamic from 'next/dynamic';
@@ -105,7 +105,7 @@ export default function AdminDashboardPage() {
               value={formatCurrency(overview?.totalRevenue ?? 0)}
               change={overview?.revenueChange}
               iconBg="bg-purple-100"
-              icon={<IndianRupee className="w-5 h-5 text-[#4A0E8F]" />}
+              icon={<IndianRupee className="w-5 h-5 text-primary" />}
             />
             <KpiCard
               title="Total Orders"
@@ -169,3 +169,4 @@ export default function AdminDashboardPage() {
     </div>
   );
 }
+

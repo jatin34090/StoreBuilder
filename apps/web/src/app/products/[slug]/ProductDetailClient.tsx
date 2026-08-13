@@ -4,7 +4,7 @@ import Image from 'next/image';
 import Link from 'next/link';
 import { useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
-import { Heart, ShoppingBag, Star, ChevronLeft, Check, Truck, Shield, RotateCcw } from 'lucide-react';
+import { Heart, ShoppingBag, Star, ChevronLeft, ChevronRight, Check, Truck, Shield, RotateCcw } from 'lucide-react';
 import { toast } from 'sonner';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
@@ -36,7 +36,7 @@ interface ProductDetail {
   tags: string[];
   isFeatured: boolean;
   isActive: boolean;
-  images: { id: string; url: string; isPrimary: boolean }[];
+  images: { id: string; url: string; isPrimary: boolean; variantId?: string | null }[];
   variants: Variant[];
   category: { id: string; name: string; slug: string };
   _count: { reviews: number };
@@ -61,6 +61,11 @@ export function ProductDetailClient({ product }: Props) {
 
   const [selectedVariant, setSelectedVariant] = useState<Variant>(product.variants[0]);
   const [selectedImageIdx, setSelectedImageIdx] = useState(0);
+
+  // Compute images for the currently-selected variant.
+  // If the variant has tagged images, show those; otherwise fall back to product-level images.
+  const variantImages = product.images.filter((img) => img.variantId === selectedVariant?.id);
+  const displayImages = variantImages.length > 0 ? variantImages : product.images.filter((img) => !img.variantId);
   const [quantity, setQuantity] = useState(1);
   const [wishlisted, setWishlisted] = useState(false);
   const [wishlistLoading, setWishlistLoading] = useState(false);
@@ -90,7 +95,7 @@ export function ProductDetailClient({ product }: Props) {
       size:      selectedVariant.size,
       color:     selectedVariant.color,
       price:     effectivePrice,
-      image:     product.images[0]?.url ?? '',
+      image:     displayImages[0]?.url ?? product.images[0]?.url ?? '',
       quantity,
       stock:     selectedVariant.stock,
     });
@@ -129,15 +134,56 @@ export function ProductDetailClient({ product }: Props) {
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-8 lg:gap-12">
         {/* ─── Images ──────────────────────────────────────────────────── */}
         <div className="space-y-3">
-          <div className="relative aspect-square overflow-hidden rounded-xl bg-gray-50">
+          {/* Main image with prev/next arrows */}
+          <div className="relative aspect-square overflow-hidden rounded-xl bg-gray-50 group">
             <Image
-              src={product.images[selectedImageIdx]?.url ?? '/placeholder-jewellery.jpg'}
+              src={displayImages[selectedImageIdx]?.url ?? product.images[0]?.url ?? '/placeholder-jewellery.jpg'}
               alt={product.name}
               fill
-              className="object-cover"
+              className="object-cover transition-opacity duration-300"
               priority
               sizes="(max-width: 1024px) 100vw, 50vw"
             />
+
+            {/* Prev button */}
+            {displayImages.length > 1 && selectedImageIdx > 0 && (
+              <button
+                onClick={() => setSelectedImageIdx((i) => i - 1)}
+                className="absolute left-3 top-1/2 -translate-y-1/2 w-9 h-9 rounded-full bg-background/80 backdrop-blur-sm border border-border/50 flex items-center justify-center shadow-sm hover:bg-background transition-all opacity-0 group-hover:opacity-100"
+                aria-label="Previous image"
+              >
+                <ChevronLeft className="w-5 h-5 text-foreground" />
+              </button>
+            )}
+
+            {/* Next button */}
+            {displayImages.length > 1 && selectedImageIdx < displayImages.length - 1 && (
+              <button
+                onClick={() => setSelectedImageIdx((i) => i + 1)}
+                className="absolute right-3 top-1/2 -translate-y-1/2 w-9 h-9 rounded-full bg-background/80 backdrop-blur-sm border border-border/50 flex items-center justify-center shadow-sm hover:bg-background transition-all opacity-0 group-hover:opacity-100"
+                aria-label="Next image"
+              >
+                <ChevronRight className="w-5 h-5 text-foreground" />
+              </button>
+            )}
+
+            {/* Dot indicators */}
+            {displayImages.length > 1 && (
+              <div className="absolute bottom-3 left-1/2 -translate-x-1/2 flex gap-1.5">
+                {displayImages.map((_, idx) => (
+                  <button
+                    key={idx}
+                    onClick={() => setSelectedImageIdx(idx)}
+                    className={cn(
+                      'w-1.5 h-1.5 rounded-full transition-all duration-200',
+                      idx === selectedImageIdx ? 'bg-white w-4' : 'bg-white/60 hover:bg-white/90',
+                    )}
+                    aria-label={`Go to image ${idx + 1}`}
+                  />
+                ))}
+              </div>
+            )}
+
             {discount > 0 && (
               <Badge variant="destructive" className="absolute top-3 left-3 text-sm px-2 py-1">
                 -{discount}% OFF
@@ -147,10 +193,11 @@ export function ProductDetailClient({ product }: Props) {
               <Badge variant="gold" className="absolute top-3 right-3">✨ Featured</Badge>
             )}
           </div>
+
           {/* Thumbnails */}
-          {product.images.length > 1 && (
+          {displayImages.length > 1 && (
             <div className="flex gap-2 overflow-x-auto scrollbar-hide pb-1">
-              {product.images.map((img, idx) => (
+              {displayImages.map((img, idx) => (
                 <button
                   key={img.id}
                   onClick={() => setSelectedImageIdx(idx)}
@@ -218,7 +265,7 @@ export function ProductDetailClient({ product }: Props) {
                     <button
                       key={color}
                       onClick={() => {
-                        if (variantWithColor) { setSelectedVariant(variantWithColor); setQuantity(1); }
+                        if (variantWithColor) { setSelectedVariant(variantWithColor); setQuantity(1); setSelectedImageIdx(0); }
                       }}
                       className={cn(
                         'px-3 py-1.5 rounded-full border text-sm transition-all',
@@ -244,7 +291,7 @@ export function ProductDetailClient({ product }: Props) {
                 {product.variants.map((v) => (
                   <button
                     key={v.id}
-                    onClick={() => { setSelectedVariant(v); setQuantity(1); }}
+                    onClick={() => { setSelectedVariant(v); setQuantity(1); setSelectedImageIdx(0); }}
                     className={cn(
                       'px-3 py-1.5 rounded-md border text-sm transition-all',
                       selectedVariant?.id === v.id ? 'border-primary bg-primary/10 text-primary font-medium' : 'border-input hover:border-primary',

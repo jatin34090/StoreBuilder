@@ -1,5 +1,5 @@
-// ─── Prisma schema — Jewellery Platform ─────────────────────────────────────
-// DB: PostgreSQL 16 on Supabase
+// ─── Prisma schema — Multi-Tenant Jewellery SaaS Platform ───────────────────
+// DB: PostgreSQL 16 on Neon
 // ORM: Prisma 5
 
 generator client {
@@ -14,10 +14,25 @@ datasource db {
 
 // ─── Enums ───────────────────────────────────────────────────────────────────
 
+enum Plan {
+  FREE
+  STARTER
+  PROFESSIONAL
+  ENTERPRISE
+}
+
+enum StoreRole {
+  OWNER
+  ADMIN
+  STAFF
+  DELIVERY_AGENT
+}
+
 enum Role {
   CUSTOMER
   ADMIN
   DELIVERY_AGENT
+  SUPER_ADMIN
 }
 
 enum OrderStatus {
@@ -77,42 +92,239 @@ enum NotificationType {
   REVIEW
 }
 
-// ─── 4.1 Users & Auth ────────────────────────────────────────────────────────
+enum RemittanceStatus {
+  PENDING
+  SUBMITTED
+  RECEIVED
+}
+
+enum SubscriptionStatus {
+  CREATED
+  AUTHENTICATED
+  ACTIVE
+  PAUSED
+  CANCELLED
+  COMPLETED
+  EXPIRED
+}
+
+enum StoreStatus {
+  DRAFT
+  SETUP
+  ACTIVE
+  SUSPENDED
+  CLOSED
+}
+
+// ─── 1. Stores (Tenants) ─────────────────────────────────────────────────────
+
+model Store {
+  id           String      @id @default(uuid())
+  name         String
+  slug         String      @unique // subdomain: slug.platform.com
+  customDomain String?     @unique // www.mystore.com
+  plan         Plan        @default(FREE)
+  status       StoreStatus @default(SETUP)
+  isActive     Boolean     @default(true)
+  logoUrl      String?
+  faviconUrl   String?
+  // Business details
+  businessName String?
+  industry     String?
+  description  String?     @db.Text
+  contactEmail String?
+  phone        String?
+  address      String?
+  country      String      @default("IN")
+  currency     String      @default("INR")
+  timezone     String      @default("Asia/Kolkata")
+  createdAt    DateTime    @default(now())
+  updatedAt    DateTime    @updatedAt
+
+  users          StoreUser[]
+  categories     Category[]
+  products       Product[]
+  orders         Order[]
+  coupons        Coupon[]
+  notifications  Notification[]
+  cartItems      CartItem[]
+  wishlistItems  WishlistItem[]
+  deliveryAgents DeliveryAgent[]
+  settings       StoreSetting[]
+  quota          StoreQuotaUsage?
+  apiLogs        TenantApiLog[]
+  subscription   StoreSubscription?
+  onboarding     OnboardingState?
+
+  @@index([slug])
+  @@index([customDomain])
+  @@index([plan, isActive])
+  @@index([status])
+}
+
+// Store membership — users can belong to many stores with different roles
+model StoreUser {
+  id        String    @id @default(uuid())
+  storeId   String
+  userId    String
+  role      StoreRole @default(STAFF)
+  createdAt DateTime  @default(now())
+
+  store Store @relation(fields: [storeId], references: [id], onDelete: Cascade)
+  user  User  @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([storeId, userId])
+  @@index([storeId, role])
+  @@index([userId])
+}
+
+// Per-store settings (replaces global SiteSetting for tenant-owned config)
+model StoreSetting {
+  storeId   String
+  key       String
+  value     String
+  updatedAt DateTime @updatedAt
+
+  store Store @relation(fields: [storeId], references: [id], onDelete: Cascade)
+
+  @@id([storeId, key])
+  @@index([storeId])
+}
+
+// ─── 2. Plan Limits (configurable by super-admin) ────────────────────────────
+
+model PlanLimit {
+  plan           Plan @id
+  maxProducts    Int  @default(100)
+  maxStaff       Int  @default(3)
+  maxStorageGB   Int  @default(5)
+  maxApiPerDay   Int  @default(10000)
+  maxApiPerMonth Int  @default(200000)
+  maxOrders      Int? // null = unlimited
+}
+
+// ─── 3. Store Subscription (Razorpay SaaS billing) ───────────────────────────
+
+model StoreSubscription {
+  id                     String             @id @default(uuid())
+  storeId                String             @unique
+  razorpaySubId          String?            @unique  // sub_xxx (null for FREE / trial plans)
+  razorpayCustomerId     String?                     // cust_xxx
+  razorpayPlanId         String?                     // plan_xxx (null for FREE plan)
+  plan                   Plan
+  status                 SubscriptionStatus @default(CREATED)
+  currentPeriodStart     DateTime?
+  currentPeriodEnd       DateTime?
+  cancelAtPeriodEnd      Boolean            @default(false)
+  chargeAt               DateTime?          // next billing date from Razorpay
+  createdAt              DateTime           @default(now())
+  updatedAt              DateTime           @updatedAt
+
+  store Store @relation(fields: [storeId], references: [id], onDelete: Cascade)
+
+  @@index([razorpaySubId])
+  @@index([storeId, status])
+}
+
+// ─── 4. Per-Tenant Quota Usage (counters updated in real-time) ───────────────
+
+model StoreQuotaUsage {
+  storeId        String   @id
+  productCount   Int      @default(0)
+  orderCount     Int      @default(0)
+  customerCount  Int      @default(0)
+  storageBytes   BigInt   @default(0)
+  apiCallsToday  Int      @default(0)
+  apiCallsMonth  Int      @default(0)
+  lastDayReset   DateTime?
+  lastMonthReset DateTime?
+  updatedAt      DateTime @updatedAt
+
+  store Store @relation(fields: [storeId], references: [id], onDelete: Cascade)
+}
+
+// Tenant API request log (for billing / monitoring — rolling 30-day window)
+model TenantApiLog {
+  id        String   @id @default(uuid())
+  storeId   String
+  path      String
+  method    String
+  statusCode Int
+  durationMs Int
+  createdAt DateTime @default(now())
+
+  store Store @relation(fields: [storeId], references: [id], onDelete: Cascade)
+
+  @@index([storeId, createdAt])
+}
+
+// Per-store onboarding progress tracker
+model OnboardingState {
+  storeId      String    @id
+  businessInfo Boolean   @default(false)
+  storeUrl     Boolean   @default(false)
+  theme        Boolean   @default(false)
+  firstProduct Boolean   @default(false)
+  payment      Boolean   @default(false)
+  shipping     Boolean   @default(false)
+  launched     Boolean   @default(false)
+  completedAt  DateTime?
+  createdAt    DateTime  @default(now())
+  updatedAt    DateTime  @updatedAt
+
+  store Store @relation(fields: [storeId], references: [id], onDelete: Cascade)
+}
+
+// Platform-level settings (super-admin only)
+model SiteSetting {
+  key       String   @id
+  value     String
+  updatedAt DateTime @updatedAt
+}
+
+// ─── 4. Users & Auth (platform-level) ────────────────────────────────────────
 
 model User {
-  id           String   @id @default(uuid())
-  name         String
-  email        String?  @unique
-  phone        String?  @unique
-  passwordHash String?
-  role         Role     @default(CUSTOMER)
-  isVerified   Boolean  @default(false)
-  isBlocked    Boolean  @default(false)
-  avatar       String? // Cloudinary public_id
-  dob          DateTime? // birthday offers
-  expoPushToken String?
-  createdAt    DateTime @default(now())
-  updatedAt    DateTime @updatedAt
+  id            String    @id @default(uuid())
+  name          String
+  email         String?   @unique
+  phone         String?   @unique
+  passwordHash  String?
+  role                     Role      @default(CUSTOMER)
+  isVerified               Boolean   @default(false)
+  isBlocked                Boolean   @default(false)
+  avatar                   String?
+  dob                      DateTime?
+  expoPushToken            String?
+  emailVerifiedAt          DateTime?
+  emailVerificationToken   String?
+  emailVerificationExpires DateTime?
+  createdAt                DateTime  @default(now())
+  updatedAt                DateTime  @updatedAt
 
-  addresses      Address[]
-  orders         Order[]
-  wishlist       WishlistItem[]
-  reviews        Review[]
-  refreshTokens  RefreshToken[]
-  notifications  Notification[]
-  deliveryAgent  DeliveryAgent?
+  addresses     Address[]
+  orders        Order[]
+  wishlist      WishlistItem[]
+  reviews       Review[]
+  refreshTokens RefreshToken[]
+  notifications Notification[]
+  deliveryAgent DeliveryAgent?
+  storeUsers    StoreUser[]
 
   @@index([email, phone])
+  @@index([role])
 }
 
 model RefreshToken {
   id        String   @id @default(uuid())
   userId    String
-  tokenHash String   @unique // bcrypt hash — never store plain
+  tokenHash String   @unique
   expiresAt DateTime
   createdAt DateTime @default(now())
 
   user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
 }
 
 model Address {
@@ -129,33 +341,43 @@ model Address {
 
   user   User    @relation(fields: [userId], references: [id], onDelete: Cascade)
   orders Order[]
+
+  @@index([userId])
 }
 
-// ─── 4.2 Catalogue ───────────────────────────────────────────────────────────
+// ─── 5. Catalogue (tenant-scoped) ────────────────────────────────────────────
 
 model Category {
   id        String  @id @default(uuid())
+  storeId   String
   name      String
-  slug      String  @unique
-  image     String? // Cloudinary public_id
+  slug      String  // unique per store (@@unique below)
+  image     String?
   parentId  String?
   isActive  Boolean @default(true)
   sortOrder Int     @default(0)
 
+  store    Store      @relation(fields: [storeId], references: [id], onDelete: Cascade)
   parent   Category?  @relation("tree", fields: [parentId], references: [id])
   children Category[] @relation("tree")
   products Product[]
+
+  @@unique([storeId, slug])
+  @@index([storeId, isActive])
+  @@index([storeId, parentId])
+  @@index([storeId, sortOrder])
 }
 
 model Product {
-  id          String  @id @default(uuid())
+  id          String   @id @default(uuid())
+  storeId     String
   name        String
-  slug        String  @unique
-  description String  @db.Text
+  slug        String   // unique per store (@@unique below)
+  description String   @db.Text
   categoryId  String
-  basePrice   Decimal @db.Decimal(10, 2)
-  discountPct Int     @default(0) // 0–100
-  attributes  Json // { material, occasion, color, finish, stone, weight }
+  basePrice   Decimal  @db.Decimal(10, 2)
+  discountPct Int      @default(0)
+  attributes  Json
   tags        String[]
   metaTitle   String?
   metaDesc    String?
@@ -164,13 +386,18 @@ model Product {
   createdAt   DateTime @default(now())
   updatedAt   DateTime @updatedAt
 
+  store    Store           @relation(fields: [storeId], references: [id], onDelete: Cascade)
   category Category        @relation(fields: [categoryId], references: [id])
   images   ProductImage[]
   variants ProductVariant[]
   reviews  Review[]
   wishlist WishlistItem[]
 
-  @@index([slug, categoryId, isActive])
+  @@unique([storeId, slug])
+  @@index([storeId, isActive, createdAt])
+  @@index([storeId, categoryId, isActive])
+  @@index([storeId, isFeatured, isActive])
+  @@index([storeId, createdAt])
 }
 
 model ProductVariant {
@@ -181,60 +408,74 @@ model ProductVariant {
   color     String?
   price     Decimal @db.Decimal(10, 2)
   stock     Int     @default(0)
-  weight    Float // grams — for shipping rate calc
+  weight    Float
 
-  product    Product     @relation(fields: [productId], references: [id], onDelete: Cascade)
+  product    Product        @relation(fields: [productId], references: [id], onDelete: Cascade)
+  images     ProductImage[]
   orderItems OrderItem[]
   cartItems  CartItem[]
 
   @@index([sku])
+  @@index([productId])
 }
 
 model ProductImage {
   id        String  @id @default(uuid())
   productId String
-  publicId  String // Cloudinary public_id
-  url       String // Cloudinary secure_url
+  variantId String?
+  publicId  String
+  url       String
   isPrimary Boolean @default(false)
   sortOrder Int     @default(0)
 
-  product Product @relation(fields: [productId], references: [id], onDelete: Cascade)
+  product Product         @relation(fields: [productId], references: [id], onDelete: Cascade)
+  variant ProductVariant? @relation(fields: [variantId], references: [id], onDelete: SetNull)
+
+  @@index([productId, isPrimary])
+  @@index([variantId])
 }
 
-// ─── Cart (server-synced) ────────────────────────────────────────────────────
+// ─── 6. Cart (tenant-scoped) ─────────────────────────────────────────────────
 
 model CartItem {
   id        String   @id @default(uuid())
+  storeId   String
   userId    String
   variantId String
   quantity  Int      @default(1)
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
+  store   Store          @relation(fields: [storeId], references: [id], onDelete: Cascade)
   variant ProductVariant @relation(fields: [variantId], references: [id], onDelete: Cascade)
 
-  @@unique([userId, variantId])
+  @@unique([storeId, userId, variantId])
+  @@index([storeId, userId])
 }
 
-// ─── Wishlist ────────────────────────────────────────────────────────────────
+// ─── 7. Wishlist (tenant-scoped) ─────────────────────────────────────────────
 
 model WishlistItem {
   id        String   @id @default(uuid())
+  storeId   String
   userId    String
   productId String
   createdAt DateTime @default(now())
 
+  store   Store   @relation(fields: [storeId], references: [id], onDelete: Cascade)
   user    User    @relation(fields: [userId], references: [id], onDelete: Cascade)
   product Product @relation(fields: [productId], references: [id], onDelete: Cascade)
 
-  @@unique([userId, productId])
+  @@unique([storeId, userId, productId])
+  @@index([storeId, userId])
 }
 
-// ─── 4.3 Orders ──────────────────────────────────────────────────────────────
+// ─── 8. Orders (tenant-scoped) ───────────────────────────────────────────────
 
 model Order {
   id             String      @id @default(uuid())
-  orderNumber    String      @unique @default(cuid()) // human-readable
+  storeId        String
+  orderNumber    String      @unique @default(cuid())
   userId         String
   addressId      String
   status         OrderStatus @default(PENDING)
@@ -247,37 +488,44 @@ model Order {
   createdAt      DateTime    @default(now())
   updatedAt      DateTime    @updatedAt
 
-  user     User       @relation(fields: [userId], references: [id])
-  address  Address    @relation(fields: [addressId], references: [id])
-  coupon   Coupon?    @relation(fields: [couponId], references: [id])
-  items    OrderItem[]
-  payment  Payment?
-  delivery Delivery?
+  store          Store              @relation(fields: [storeId], references: [id])
+  user           User               @relation(fields: [userId], references: [id])
+  address        Address            @relation(fields: [addressId], references: [id])
+  coupon         Coupon?            @relation(fields: [couponId], references: [id])
+  items          OrderItem[]
+  payment        Payment?
+  delivery       Delivery?
+  remittanceItem CodRemittanceItem?
 
-  @@index([userId, status, createdAt])
+  @@index([storeId, status, createdAt])
+  @@index([storeId, userId, createdAt])
+  @@index([storeId, createdAt])
+  @@index([storeId, status])
 }
 
 model OrderItem {
   id        String  @id @default(uuid())
   orderId   String
   variantId String
-  name      String // snapshot at order time
-  sku       String // snapshot
-  price     Decimal @db.Decimal(10, 2) // snapshot
+  name      String
+  sku       String
+  price     Decimal @db.Decimal(10, 2)
   quantity  Int
-  image     String // snapshot
+  image     String
 
   order   Order          @relation(fields: [orderId], references: [id])
   variant ProductVariant @relation(fields: [variantId], references: [id])
+
+  @@index([orderId])
 }
 
-// ─── 4.4 Payments ────────────────────────────────────────────────────────────
+// ─── 9. Payments ─────────────────────────────────────────────────────────────
 
 model Payment {
   id              String        @id @default(uuid())
   orderId         String        @unique
   method          PaymentMethod
-  gateway         String // "razorpay" | "cod"
+  gateway         String
   razorpayOrderId String?       @unique
   razorpayPayId   String?       @unique
   amount          Decimal       @db.Decimal(10, 2)
@@ -293,20 +541,25 @@ model Payment {
   @@index([razorpayOrderId, razorpayPayId])
 }
 
-// ─── 4.5 Delivery ────────────────────────────────────────────────────────────
+// ─── 10. Delivery (tenant-scoped agents) ─────────────────────────────────────
 
 model DeliveryAgent {
   id          String   @id @default(uuid())
+  storeId     String
   userId      String   @unique
-  vehicleType String // "bike" | "cycle" | "foot"
-  zones       String[] // serviceable pincodes
+  vehicleType String
+  zones       String[]
   isOnline    Boolean  @default(false)
   currentLat  Float?
   currentLng  Float?
   rating      Float    @default(5.0)
 
-  user       User       @relation(fields: [userId], references: [id])
-  deliveries Delivery[]
+  store       Store           @relation(fields: [storeId], references: [id])
+  user        User            @relation(fields: [userId], references: [id])
+  deliveries  Delivery[]
+  remittances CodRemittance[]
+
+  @@index([storeId, isOnline])
 }
 
 model Delivery {
@@ -314,49 +567,85 @@ model Delivery {
   orderId       String         @unique
   type          DeliveryType
   agentId       String?
-  provider      String? // "shiprocket" | "delhivery"
+  provider      String?
   awbCode       String?
   trackingUrl   String?
-  otpHash       String? // bcrypt hash of 6-digit OTP
+  otpHash       String?
   otpVerified   Boolean        @default(false)
   status        DeliveryStatus @default(PENDING)
   estimatedAt   DateTime?
   deliveredAt   DateTime?
   failureReason String?
-  locationLog   Json[] // [{ lat, lng, timestamp }] last 50 points
+  locationLog   Json[]
+  codCollected  Boolean        @default(false)
+  codCollectedAt DateTime?
 
   order Order          @relation(fields: [orderId], references: [id])
   agent DeliveryAgent? @relation(fields: [agentId], references: [id])
 }
 
-// ─── 4.6 Marketing ───────────────────────────────────────────────────────────
+model CodRemittance {
+  id          String           @id @default(uuid())
+  agentId     String
+  status      RemittanceStatus @default(PENDING)
+  totalAmount Decimal          @db.Decimal(10, 2)
+  notes       String?
+  submittedAt DateTime?
+  receivedAt  DateTime?
+  createdAt   DateTime         @default(now())
+  updatedAt   DateTime         @updatedAt
+
+  agent DeliveryAgent       @relation(fields: [agentId], references: [id])
+  items CodRemittanceItem[]
+
+  @@index([agentId, status])
+}
+
+model CodRemittanceItem {
+  id           String   @id @default(uuid())
+  remittanceId String
+  orderId      String   @unique
+  amount       Decimal  @db.Decimal(10, 2)
+  collectedAt  DateTime @default(now())
+
+  remittance CodRemittance @relation(fields: [remittanceId], references: [id], onDelete: Cascade)
+  order      Order         @relation(fields: [orderId], references: [id])
+}
+
+// ─── 11. Marketing (tenant-scoped) ───────────────────────────────────────────
 
 model Coupon {
   id             String     @id @default(uuid())
-  code           String     @unique @db.VarChar(32)
-  type           CouponType // PERCENT | FLAT
+  storeId        String
+  code           String     @db.VarChar(32) // unique per store (@@unique below)
+  type           CouponType
   value          Decimal    @db.Decimal(10, 2)
   minOrderAmount Decimal?   @db.Decimal(10, 2)
   maxDiscount    Decimal?   @db.Decimal(10, 2)
-  usageLimit     Int? // null = unlimited
+  usageLimit     Int?
   usedCount      Int        @default(0)
   expiresAt      DateTime?
   isActive       Boolean    @default(true)
 
+  store  Store   @relation(fields: [storeId], references: [id], onDelete: Cascade)
   orders Order[]
+
+  @@unique([storeId, code])
+  @@index([storeId, isActive])
 }
 
-// ─── 4.7 Reviews & Notifications ─────────────────────────────────────────────
+// ─── 12. Reviews & Notifications (tenant-scoped) ─────────────────────────────
 
 model Review {
   id        String   @id @default(uuid())
+  storeId   String
   productId String
   userId    String
   orderId   String
-  rating    Int // 1–5
+  rating    Int
   title     String?
   body      String?  @db.Text
-  images    String[] // Cloudinary public_ids
+  images    String[]
   isVisible Boolean  @default(true)
   createdAt DateTime @default(now())
 
@@ -364,17 +653,24 @@ model Review {
   user    User    @relation(fields: [userId], references: [id])
 
   @@unique([userId, orderId, productId])
+  @@index([storeId, productId, isVisible])
+  @@index([storeId, createdAt])
 }
 
 model Notification {
   id        String           @id @default(uuid())
+  storeId   String
   userId    String
   type      NotificationType
   title     String
   body      String
-  data      Json? // { orderId, productId, ... }
+  data      Json?
   isRead    Boolean          @default(false)
   createdAt DateTime         @default(now())
 
-  user User @relation(fields: [userId], references: [id])
+  store Store @relation(fields: [storeId], references: [id], onDelete: Cascade)
+  user  User  @relation(fields: [userId], references: [id])
+
+  @@index([storeId, userId, isRead])
+  @@index([storeId, createdAt])
 }

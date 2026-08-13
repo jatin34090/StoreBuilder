@@ -8,27 +8,23 @@ export const api = axios.create({
   headers: { 'Content-Type': 'application/json' },
 });
 
-// ─── Attach bearer token on every request ────────────────────────────────────
-// Reads from localStorage per-request (not from React state) so the header is
-// present even before Zustand's rehydration callback has fired.
-// Priority: admin token > customer token.
+// Tokens are now httpOnly cookies — the browser sends them automatically.
+// withCredentials: true (set on the axios instance) is all that's needed.
+
+// ─── Store tenant header ──────────────────────────────────────────────────────
+// Middleware sets a client-readable 'store-id' cookie for the current subdomain.
+// Forward it as X-Store-Id so the API TenantMiddleware can scope requests.
+
+function getStoreIdCookie(): string | undefined {
+  if (typeof document === 'undefined') return undefined;
+  const match = document.cookie.match(/(?:^|;\s*)store-id=([^;]+)/);
+  return match?.[1];
+}
+
 api.interceptors.request.use((config) => {
-  if (typeof window !== 'undefined') {
-    try {
-      const adminRaw = window.localStorage.getItem('jewellery-admin-auth');
-      const adminToken = adminRaw ? JSON.parse(adminRaw)?.state?.adminToken : null;
-
-      const userRaw = window.localStorage.getItem('jewellery-auth');
-      const userToken = userRaw ? JSON.parse(userRaw)?.state?.token : null;
-
-      const token = adminToken ?? userToken;
-      if (token) {
-        config.headers = config.headers ?? {};
-        (config.headers as Record<string, string>)['Authorization'] = `Bearer ${token}`;
-      }
-    } catch {
-      /* ignore malformed persisted state */
-    }
+  const storeId = getStoreIdCookie();
+  if (storeId) {
+    config.headers['X-Store-Id'] = storeId;
   }
   return config;
 });
@@ -85,7 +81,7 @@ api.interceptors.response.use(
 export const authApi = {
   sendOtp: (phone: string) => api.post('/auth/send-otp', { phone }),
   verifyOtp: (phone: string, otp: string) => api.post('/auth/verify-otp', { phone, otp }),
-  login: (email: string, password: string) => api.post('/auth/login', { email, password }),
+  login: (identifier: string, password: string) => api.post('/auth/login', { identifier, password }),
   logout: () => api.post('/auth/logout'),
   refresh: () => api.post('/auth/refresh'),
 };
@@ -137,14 +133,15 @@ export const ordersApi = {
   place: (data: unknown) => api.post('/orders', data),
   cancel: (id: string, reason: string) => api.patch(`/orders/${id}/cancel`, { reason }),
   return: (id: string, reason: string) => api.patch(`/orders/${id}/return`, { reason }),
-  verifyPayment: (orderId: string, data: unknown) => api.post(`/orders/${orderId}/payment/verify`, data),
+  verifyPayment: (orderId: string, data: Record<string, unknown>) =>
+    api.post('/payments/verify', { orderId, ...data }),
 };
 
 // ─── Users ────────────────────────────────────────────────────────────────────
 
 export const usersApi = {
-  profile: () => api.get('/users/profile'),
-  updateProfile: (data: unknown) => api.patch('/users/profile', data),
+  profile: () => api.get('/users/me'),
+  updateProfile: (data: unknown) => api.patch('/users/me', data),
   addresses: () => api.get('/users/me/addresses'),
   addAddress: (data: unknown) => api.post('/users/me/addresses', data),
   updateAddress: (id: string, data: unknown) => api.patch(`/users/me/addresses/${id}`, data),

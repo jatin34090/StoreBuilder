@@ -125,6 +125,7 @@ export interface AdminOrder {
     id?: string;
     status?: string;
     type?: string;
+    provider?: string | null;
     agent?: { id: string; user?: { name: string; phone?: string } } | null;
     awbCode?: string | null;
     trackingUrl?: string | null;
@@ -160,9 +161,12 @@ export type OrderStatus =
   | 'CONFIRMED'
   | 'PROCESSING'
   | 'SHIPPED'
+  | 'OUT_FOR_DELIVERY'
   | 'DELIVERED'
   | 'CANCELLED'
-  | 'RETURNED';
+  | 'RETURN_REQUESTED'
+  | 'RETURNED'
+  | 'REFUNDED';
 
 export type PaymentStatus =
   | 'PENDING'
@@ -406,12 +410,18 @@ export const adminProductsApi = {
     unwrap<AdminVariant>(api.patch(`/admin/products/${productId}/variants/${variantId}`, data)),
   deleteVariant: (productId: string, variantId: string) =>
     api.delete(`/admin/products/${productId}/variants/${variantId}`),
-  uploadImage: (productId: string, formData: FormData) =>
-    api.post(`/admin/products/${productId}/images`, formData, {
-      headers: { 'Content-Type': 'multipart/form-data' },
-    }),
+  uploadImage: (productId: string, formData: FormData, variantId?: string) =>
+    api.post(
+      `/admin/products/${productId}/images${variantId ? `?variantId=${variantId}` : ''}`,
+      formData,
+      { headers: { 'Content-Type': 'multipart/form-data' } },
+    ),
   deleteImage: (productId: string, imageId: string) =>
     api.delete(`/admin/products/${productId}/images/${imageId}`),
+  reorderImages: (productId: string, imageIds: string[]) =>
+    api.patch(`/admin/products/${productId}/images/reorder`, { imageIds }),
+  assignImageVariant: (productId: string, imageId: string, variantId: string | null) =>
+    api.patch(`/admin/products/${productId}/images/${imageId}/variant`, { variantId }),
 };
 
 // ─── Categories ───────────────────────────────────────────────────────────────
@@ -439,8 +449,12 @@ export const adminOrdersApi = {
     api.patch(`/admin/orders/${id}/status`, { status, notes }),
   updateDelivery: (
     id: string,
-    data: { agentId?: string; trackingNumber?: string; estimatedDelivery?: string },
+    data: { agentId?: string; awbCode?: string; trackingUrl?: string; estimatedDelivery?: string },
   ) => api.patch(`/admin/orders/${id}/delivery`, data),
+  shipViaShiprocket: (orderId: string) =>
+    unwrap<{ awbCode: string; courierName: string; trackingUrl: string; shiprocketOrderId: number; shipmentId: number }>(
+      api.post(`/admin/orders/${orderId}/ship`),
+    ),
 };
 
 // ─── Users ────────────────────────────────────────────────────────────────────
@@ -529,17 +543,35 @@ export const adminSearchApi = {
 
 // ─── Unified adminApi object ──────────────────────────────────────────────────
 
+const adminRemittancesApi = {
+  list: (status?: string) => api.get('/admin/remittances', { params: status ? { status } : undefined }),
+  confirm: (id: string) => api.patch(`/admin/remittances/${id}/receive`),
+};
+
+const adminSettingsApi = {
+  getTheme:            ()                            => api.get('/settings/theme'),
+  updateTheme:         (data: Record<string, string>) => api.patch('/settings/theme', data),
+  getThemePresets:     ()                            => api.get('/settings/theme/presets'),
+  updateThemePresets:  (presets: unknown[])           => api.patch('/settings/theme/presets', { presets }),
+  getSiteConfig:       ()                            => api.get('/settings/site'),
+  updateSiteConfig:    (data: Record<string, string>) => api.patch('/settings/site', data),
+  getLayoutConfig:     ()                            => api.get('/settings/layout'),
+  updateLayoutConfig:  (data: Record<string, string>) => api.patch('/settings/layout', data),
+};
+
 export const adminApi = {
-  analytics: adminAnalyticsApi,
-  products: adminProductsApi,
-  categories: adminCategoriesApi,
-  orders: adminOrdersApi,
-  users: adminUsersApi,
-  inventory: adminInventoryApi,
-  coupons: adminCouponsApi,
+  analytics:   adminAnalyticsApi,
+  products:    adminProductsApi,
+  categories:  adminCategoriesApi,
+  orders:      adminOrdersApi,
+  users:       adminUsersApi,
+  inventory:   adminInventoryApi,
+  coupons:     adminCouponsApi,
   notifications: adminNotificationsApi,
-  delivery: adminDeliveryApi,
-  payments: adminPaymentsApi,
-  reviews: adminReviewsApi,
-  search: adminSearchApi,
+  delivery:    adminDeliveryApi,
+  payments:    adminPaymentsApi,
+  reviews:     adminReviewsApi,
+  search:      adminSearchApi,
+  remittances: adminRemittancesApi,
+  settings:    adminSettingsApi,
 };

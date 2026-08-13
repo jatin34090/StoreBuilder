@@ -1,4 +1,4 @@
-'use client';
+﻿'use client';
 
 import { useState } from 'react';
 import { useMutation } from '@tanstack/react-query';
@@ -81,7 +81,7 @@ export default function NotificationsPage() {
           onClick={() => setActiveTab('broadcast')}
           className={`flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium transition-all ${
             activeTab === 'broadcast'
-              ? 'bg-[#4A0E8F] text-white shadow'
+              ? 'bg-primary text-white shadow'
               : 'bg-white text-slate-600 border border-slate-200 hover:bg-slate-50'
           }`}
         >
@@ -92,7 +92,7 @@ export default function NotificationsPage() {
           onClick={() => setActiveTab('direct')}
           className={`flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium transition-all ${
             activeTab === 'direct'
-              ? 'bg-[#4A0E8F] text-white shadow'
+              ? 'bg-primary text-white shadow'
               : 'bg-white text-slate-600 border border-slate-200 hover:bg-slate-50'
           }`}
         >
@@ -108,7 +108,7 @@ export default function NotificationsPage() {
             <Card className="border-0 shadow-sm">
               <CardHeader>
                 <CardTitle className="flex items-center gap-2">
-                  <Bell className="w-5 h-5 text-[#4A0E8F]" />
+                  <Bell className="w-5 h-5 text-primary" />
                   Broadcast Notification
                 </CardTitle>
                 <CardDescription>
@@ -154,7 +154,7 @@ export default function NotificationsPage() {
                   <Button
                     type="submit"
                     disabled={broadcastMutation.isPending}
-                    className="w-full bg-[#4A0E8F] hover:bg-[#3d0b78]"
+                    className="w-full bg-primary hover:bg-primary/90"
                   >
                     <Send className="w-4 h-4 mr-2" />
                     {broadcastMutation.isPending ? 'Sending...' : 'Send Broadcast'}
@@ -166,7 +166,7 @@ export default function NotificationsPage() {
             <Card className="border-0 shadow-sm">
               <CardHeader>
                 <CardTitle className="flex items-center gap-2">
-                  <User className="w-5 h-5 text-[#4A0E8F]" />
+                  <User className="w-5 h-5 text-primary" />
                   Direct Notification
                 </CardTitle>
                 <CardDescription>
@@ -219,7 +219,7 @@ export default function NotificationsPage() {
                   <Button
                     type="submit"
                     disabled={directMutation.isPending}
-                    className="w-full bg-[#4A0E8F] hover:bg-[#3d0b78]"
+                    className="w-full bg-primary hover:bg-primary/90"
                   >
                     <Send className="w-4 h-4 mr-2" />
                     {directMutation.isPending ? 'Sending...' : 'Send Notification'}
@@ -275,3 +275,4 @@ export default function NotificationsPage() {
     </div>
   );
 }
+

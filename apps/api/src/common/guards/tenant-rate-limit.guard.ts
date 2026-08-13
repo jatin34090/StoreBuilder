@@ -54,7 +54,7 @@ export class TenantRateLimitGuard implements CanActivate {
   ) {}
 
   async canActivate(ctx: ExecutionContext): Promise<boolean> {
-    if (this.reflector.get<boolean>(SKIP_TENANT_RATE_LIMIT, ctx.getHandler())) return true;
+    if (this.reflector.getAllAndOverride<boolean>(SKIP_TENANT_RATE_LIMIT, [ctx.getHandler(), ctx.getClass()])) return true;
 
     const req = ctx.switchToHttp().getRequest<Request & { user?: { role?: string; storeId?: string } }>();
     const storeId = req.storeId;

@@ -30,6 +30,7 @@ import { UpdateDeliveryStatusDto } from './dto/update-delivery-status.dto';
 import { CurrentUser } from '../../common/decorators/current-user.decorator';
 import { Roles } from '../../common/decorators/roles.decorator';
 import { type AuthUser } from '../../common/decorators/current-user.decorator';
+import { CurrentStoreId } from '../../common/decorators/current-store.decorator';
 
 @ApiTags('Orders')
 @ApiBearerAuth()
@@ -49,8 +50,8 @@ export class OrdersController {
       'Returns razorpayOrderId and razorpayKeyId for frontend checkout integration.',
   })
   @ApiCreatedResponse({ description: 'Order placed successfully with payment initialization data' })
-  placeOrder(@CurrentUser() user: AuthUser, @Body() dto: CreateOrderDto) {
-    return this.ordersService.placeOrder(user.id, dto);
+  placeOrder(@CurrentUser() user: AuthUser, @Body() dto: CreateOrderDto, @CurrentStoreId() storeId: string) {
+    return this.ordersService.placeOrder(user.id, dto, storeId);
   }
 
   @Get('orders')
@@ -108,16 +109,16 @@ export class OrdersController {
   @ApiOperation({
     summary: 'Admin: list all orders with search, status filter, and date range',
   })
-  adminListOrders(@Query() query: QueryOrdersDto) {
-    return this.ordersService.adminListOrders(query);
+  adminListOrders(@Query() query: QueryOrdersDto, @CurrentStoreId() storeId: string) {
+    return this.ordersService.adminListOrders(query, storeId);
   }
 
   @Get('admin/orders/:id')
   @Roles(Role.ADMIN)
   @ApiOperation({ summary: 'Admin: get full order details including user info' })
   @ApiParam({ name: 'id', description: 'Order UUID', format: 'uuid' })
-  adminGetOrder(@Param('id') id: string) {
-    return this.ordersService.adminGetOrder(id);
+  adminGetOrder(@Param('id') id: string, @CurrentStoreId() storeId: string) {
+    return this.ordersService.adminGetOrder(id, storeId);
   }
 
   @Patch('admin/orders/:id/status')
@@ -133,8 +134,9 @@ export class OrdersController {
   adminUpdateStatus(
     @Param('id') id: string,
     @Body() dto: UpdateOrderStatusDto,
+    @CurrentStoreId() storeId: string,
   ) {
-    return this.ordersService.adminUpdateStatus(id, dto);
+    return this.ordersService.adminUpdateStatus(id, dto, storeId);
   }
 
   @Patch('admin/orders/:id/delivery')

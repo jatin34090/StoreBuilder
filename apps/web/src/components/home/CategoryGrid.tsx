@@ -1,38 +1,55 @@
-import Link from 'next/link';
+import { CategoryScroller } from './CategoryScroller';
 
-const CATEGORIES = [
-  { name: 'Rings',               slug: 'rings',               emoji: '💍', gradient: 'from-amber-400 to-orange-500' },
-  { name: 'Necklaces',           slug: 'necklaces-pendants',  emoji: '📿', gradient: 'from-purple-500 to-pink-500'  },
-  { name: 'Earrings',            slug: 'earrings',            emoji: '✨', gradient: 'from-blue-400 to-cyan-500'   },
-  { name: 'Bangles & Bracelets', slug: 'bangles-bracelets',   emoji: '🔮', gradient: 'from-green-400 to-teal-500'  },
-];
+interface CategoryNode {
+  id: string;
+  name: string;
+  slug: string;
+  image?: string;
+  _count?: { products: number };
+  children?: CategoryNode[];
+}
 
-export function CategoryGrid() {
+const API_URL = process.env['NEXT_PUBLIC_API_URL'] ?? 'http://localhost:3001/api/v1';
+
+async function fetchTopLevelCategories(): Promise<CategoryNode[]> {
+  try {
+    const res = await fetch(`${API_URL}/categories`, {
+      cache: 'no-store', // always fetch fresh — reflects admin changes immediately
+    });
+    if (!res.ok) return [];
+    const json = (await res.json()) as Record<string, unknown>;
+    const tree  = (json['data'] ?? json) as CategoryNode[];
+    return Array.isArray(tree) ? tree : [];
+  } catch {
+    return [];
+  }
+}
+
+export async function CategoryGrid() {
+  const categories = await fetchTopLevelCategories();
+
+  if (categories.length === 0) return null;
+
   return (
-    <section className="container py-14">
-      <div className="text-center mb-8">
-        <h2 className="text-2xl md:text-3xl font-bold text-foreground">Shop by Category</h2>
-        <p className="text-muted-foreground mt-2">Find the perfect piece for every occasion</p>
+    <section className="py-20 overflow-hidden">
+      <div className="container mb-12 text-center">
+        <p
+          className="text-primary font-medium mb-3"
+          style={{ fontSize: '0.7rem', letterSpacing: '0.3em', textTransform: 'uppercase' }}
+        >
+          Browse
+        </p>
+        <h2 className="font-display font-normal text-foreground text-3xl md:text-4xl">
+          Shop by Category
+        </h2>
       </div>
 
-      <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-        {CATEGORIES.map((cat) => (
-          <Link
-            key={cat.slug}
-            href={`/products?category=${cat.slug}`}
-            className="group relative overflow-hidden rounded-xl aspect-[3/4] flex flex-col items-center justify-end p-4 text-white transition-transform duration-300 hover:-translate-y-1 hover:shadow-xl"
-          >
-            <div className={`absolute inset-0 bg-gradient-to-br ${cat.gradient} opacity-90 group-hover:opacity-100 transition-opacity`} />
-            <div className="absolute inset-0 bg-black/20 group-hover:bg-black/10 transition-colors" />
-            <div className="relative text-center">
-              <div className="text-4xl mb-2">{cat.emoji}</div>
-              <h3 className="font-semibold text-sm md:text-base">{cat.name}</h3>
-              <p className="text-xs text-white/80 mt-0.5 group-hover:text-white transition-colors">
-                Shop Now →
-              </p>
-            </div>
-          </Link>
-        ))}
+      {/*
+        max-w-7xl caps at 1280 px so we never show ≥ n cards simultaneously
+        (1280 − 32 px padding = 1248 px; 1248 / 212 px-per-step ≈ 5.9 < 6 = n)
+      */}
+      <div className="max-w-7xl mx-auto px-4 md:px-8">
+        <CategoryScroller categories={categories} />
       </div>
     </section>
   );

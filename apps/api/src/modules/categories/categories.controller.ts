@@ -6,7 +6,6 @@ import {
   Delete,
   Body,
   Param,
-  ParseUUIDPipe,
   HttpCode,
   HttpStatus,
 } from '@nestjs/common';
@@ -16,6 +15,7 @@ import { CreateCategoryDto } from './dto/create-category.dto';
 import { UpdateCategoryDto } from './dto/update-category.dto';
 import { Public } from '../../common/decorators/public.decorator';
 import { Roles } from '../../common/decorators/roles.decorator';
+import { CurrentStoreId } from '../../common/decorators/current-store.decorator';
 import { Role } from '@jewellery/types';
 
 @ApiTags('Categories')
@@ -23,21 +23,21 @@ import { Role } from '@jewellery/types';
 export class CategoriesController {
   constructor(private readonly categoriesService: CategoriesService) {}
 
-  // ─── Public ───────────────────────────────────────────────────────────────
+  // ─── Public (storefront) ──────────────────────────────────────────────────
 
   @Public()
   @Get('categories')
-  @ApiOperation({ summary: 'Get full category tree (active categories only)' })
-  getTree() {
-    return this.categoriesService.getTree();
+  @ApiOperation({ summary: 'Get full category tree (active, store-scoped)' })
+  getTree(@CurrentStoreId() storeId: string) {
+    return this.categoriesService.getTree(storeId);
   }
 
   @Public()
   @Get('categories/:slug')
-  @ApiOperation({ summary: 'Get category by slug with children and parent' })
+  @ApiOperation({ summary: 'Get category by slug (store-scoped)' })
   @ApiParam({ name: 'slug', example: 'necklaces' })
-  getCategoryBySlug(@Param('slug') slug: string) {
-    return this.categoriesService.getCategoryBySlug(slug);
+  getCategoryBySlug(@Param('slug') slug: string, @CurrentStoreId() storeId: string) {
+    return this.categoriesService.getCategoryBySlug(slug, storeId);
   }
 
   // ─── Admin ────────────────────────────────────────────────────────────────
@@ -45,38 +45,39 @@ export class CategoriesController {
   @Get('admin/categories')
   @Roles(Role.ADMIN)
   @ApiBearerAuth('access-token')
-  @ApiOperation({ summary: '[Admin] List all categories including inactive' })
-  adminListAll() {
-    return this.categoriesService.adminListAll();
+  @ApiOperation({ summary: '[Admin] List all categories for this store' })
+  adminListAll(@CurrentStoreId() storeId: string) {
+    return this.categoriesService.adminListAll(storeId);
   }
 
   @Post('admin/categories')
   @Roles(Role.ADMIN)
   @ApiBearerAuth('access-token')
-  @ApiOperation({ summary: '[Admin] Create a new category' })
-  create(@Body() dto: CreateCategoryDto) {
-    return this.categoriesService.create(dto);
+  @ApiOperation({ summary: '[Admin] Create a category in this store' })
+  create(@Body() dto: CreateCategoryDto, @CurrentStoreId() storeId: string) {
+    return this.categoriesService.create(dto, storeId);
   }
 
   @Patch('admin/categories/:id')
   @Roles(Role.ADMIN)
   @ApiBearerAuth('access-token')
-  @ApiOperation({ summary: '[Admin] Update category name, image, parent, or sort order' })
+  @ApiOperation({ summary: '[Admin] Update a category (store-scoped)' })
   @ApiParam({ name: 'id', description: 'Category UUID' })
   update(
     @Param('id') id: string,
     @Body() dto: UpdateCategoryDto,
+    @CurrentStoreId() storeId: string,
   ) {
-    return this.categoriesService.update(id, dto);
+    return this.categoriesService.update(id, dto, storeId);
   }
 
   @Delete('admin/categories/:id')
   @Roles(Role.ADMIN)
   @ApiBearerAuth('access-token')
   @HttpCode(HttpStatus.OK)
-  @ApiOperation({ summary: '[Admin] Soft-delete category (deactivates it and all children)' })
+  @ApiOperation({ summary: '[Admin] Delete a category (store-scoped)' })
   @ApiParam({ name: 'id', description: 'Category UUID' })
-  softDelete(@Param('id') id: string) {
-    return this.categoriesService.softDelete(id);
+  delete(@Param('id') id: string, @CurrentStoreId() storeId: string) {
+    return this.categoriesService.delete(id, storeId);
   }
 }

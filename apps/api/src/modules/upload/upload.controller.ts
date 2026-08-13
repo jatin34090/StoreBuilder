@@ -30,6 +30,7 @@ import { TenantService } from '../tenant/tenant.service';
 import { CurrentUser, type AuthUser } from '../../common/decorators/current-user.decorator';
 import { CurrentStoreId } from '../../common/decorators/current-store.decorator';
 import { Roles } from '../../common/decorators/roles.decorator';
+import { RateCategory } from '../../common/decorators/rate-category.decorator';
 import { Role } from '@jewellery/types';
 
 const multerOptions = {
@@ -53,6 +54,7 @@ export class UploadController {
 
   @Post('admin/products/:productId/images')
   @Roles(Role.ADMIN)
+  @RateCategory('file_upload')
   @UseInterceptors(FileInterceptor('file', multerOptions))
   @ApiOperation({ summary: 'Upload a product image (admin only)' })
   @ApiConsumes('multipart/form-data')
@@ -106,6 +108,7 @@ export class UploadController {
   // ─── Avatar ───────────────────────────────────────────────────────────────
 
   @Post('users/me/avatar')
+  @RateCategory('file_upload')
   @UseInterceptors(FileInterceptor('file', multerOptions))
   @ApiOperation({ summary: 'Upload authenticated user avatar' })
   @ApiConsumes('multipart/form-data')
@@ -128,6 +131,7 @@ export class UploadController {
 
   @Post('admin/categories/:categoryId/image')
   @Roles(Role.ADMIN)
+  @RateCategory('file_upload')
   @UseInterceptors(FileInterceptor('file', multerOptions))
   @ApiOperation({ summary: 'Upload a category banner image (admin only)' })
   @ApiConsumes('multipart/form-data')

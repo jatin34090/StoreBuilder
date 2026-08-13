@@ -7,14 +7,13 @@ import {
 } from '@nestjs/common';
 import { JwtService } from '@nestjs/jwt';
 import { ConfigService } from '@nestjs/config';
-import { InjectQueue } from '@nestjs/bull';
-import type { Queue } from 'bull';
 import * as bcrypt from 'bcrypt';
 import * as crypto from 'crypto';
 import { PrismaService } from '../../prisma/prisma.service';
 import type { SendOtpDto } from './dto/send-otp.dto';
 import type { VerifyOtpDto } from './dto/verify-otp.dto';
 import type { LoginDto } from './dto/login.dto';
+import type { RegisterDto } from './dto/register.dto';
 import { RedisService } from '../notifications/redis.service';
 
 const BCRYPT_ROUNDS = 10;
@@ -33,6 +32,38 @@ export class AuthService {
     private configService: ConfigService,
     private redis: RedisService,
   ) {}
+
+  // ─── Email/Password Registration ─────────────────────────────────────────
+
+  async register(dto: RegisterDto): Promise<{ accessToken: string; refreshToken: string; user: Record<string, unknown> }> {
+    const existing = await this.prisma.user.findUnique({
+      where: { email: dto.email },
+      select: { id: true },
+    });
+    if (existing) {
+      throw new ConflictException('An account with this email already exists');
+    }
+
+    const passwordHash = await bcrypt.hash(dto.password, BCRYPT_ROUNDS);
+    const user = await this.prisma.user.create({
+      data: {
+        name:         dto.name.trim(),
+        email:        dto.email.toLowerCase().trim(),
+        passwordHash,
+        role:         'ADMIN', // Store owners are ADMIN at platform level
+        isVerified:   false,
+      },
+      select: { id: true, name: true, email: true, role: true, avatar: true },
+    });
+
+    // New registrations start with no store membership — storeId is absent from JWT
+    // until they complete onboarding and create/join a store.
+    const { accessToken, refreshToken } = await this.generateTokens(user.id, user.role);
+    await this.storeRefreshToken(user.id, refreshToken);
+
+    this.logger.log(`New owner registered: ${user.email}`);
+    return { accessToken, refreshToken, user };
+  }
 
   // ─── OTP Auth ──────────────────────────────────────────────────────────────
 
@@ -96,7 +127,10 @@ export class AuthService {
       select: { id: true, name: true, phone: true, email: true, role: true, avatar: true },
     });
 
-    const { accessToken, refreshToken } = await this.generateTokens(user.id, user.role);
+    const storeMembership = await this.resolveUserStore(user.id);
+    const { accessToken, refreshToken } = await this.generateTokens(
+      user.id, user.role, storeMembership?.storeId, storeMembership?.storeRole,
+    );
     await this.storeRefreshToken(user.id, refreshToken);
 
     return { accessToken, refreshToken, user };
@@ -105,8 +139,9 @@ export class AuthService {
   // ─── Email/Password (Admin fallback) ─────────────────────────────────────
 
   async login(dto: LoginDto): Promise<{ accessToken: string; refreshToken: string; user: Record<string, unknown> }> {
-    const user = await this.prisma.user.findUnique({
-      where: { email: dto.email },
+    const isPhone = /^\d{10}$/.test(dto.identifier);
+    const user = await this.prisma.user.findFirst({
+      where: isPhone ? { phone: dto.identifier } : { email: dto.identifier },
       select: { id: true, name: true, email: true, phone: true, role: true, passwordHash: true, isBlocked: true, avatar: true },
     });
 
@@ -123,7 +158,10 @@ export class AuthService {
       throw new UnauthorizedException('Invalid credentials');
     }
 
-    const { accessToken, refreshToken } = await this.generateTokens(user.id, user.role);
+    const storeMembership = await this.resolveUserStore(user.id);
+    const { accessToken, refreshToken } = await this.generateTokens(
+      user.id, user.role, storeMembership?.storeId, storeMembership?.storeRole,
+    );
     await this.storeRefreshToken(user.id, refreshToken);
 
     const { passwordHash: _h, ...safeUser } = user;
@@ -157,14 +195,17 @@ export class AuthService {
       throw new UnauthorizedException('Account is blocked');
     }
 
-    const { accessToken, refreshToken } = await this.generateTokens(user.id, user.role);
+    const storeMembership = await this.resolveUserStore(user.id);
+    const { accessToken, refreshToken } = await this.generateTokens(
+      user.id, user.role, storeMembership?.storeId, storeMembership?.storeRole,
+    );
     await this.storeRefreshToken(user.id, refreshToken);
     return { accessToken, refreshToken };
   }
 
   // ─── Token Rotation ───────────────────────────────────────────────────────
 
-  async refresh(refreshToken: string): Promise<{ accessToken: string }> {
+  async refresh(refreshToken: string): Promise<{ accessToken: string; refreshToken: string }> {
     const tokenHash = this.tokenHash(refreshToken);
 
     const dbToken = await this.prisma.refreshToken.findFirst({
@@ -185,15 +226,18 @@ export class AuthService {
       throw new UnauthorizedException('Account is blocked');
     }
 
-    // Rotate: delete old, issue new
+    // Rotate: delete old, issue new (re-resolve store in case membership changed)
+    const storeMembership = await this.resolveUserStore(dbToken.user.id);
     await this.prisma.refreshToken.delete({ where: { id: dbToken.id } });
     const { accessToken, refreshToken: newRefreshToken } = await this.generateTokens(
       dbToken.user.id,
       dbToken.user.role,
+      storeMembership?.storeId,
+      storeMembership?.storeRole,
     );
     await this.storeRefreshToken(dbToken.user.id, newRefreshToken);
 
-    return { accessToken };
+    return { accessToken, refreshToken: newRefreshToken };
   }
 
   async logout(userId: string, refreshToken: string): Promise<void> {
@@ -205,23 +249,40 @@ export class AuthService {
 
   // ─── Helpers ──────────────────────────────────────────────────────────────
 
-  private async generateTokens(userId: string, role: string) {
+  private async generateTokens(
+    userId: string,
+    role: string,
+    storeId?: string,
+    storeRole?: string,
+  ) {
     const privateKey = Buffer.from(
       this.configService.getOrThrow<string>('JWT_PRIVATE_KEY'),
       'base64',
     ).toString('utf-8');
 
-    const accessToken = this.jwtService.sign(
-      { sub: userId, role },
-      {
-        privateKey,
-        algorithm: 'RS256',
-        expiresIn: this.configService.get<string>('JWT_ACCESS_EXPIRES_IN', '15m'),
-      },
-    );
+    const payload: Record<string, unknown> = { sub: userId, role };
+    if (storeId)   payload['storeId']   = storeId;
+    if (storeRole) payload['storeRole'] = storeRole;
+
+    const accessToken = this.jwtService.sign(payload, {
+      privateKey,
+      algorithm: 'RS256',
+      expiresIn: this.configService.get<string>('JWT_ACCESS_EXPIRES_IN', '15m'),
+    });
 
     const refreshToken = crypto.randomUUID();
     return { accessToken, refreshToken };
+  }
+
+  // Resolves primary store membership for a user (first OWNER/ADMIN role found)
+  private async resolveUserStore(userId: string): Promise<{ storeId: string; storeRole: string } | null> {
+    const membership = await this.prisma.storeUser.findFirst({
+      where: { userId },
+      orderBy: { createdAt: 'asc' },
+      select: { storeId: true, role: true },
+    });
+    if (!membership) return null;
+    return { storeId: membership.storeId, storeRole: membership.role };
   }
 
   private async storeRefreshToken(userId: string, token: string): Promise<void> {

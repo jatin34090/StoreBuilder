@@ -1,7 +1,13 @@
 import { Injectable, Logger } from '@nestjs/common';
-import { OrderStatus, PaymentStatus, Role, Prisma } from '@prisma/client';
+import { InjectQueue } from '@nestjs/bull';
+import type { Queue } from 'bull';
+import { OrderStatus, Prisma } from '@prisma/client';
+import { QUEUE_ANALYTICS, JOB_NIGHTLY_REPORT } from '../queues/queue.constants';
 import { PrismaService } from '../../prisma/prisma.service';
+import { RedisService } from '../notifications/redis.service';
 import type { AnalyticsQueryDto } from './dto/analytics-query.dto';
+
+const OVERVIEW_CACHE_TTL_SEC = 300; // 5 minutes
 
 const REVENUE_STATUSES: OrderStatus[] = [
   OrderStatus.CONFIRMED,
@@ -20,7 +26,11 @@ interface DateRange {
 export class AnalyticsService {
   private readonly logger = new Logger(AnalyticsService.name);
 
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(
+    private readonly prisma: PrismaService,
+    @InjectQueue(QUEUE_ANALYTICS) private readonly analyticsQueue: Queue,
+    private readonly redis: RedisService,
+  ) {}
 
   // ─── Helpers ──────────────────────────────────────────────────────────────
 
@@ -39,12 +49,32 @@ export class AnalyticsService {
 
   // ─── 1. Overview KPIs ─────────────────────────────────────────────────────
 
-  async getOverview(dto: AnalyticsQueryDto) {
+  async getOverview(storeId: string, dto: AnalyticsQueryDto) {
+    // Cache with 5-min TTL per store+period — overview is expensive (8 DB queries)
+    const cacheKey = `analytics:overview:${storeId}:${dto.from ?? 'default'}:${dto.to ?? 'default'}`;
+    try {
+      const cached = await this.redis.get(cacheKey);
+      if (cached) return JSON.parse(cached);
+    } catch { /* Redis unavailable — proceed without cache */ }
+
+    const result = await this._computeOverview(storeId, dto);
+
+    try {
+      await this.redis.setEx(cacheKey, OVERVIEW_CACHE_TTL_SEC, JSON.stringify(result));
+    } catch { /* ignore cache write failure */ }
+
+    return result;
+  }
+
+  private async _computeOverview(storeId: string, dto: AnalyticsQueryDto) {
     const { from, to } = this.resolveDateRange(dto);
     const periodMs = to.getTime() - from.getTime();
     const prevFrom = new Date(from.getTime() - periodMs);
     const prevTo   = new Date(from.getTime() - 1);
 
+    const baseWhere = { storeId };
+
+    // Use Promise.all — $transaction only accepts PrismaPromise[], not plain Promise
     const [
       revenueAgg,
       prevRevenueAgg,
@@ -54,38 +84,31 @@ export class AnalyticsService {
       prevNewCustomers,
       activeProducts,
       avgOrderAgg,
-    ] = await this.prisma.$transaction([
-      // Current period revenue
+    ] = await Promise.all([
       this.prisma.order.aggregate({
-        where: { status: { in: REVENUE_STATUSES }, createdAt: { gte: from, lte: to } },
+        where: { ...baseWhere, status: { in: REVENUE_STATUSES }, createdAt: { gte: from, lte: to } },
         _sum: { total: true },
       }),
-      // Previous period revenue
       this.prisma.order.aggregate({
-        where: { status: { in: REVENUE_STATUSES }, createdAt: { gte: prevFrom, lte: prevTo } },
+        where: { ...baseWhere, status: { in: REVENUE_STATUSES }, createdAt: { gte: prevFrom, lte: prevTo } },
         _sum: { total: true },
       }),
-      // Current period order count
       this.prisma.order.count({
-        where: { createdAt: { gte: from, lte: to } },
+        where: { ...baseWhere, createdAt: { gte: from, lte: to } },
       }),
-      // Previous period order count
       this.prisma.order.count({
-        where: { createdAt: { gte: prevFrom, lte: prevTo } },
+        where: { ...baseWhere, createdAt: { gte: prevFrom, lte: prevTo } },
       }),
-      // New customers in period
-      this.prisma.user.count({
-        where: { role: Role.CUSTOMER, createdAt: { gte: from, lte: to } },
-      }),
-      // Previous period new customers
-      this.prisma.user.count({
-        where: { role: Role.CUSTOMER, createdAt: { gte: prevFrom, lte: prevTo } },
-      }),
-      // Active products
-      this.prisma.product.count({ where: { isActive: true } }),
-      // Average order value (current period, revenue statuses)
+      // Unique customers who placed orders with this store in the period
+      this.prisma.$queryRaw<[{ count: bigint }]>(
+        Prisma.sql`SELECT COUNT(DISTINCT "userId")::bigint AS count FROM "Order" WHERE "storeId" = ${storeId} AND "createdAt" >= ${from} AND "createdAt" <= ${to}`,
+      ).then((r) => Number(r[0]?.count ?? 0)),
+      this.prisma.$queryRaw<[{ count: bigint }]>(
+        Prisma.sql`SELECT COUNT(DISTINCT "userId")::bigint AS count FROM "Order" WHERE "storeId" = ${storeId} AND "createdAt" >= ${prevFrom} AND "createdAt" <= ${prevTo}`,
+      ).then((r) => Number(r[0]?.count ?? 0)),
+      this.prisma.product.count({ where: { storeId, isActive: true } }),
       this.prisma.order.aggregate({
-        where: { status: { in: REVENUE_STATUSES }, createdAt: { gte: from, lte: to } },
+        where: { ...baseWhere, status: { in: REVENUE_STATUSES }, createdAt: { gte: from, lte: to } },
         _avg: { total: true },
       }),
     ]);
@@ -96,8 +119,8 @@ export class AnalyticsService {
     return {
       period: { from, to },
       revenue: {
-        total:      Number(revenue),
-        growth:     this.growthRate(Number(revenue), Number(prevRevenue)),
+        total:  Number(revenue),
+        growth: this.growthRate(Number(revenue), Number(prevRevenue)),
       },
       orders: {
         total:  orderCount,
@@ -116,11 +139,10 @@ export class AnalyticsService {
 
   // ─── 2. Sales Trend ───────────────────────────────────────────────────────
 
-  async getSalesTrend(dto: AnalyticsQueryDto) {
+  async getSalesTrend(storeId: string, dto: AnalyticsQueryDto) {
     const { from, to } = this.resolveDateRange(dto);
     const granularity  = dto.granularity ?? 'day';
 
-    // DATE_TRUNC requires raw SQL — Prisma doesn't support it natively
     const rows = await this.prisma.$queryRaw<
       Array<{ bucket: Date; revenue: number; orders: bigint }>
     >(
@@ -130,7 +152,8 @@ export class AnalyticsService {
           COALESCE(SUM(total), 0)::float                             AS revenue,
           COUNT(*)::bigint                                           AS orders
         FROM "Order"
-        WHERE "createdAt" >= ${from}
+        WHERE "storeId" = ${storeId}
+          AND "createdAt" >= ${from}
           AND "createdAt" <= ${to}
           AND status::text = ANY(${REVENUE_STATUSES}::text[])
         GROUP BY bucket
@@ -151,7 +174,7 @@ export class AnalyticsService {
 
   // ─── 3. Top Products ──────────────────────────────────────────────────────
 
-  async getTopProducts(dto: AnalyticsQueryDto) {
+  async getTopProducts(storeId: string, dto: AnalyticsQueryDto) {
     const { from, to } = this.resolveDateRange(dto);
     const limit = dto.limit ?? 10;
 
@@ -179,7 +202,8 @@ export class AnalyticsService {
         JOIN "ProductVariant" pv ON pv.id = oi."variantId"
         JOIN "Product"        p  ON p.id  = pv."productId"
         JOIN "Order"          o  ON o.id  = oi."orderId"
-        WHERE o."createdAt" >= ${from}
+        WHERE o."storeId" = ${storeId}
+          AND o."createdAt" >= ${from}
           AND o."createdAt" <= ${to}
           AND o.status::text = ANY(${REVENUE_STATUSES}::text[])
         GROUP BY p.id, p.name, p.slug
@@ -204,12 +228,12 @@ export class AnalyticsService {
 
   // ─── 4. Order Status Distribution ─────────────────────────────────────────
 
-  async getOrderStatusDistribution(dto: AnalyticsQueryDto) {
+  async getOrderStatusDistribution(storeId: string, dto: AnalyticsQueryDto) {
     const { from, to } = this.resolveDateRange(dto);
 
     const groups = await this.prisma.order.groupBy({
       by: ['status'],
-      where: { createdAt: { gte: from, lte: to } },
+      where: { storeId, createdAt: { gte: from, lte: to } },
       _count: { _all: true },
     });
 
@@ -230,127 +254,142 @@ export class AnalyticsService {
 
   // ─── 5. Payment Analytics ─────────────────────────────────────────────────
 
-  async getPaymentAnalytics(dto: AnalyticsQueryDto) {
+  async getPaymentAnalytics(storeId: string, dto: AnalyticsQueryDto) {
     const { from, to } = this.resolveDateRange(dto);
 
-    const [statusGroups, methodGroups, refundAgg] = await this.prisma.$transaction([
-      // Payment status distribution
-      (this.prisma.payment.groupBy as any)({
-        by: ['status'],
-        where: { createdAt: { gte: from, lte: to } },
-        _count: { _all: true },
-        _sum:   { amount: true },
-      }),
-      // Payment method distribution
-      (this.prisma.payment.groupBy as any)({
-        by: ['method'],
-        where: { createdAt: { gte: from, lte: to } },
-        _count: { _all: true },
-        _sum:   { amount: true },
-      }),
-      // Refund totals
-      this.prisma.payment.aggregate({
-        where: {
-          status: PaymentStatus.REFUNDED,
-          createdAt: { gte: from, lte: to },
-        },
-        _sum:   { refundAmount: true },
-        _count: { _all: true },
-      }),
+    // Use subquery via raw SQL to avoid loading all order IDs into memory
+    const [statusGroups, methodGroups, refundAgg] = await Promise.all([
+      this.prisma.$queryRaw<Array<{ status: string; count: bigint; amount: number }>>(
+        Prisma.sql`
+          SELECT p.status, COUNT(*)::bigint AS count, COALESCE(SUM(p.amount), 0)::float AS amount
+          FROM "Payment" p
+          JOIN "Order" o ON o.id = p."orderId"
+          WHERE o."storeId" = ${storeId} AND o."createdAt" >= ${from} AND o."createdAt" <= ${to}
+          GROUP BY p.status
+        `,
+      ),
+      this.prisma.$queryRaw<Array<{ method: string; count: bigint; amount: number }>>(
+        Prisma.sql`
+          SELECT p.method, COUNT(*)::bigint AS count, COALESCE(SUM(p.amount), 0)::float AS amount
+          FROM "Payment" p
+          JOIN "Order" o ON o.id = p."orderId"
+          WHERE o."storeId" = ${storeId} AND o."createdAt" >= ${from} AND o."createdAt" <= ${to}
+          GROUP BY p.method
+        `,
+      ),
+      this.prisma.$queryRaw<[{ count: bigint; refund_amount: number }]>(
+        Prisma.sql`
+          SELECT COUNT(*)::bigint AS count, COALESCE(SUM(p."refundAmount"), 0)::float AS refund_amount
+          FROM "Payment" p
+          JOIN "Order" o ON o.id = p."orderId"
+          WHERE o."storeId" = ${storeId} AND o."createdAt" >= ${from} AND o."createdAt" <= ${to}
+            AND p.status = 'REFUNDED'
+        `,
+      ),
     ]);
 
-    const totalPayments = (statusGroups as any[]).reduce((acc: number, g: any) => acc + (g._count?._all ?? 0), 0);
-    const successCount  = (statusGroups as any[]).find((g: any) => g.status === PaymentStatus.SUCCESS)?._count?._all ?? 0;
+    const totalPayments = statusGroups.reduce((acc, g) => acc + Number(g.count), 0);
+    const successCount  = statusGroups.find((g) => g.status === 'SUCCESS')?.count ?? BigInt(0);
     const successRate   = totalPayments > 0
-      ? parseFloat(((successCount / totalPayments) * 100).toFixed(2))
+      ? parseFloat(((Number(successCount) / totalPayments) * 100).toFixed(2))
       : 0;
 
+    const refund = refundAgg[0];
     return {
       period: { from, to },
       successRate,
-      statusDistribution: (statusGroups as any[]).map((g) => ({
-        status:  g.status,
-        count:   g._count?._all ?? 0,
-        amount:  Number(g._sum?.amount ?? 0),
+      statusDistribution: statusGroups.map((g) => ({
+        status: g.status,
+        count:  Number(g.count),
+        amount: Number(g.amount),
       })),
-      methodDistribution: (methodGroups as any[]).map((g) => ({
+      methodDistribution: methodGroups.map((g) => ({
         method: g.method,
-        count:  g._count?._all ?? 0,
-        amount: Number(g._sum?.amount ?? 0),
+        count:  Number(g.count),
+        amount: Number(g.amount),
       })),
       refunds: {
-        count:  (refundAgg as any)._count?._all ?? 0,
-        amount: Number((refundAgg as any)._sum?.refundAmount ?? 0),
+        count:  Number(refund?.count ?? 0),
+        amount: Number(refund?.refund_amount ?? 0),
       },
     };
   }
 
   // ─── 6. Delivery Analytics ────────────────────────────────────────────────
 
-  async getDeliveryAnalytics(dto: AnalyticsQueryDto) {
+  async getDeliveryAnalytics(storeId: string, dto: AnalyticsQueryDto) {
     const { from, to } = this.resolveDateRange(dto);
 
-    const [deliveryGroups, avgDeliveryRow] = await Promise.all([
-      // Delivery type + status distribution (SELF vs THIRD_PARTY)
-      this.prisma.delivery.groupBy({
-        by: ['type', 'status'],
-        _count: { _all: true },
-      } as any),
-      // Avg delivery time from assignment to delivery (hours)
-      // Avg delivery time not available (Delivery model lacks assignedAt/createdAt)
-      Promise.resolve([{ avgHours: 0 }]),
-    ]);
+    const deliveryGroups = await this.prisma.$queryRaw<
+      Array<{ type: string; status: string; count: bigint }>
+    >(
+      Prisma.sql`
+        SELECT d.type, d.status, COUNT(*)::bigint AS count
+        FROM "Delivery" d
+        JOIN "Order" o ON o.id = d."orderId"
+        WHERE o."storeId" = ${storeId} AND o."createdAt" >= ${from} AND o."createdAt" <= ${to}
+        GROUP BY d.type, d.status
+      `,
+    );
 
-    const total   = (deliveryGroups as any[]).reduce((acc, g) => acc + (g._count?._all ?? 0), 0);
-    const delivered = (deliveryGroups as any[])
+    if (deliveryGroups.length === 0) {
+      return { period: { from, to }, total: 0, successRate: 0, avgDeliveryHours: null, distribution: [] };
+    }
+
+    const total     = deliveryGroups.reduce((acc, g) => acc + Number(g.count), 0);
+    const delivered = deliveryGroups
       .filter((g) => g.status === 'DELIVERED')
-      .reduce((acc, g) => acc + (g._count?._all ?? 0), 0);
-    const successRate = total > 0
-      ? parseFloat(((delivered / total) * 100).toFixed(2))
-      : 0;
+      .reduce((acc, g) => acc + Number(g.count), 0);
+    const successRate = total > 0 ? parseFloat(((delivered / total) * 100).toFixed(2)) : 0;
 
     return {
       period: { from, to },
       total,
       successRate,
-      avgDeliveryHours: avgDeliveryRow[0]?.avgHours
-        ? parseFloat(avgDeliveryRow[0].avgHours.toFixed(2))
-        : null,
-      distribution: (deliveryGroups as any[]).map((g) => ({
+      avgDeliveryHours: null,
+      distribution: deliveryGroups.map((g) => ({
         type:   g.type,
         status: g.status,
-        count:  typeof g._count === 'object' ? g._count._all : 0,
+        count:  Number(g.count),
       })),
     };
   }
 
   // ─── 7. Customer Growth ───────────────────────────────────────────────────
 
-  async getCustomerGrowth(dto: AnalyticsQueryDto) {
+  async getCustomerGrowth(storeId: string, dto: AnalyticsQueryDto) {
     const { from, to } = this.resolveDateRange(dto);
     const granularity  = dto.granularity ?? 'day';
 
+    // Customers scoped to this store = unique users who have ordered from this store
     const [growthRows, totalCustomers, verifiedCount] = await Promise.all([
-      // New customers per time bucket
       this.prisma.$queryRaw<Array<{ bucket: Date; newCustomers: bigint }>>(
         Prisma.sql`
           SELECT
-            DATE_TRUNC(${granularity}, "createdAt" AT TIME ZONE 'UTC') AS bucket,
-            COUNT(*)::bigint AS "newCustomers"
-          FROM "User"
-          WHERE role = 'CUSTOMER'
-            AND "createdAt" >= ${from}
-            AND "createdAt" <= ${to}
+            DATE_TRUNC(${granularity}, o."createdAt" AT TIME ZONE 'UTC') AS bucket,
+            COUNT(DISTINCT o."userId")::bigint AS "newCustomers"
+          FROM "Order" o
+          WHERE o."storeId" = ${storeId}
+            AND o."createdAt" >= ${from}
+            AND o."createdAt" <= ${to}
           GROUP BY bucket
           ORDER BY bucket ASC
         `,
       ),
-      // Total customers ever
-      this.prisma.user.count({ where: { role: Role.CUSTOMER } }),
-      // Verified customers (isVerified flag)
-      this.prisma.user.count({
-        where: { role: Role.CUSTOMER, isVerified: true },
-      }),
+      // Total unique customers for this store (all time) — use COUNT DISTINCT
+      this.prisma.$queryRaw<[{ count: bigint }]>(
+        Prisma.sql`SELECT COUNT(DISTINCT "userId")::bigint AS count FROM "Order" WHERE "storeId" = ${storeId}`,
+      ).then((rows) => Number(rows[0]?.count ?? 0)),
+      // Verified customers (joined via User)
+      this.prisma.$queryRaw<[{ count: bigint }]>(
+        Prisma.sql`
+          SELECT COUNT(DISTINCT o."userId")::bigint AS count
+          FROM "Order" o
+          JOIN "User" u ON u.id = o."userId"
+          WHERE o."storeId" = ${storeId}
+            AND u."isVerified" = true
+        `,
+      ).then((rows) => Number(rows[0]?.count ?? 0)),
     ]);
 
     return {
@@ -370,50 +409,25 @@ export class AnalyticsService {
 
   // ─── 8. Low-Stock Summary ─────────────────────────────────────────────────
 
-  async getLowStockSummary() {
+  async getLowStockSummary(storeId: string) {
     const LOW_STOCK_THRESHOLD = 5;
 
     const [outOfStock, lowStock] = await this.prisma.$transaction([
-      // Completely out of stock
       this.prisma.productVariant.findMany({
-        where: { stock: 0, product: { isActive: true } },
+        where: { stock: 0, product: { storeId, isActive: true } },
         select: {
-          id:    true,
-          sku:   true,
-          stock: true,
-          product: {
-            select: {
-              id:   true,
-              name: true,
-              slug: true,
-              category: { select: { name: true } },
-            },
-          },
-          size: true,
-          color: true,
+          id: true, sku: true, stock: true,
+          product: { select: { id: true, name: true, slug: true, category: { select: { name: true } } } },
+          size: true, color: true,
         },
         orderBy: { product: { name: 'asc' } },
       }),
-      // Low stock (1–5)
       this.prisma.productVariant.findMany({
-        where: {
-          stock:   { gt: 0, lte: LOW_STOCK_THRESHOLD },
-          product: { isActive: true },
-        },
+        where: { stock: { gt: 0, lte: LOW_STOCK_THRESHOLD }, product: { storeId, isActive: true } },
         select: {
-          id:    true,
-          sku:   true,
-          stock: true,
-          product: {
-            select: {
-              id:   true,
-              name: true,
-              slug: true,
-              category: { select: { name: true } },
-            },
-          },
-          size: true,
-          color: true,
+          id: true, sku: true, stock: true,
+          product: { select: { id: true, name: true, slug: true, category: { select: { name: true } } } },
+          size: true, color: true,
         },
         orderBy: { stock: 'asc' },
       }),
@@ -421,26 +435,19 @@ export class AnalyticsService {
 
     return {
       threshold: LOW_STOCK_THRESHOLD,
-      outOfStock: {
-        count: outOfStock.length,
-        items: outOfStock,
-      },
-      lowStock: {
-        count: lowStock.length,
-        items: lowStock,
-      },
+      outOfStock: { count: outOfStock.length, items: outOfStock },
+      lowStock:   { count: lowStock.length,   items: lowStock   },
     };
   }
 
-  // ─── Phase 2: BullMQ Nightly Report Placeholder ───────────────────────────
+  // ─── BullMQ: Nightly Report Trigger ───────────────────────────────────────
 
-  /**
-   * Phase 2: Wire up as a BullMQ scheduled job.
-   * Job name: 'analytics:nightly-report'
-   * Schedule: '0 2 * * *' (02:00 UTC daily)
-   * Processor: fetch 24h overview + top 10 products → email to all ADMINs via NotificationsService.sendEmail()
-   */
   async generateNightlyReport(): Promise<void> {
-    this.logger.log('[PLACEHOLDER] generateNightlyReport() — implement in Phase 2 with BullMQ');
+    await this.analyticsQueue.add(
+      JOB_NIGHTLY_REPORT,
+      {},
+      { attempts: 2, removeOnComplete: true },
+    );
+    this.logger.log('Nightly report job enqueued');
   }
 }

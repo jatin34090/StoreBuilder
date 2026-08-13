@@ -8,9 +8,10 @@ import {
 } from '@nestjs/common';
 import * as bcrypt from 'bcrypt';
 import * as crypto from 'crypto';
-import { Prisma, DeliveryStatus, DeliveryType, Role, NotificationType, OrderStatus } from '@prisma/client';
+import { Prisma, DeliveryStatus, DeliveryType, Role, NotificationType, OrderStatus, PaymentStatus, RemittanceStatus } from '@prisma/client';
 import { PrismaService } from '../../prisma/prisma.service';
 import { NotificationsService } from '../notifications/notifications.service';
+import { ShiprocketService } from './shiprocket.service';
 import type { CreateAgentDto } from './dto/create-agent.dto';
 import type { UpdateAgentDto } from './dto/update-agent.dto';
 import type { UpdateLocationDto } from './dto/update-location.dto';
@@ -19,6 +20,7 @@ import type { QueryDeliveriesDto } from './dto/query-deliveries.dto';
 
 // ─── Constants ────────────────────────────────────────────────────────────────
 
+const DEFAULT_STORE_ID = '00000000-0000-0000-0000-000000000001';
 const BCRYPT_ROUNDS = 10;
 const MAX_LOCATION_LOG_POINTS = 50;
 
@@ -80,6 +82,7 @@ export class DeliveryService {
   constructor(
     private readonly prisma: PrismaService,
     private readonly notifications: NotificationsService,
+    private readonly shiprocket: ShiprocketService,
   ) {}
 
   // ─── Admin: Agent Management ───────────────────────────────────────────────
@@ -100,6 +103,7 @@ export class DeliveryService {
     const [agent] = await this.prisma.$transaction([
       this.prisma.deliveryAgent.create({
         data: {
+          storeId:     DEFAULT_STORE_ID,
           userId:      dto.userId,
           vehicleType: dto.vehicleType,
           zones:       dto.zones,
@@ -117,7 +121,7 @@ export class DeliveryService {
 
   async adminListAgents(query: QueryDeliveriesDto) {
     const page  = query.page  ?? 1;
-    const limit = query.limit ?? 20;
+    const limit = Math.min(query.limit ?? 20, 100);
     const skip  = (page - 1) * limit;
 
     const where: Prisma.DeliveryAgentWhereInput = {};
@@ -207,16 +211,17 @@ export class DeliveryService {
 
   // ─── Admin: Delivery Management ───────────────────────────────────────────
 
-  async adminListDeliveries(query: QueryDeliveriesDto) {
+  async adminListDeliveries(query: QueryDeliveriesDto, storeId = DEFAULT_STORE_ID) {
     const page  = query.page  ?? 1;
-    const limit = query.limit ?? 20;
+    const limit = Math.min(query.limit ?? 20, 100);
     const skip  = (page - 1) * limit;
 
-    const where: Prisma.DeliveryWhereInput = {};
+    const where: Prisma.DeliveryWhereInput = { order: { storeId } };
     if (query.status) where.status = query.status;
     if (query.type)   where.type   = query.type;
     if (query.search) {
       where.order = {
+        storeId,
         OR: [
           { orderNumber: { contains: query.search, mode: 'insensitive' } },
           { user: { name:  { contains: query.search, mode: 'insensitive' } } },
@@ -400,7 +405,7 @@ export class DeliveryService {
     if (!agent) throw new ForbiddenException('Delivery agent profile not found');
 
     const page  = query.page  ?? 1;
-    const limit = query.limit ?? 20;
+    const limit = Math.min(query.limit ?? 20, 100);
     const skip  = (page - 1) * limit;
 
     const where: Prisma.DeliveryWhereInput = { agentId: agent.id };
@@ -532,23 +537,30 @@ export class DeliveryService {
       return { message: 'Delivery marked as failed' };
     }
 
-    // When transitioning to OUT_FOR_DELIVERY: auto-generate and send OTP to customer
-    if (status === DeliveryStatus.OUT_FOR_DELIVERY && delivery.type === DeliveryType.SELF) {
-      const { otp, hash } = await this.generateOtpHash();
+    // When transitioning to OUT_FOR_DELIVERY: sync order status + auto-generate OTP for SELF delivery
+    if (status === DeliveryStatus.OUT_FOR_DELIVERY) {
+      if (delivery.type === DeliveryType.SELF) {
+        const { otp, hash } = await this.generateOtpHash();
 
-      await this.prisma.delivery.update({
-        where: { orderId },
-        data: { status, otpHash: hash },
-      });
+        await this.prisma.$transaction([
+          this.prisma.delivery.update({ where: { orderId }, data: { status, otpHash: hash } }),
+          this.prisma.order.update({ where: { id: orderId }, data: { status: OrderStatus.OUT_FOR_DELIVERY } }),
+        ]);
 
-      await this.notifications.notify(delivery.order.userId, {
-        type:  NotificationType.DELIVERY,
-        title: 'Your Delivery is Here!',
-        body:  `Order ${delivery.order.orderNumber} is out for delivery. Your OTP is: ${otp}. Share only with the agent.`,
-        data:  { orderId, otp },
-      });
+        await this.notifications.notify(delivery.order.userId, {
+          type:  NotificationType.DELIVERY,
+          title: 'Your Delivery is Here!',
+          body:  `Order ${delivery.order.orderNumber} is out for delivery. Your OTP is: ${otp}. Share only with the agent.`,
+          data:  { orderId, otp },
+        });
 
-      this.logger.log(`OTP generated for order ${orderId} — delivery OUT_FOR_DELIVERY`);
+        this.logger.log(`OTP generated for order ${orderId} — delivery OUT_FOR_DELIVERY`);
+      } else {
+        await this.prisma.$transaction([
+          this.prisma.delivery.update({ where: { orderId }, data: { status } }),
+          this.prisma.order.update({ where: { id: orderId }, data: { status: OrderStatus.OUT_FOR_DELIVERY } }),
+        ]);
+      }
     } else {
       await this.prisma.delivery.update({
         where: { orderId },
@@ -691,5 +703,332 @@ export class DeliveryService {
     // TODO (Phase 2): emit 'delivery:location' to the order's room via Socket.IO
     // this.deliveryGateway.emitToOrder(orderId, 'delivery:location', { lat, lng })
     this.logger.debug(`[GPS] order=${orderId} lat=${lat} lng=${lng}`);
+  }
+
+  // ─── Shiprocket (Third-Party) ─────────────────────────────────────────────
+
+  async createThirdPartyShipment(orderId: string) {
+    const order = await this.prisma.order.findUnique({
+      where: { id: orderId },
+      select: {
+        id:          true,
+        orderNumber: true,
+        total:       true,
+        status:      true,
+        items: {
+          select: {
+            name:     true,
+            sku:      true,
+            quantity: true,
+            price:    true,
+            variant:  { select: { weight: true } },
+          },
+        },
+        address: {
+          select: { name: true, phone: true, line1: true, line2: true, city: true, state: true, pincode: true },
+        },
+        payment: { select: { method: true } },
+      },
+    });
+    if (!order) throw new NotFoundException('Order not found');
+
+    const delivery = await this.prisma.delivery.findUnique({
+      where: { orderId },
+      select: { type: true, status: true },
+    });
+    if (!delivery) throw new NotFoundException('Delivery record not found');
+    if (delivery.type === DeliveryType.THIRD_PARTY && delivery.status !== DeliveryStatus.PENDING) {
+      throw new BadRequestException('Shiprocket shipment already created for this order');
+    }
+
+    let result;
+    try {
+      result = await this.shiprocket.createShipment({
+        orderNumber: order.orderNumber,
+        total:       Number(order.total),
+        payment:     { method: order.payment?.method ?? 'Prepaid' },
+        items: order.items.map((i) => ({
+          name:     i.name,
+          sku:      i.sku ?? `item-${i.name.slice(0, 8)}`,
+          quantity: i.quantity,
+          price:    Number(i.price),
+          weight:   Number(i.variant?.weight ?? 50),
+        })),
+        address: order.address,
+      });
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : 'Shiprocket API error';
+      this.logger.error(`Shiprocket shipment failed for order ${orderId}: ${msg}`);
+      throw new BadRequestException(`Shiprocket error: ${msg}`);
+    }
+
+    // Update delivery record with Shiprocket data
+    await this.prisma.delivery.update({
+      where: { orderId },
+      data: {
+        type:        DeliveryType.THIRD_PARTY,
+        provider:    `shiprocket:${result.courierName}`,
+        awbCode:     result.awbCode,
+        trackingUrl: result.trackingUrl,
+        status:      DeliveryStatus.ASSIGNED,
+      },
+    });
+
+    this.logger.log(`Shiprocket shipment created for order ${orderId}: AWB=${result.awbCode}`);
+    return result;
+  }
+
+  async handleShiprocketWebhook(payload: Record<string, unknown>) {
+    const awbCode       = payload['awb'] as string | undefined;
+    const srStatus      = payload['current_status'] as string | undefined;
+
+    if (!awbCode || !srStatus) {
+      this.logger.warn('Shiprocket webhook: missing awb or current_status');
+      return { received: true };
+    }
+
+    const delivery = await this.prisma.delivery.findFirst({
+      where: { awbCode },
+      select: { orderId: true, status: true, order: { select: { id: true, userId: true, orderNumber: true } } },
+    });
+
+    if (!delivery) {
+      this.logger.warn(`Shiprocket webhook: no delivery for AWB ${awbCode}`);
+      return { received: true };
+    }
+
+    const newStatus = this.shiprocket.mapStatus(srStatus);
+    if (!newStatus) {
+      this.logger.debug(`Shiprocket webhook: unrecognised status "${srStatus}" for AWB ${awbCode}`);
+      return { received: true };
+    }
+
+    const deliveryStatus = newStatus as DeliveryStatus;
+    const updates: Prisma.DeliveryUpdateInput = { status: deliveryStatus };
+    if (deliveryStatus === DeliveryStatus.DELIVERED) updates.deliveredAt = new Date();
+
+    await this.prisma.$transaction([
+      this.prisma.delivery.update({ where: { orderId: delivery.orderId }, data: updates }),
+      ...(deliveryStatus === DeliveryStatus.DELIVERED
+        ? [this.prisma.order.update({ where: { id: delivery.order.id }, data: { status: OrderStatus.DELIVERED } })]
+        : []),
+    ]);
+
+    if (delivery.order.userId) {
+      await this.notifications.notify(delivery.order.userId, {
+        type:  NotificationType.DELIVERY,
+        title: 'Shipment Update',
+        body:  `Your order ${delivery.order.orderNumber} is now: ${srStatus}`,
+        data:  { orderId: delivery.orderId },
+      });
+    }
+
+    this.logger.log(`Shiprocket webhook: AWB=${awbCode} → ${deliveryStatus}`);
+    return { received: true };
+  }
+
+  // ─── COD Remittance ───────────────────────────────────────────────────────
+
+  async agentMarkCodCollected(userId: string, orderId: string) {
+    const agent = await this.prisma.deliveryAgent.findUnique({
+      where: { userId },
+      select: { id: true },
+    });
+    if (!agent) throw new ForbiddenException('Delivery agent profile not found');
+
+    const delivery = await this.prisma.delivery.findUnique({
+      where: { orderId },
+      select: {
+        agentId:      true,
+        status:       true,
+        codCollected: true,
+        order: {
+          select: {
+            id:            true,
+            total:         true,
+            payment:       { select: { method: true } },
+          },
+        },
+      },
+    });
+    if (!delivery) throw new NotFoundException('Delivery not found');
+    if (delivery.agentId !== agent.id) throw new ForbiddenException('Not your delivery');
+    if (delivery.status !== DeliveryStatus.DELIVERED) throw new BadRequestException('Can only collect cash after delivery is confirmed');
+    if (delivery.order.payment?.method !== 'COD') throw new BadRequestException('This is not a COD order');
+    if (delivery.codCollected) throw new BadRequestException('Cash already marked as collected for this order');
+
+    await this.prisma.delivery.update({
+      where: { orderId },
+      data: { codCollected: true, codCollectedAt: new Date() },
+    });
+
+    this.logger.log(`COD collected by agent ${userId} for order ${orderId}`);
+    return { message: 'Cash collection recorded successfully' };
+  }
+
+  async agentGetRemittanceSummary(userId: string) {
+    const agent = await this.prisma.deliveryAgent.findUnique({
+      where: { userId },
+      select: { id: true },
+    });
+    if (!agent) throw new ForbiddenException('Delivery agent profile not found');
+
+    // Collected COD orders not yet in any remittance
+    const pendingCollections = await this.prisma.delivery.findMany({
+      where: {
+        agentId:      agent.id,
+        codCollected: true,
+        order:        { remittanceItem: null, payment: { method: 'COD' } },
+      },
+      select: {
+        orderId:       true,
+        codCollectedAt: true,
+        order: {
+          select: {
+            id:          true,
+            orderNumber: true,
+            total:       true,
+            address:     { select: { name: true, city: true } },
+          },
+        },
+      },
+      orderBy: { codCollectedAt: 'asc' },
+    });
+
+    // Past remittances
+    const remittances = await this.prisma.codRemittance.findMany({
+      where: { agentId: agent.id },
+      select: {
+        id:          true,
+        status:      true,
+        totalAmount: true,
+        submittedAt: true,
+        receivedAt:  true,
+        createdAt:   true,
+        items:       { select: { orderId: true, amount: true, collectedAt: true } },
+      },
+      orderBy: { createdAt: 'desc' },
+    });
+
+    const pendingTotal = pendingCollections.reduce(
+      (sum, d) => sum + Number(d.order.total),
+      0,
+    );
+
+    return { pendingCollections, pendingTotal, remittances };
+  }
+
+  async agentSubmitRemittance(userId: string, notes?: string) {
+    const agent = await this.prisma.deliveryAgent.findUnique({
+      where: { userId },
+      select: { id: true },
+    });
+    if (!agent) throw new ForbiddenException('Delivery agent profile not found');
+
+    const pendingCollections = await this.prisma.delivery.findMany({
+      where: {
+        agentId:      agent.id,
+        codCollected: true,
+        order:        { remittanceItem: null, payment: { method: 'COD' } },
+      },
+      select: {
+        orderId: true,
+        order:   { select: { id: true, total: true } },
+      },
+    });
+
+    if (pendingCollections.length === 0) {
+      throw new BadRequestException('No pending COD collections to submit');
+    }
+
+    const totalAmount = pendingCollections.reduce(
+      (sum, d) => sum + Number(d.order.total),
+      0,
+    );
+
+    const remittance = await this.prisma.codRemittance.create({
+      data: {
+        agentId:     agent.id,
+        status:      RemittanceStatus.SUBMITTED,
+        totalAmount: new Prisma.Decimal(totalAmount),
+        notes,
+        submittedAt: new Date(),
+        items: {
+          create: pendingCollections.map((d) => ({
+            orderId:     d.order.id,
+            amount:      new Prisma.Decimal(Number(d.order.total)),
+            collectedAt: new Date(),
+          })),
+        },
+      },
+      include: { items: true },
+    });
+
+    this.logger.log(`Agent ${userId} submitted remittance ${remittance.id} — ₹${totalAmount} (${pendingCollections.length} orders)`);
+    return remittance;
+  }
+
+  async adminListRemittances(status?: RemittanceStatus) {
+    return this.prisma.codRemittance.findMany({
+      where: status ? { status } : undefined,
+      select: {
+        id:          true,
+        status:      true,
+        totalAmount: true,
+        notes:       true,
+        submittedAt: true,
+        receivedAt:  true,
+        createdAt:   true,
+        agent: {
+          select: {
+            id:   true,
+            user: { select: { name: true, phone: true } },
+          },
+        },
+        items: {
+          select: {
+            orderId:    true,
+            amount:     true,
+            collectedAt: true,
+            order:      { select: { orderNumber: true } },
+          },
+        },
+      },
+      orderBy: { createdAt: 'desc' },
+    });
+  }
+
+  async adminConfirmRemittance(remittanceId: string) {
+    const remittance = await this.prisma.codRemittance.findUnique({
+      where: { id: remittanceId },
+      select: {
+        status: true,
+        items:  { select: { orderId: true } },
+      },
+    });
+    if (!remittance) throw new NotFoundException('Remittance not found');
+    if (remittance.status === RemittanceStatus.RECEIVED) {
+      throw new BadRequestException('Remittance already confirmed');
+    }
+    if (remittance.status !== RemittanceStatus.SUBMITTED) {
+      throw new BadRequestException('Remittance must be in SUBMITTED status to confirm');
+    }
+
+    const orderIds = remittance.items.map((i) => i.orderId);
+
+    await this.prisma.$transaction([
+      this.prisma.codRemittance.update({
+        where: { id: remittanceId },
+        data:  { status: RemittanceStatus.RECEIVED, receivedAt: new Date() },
+      }),
+      // Mark all COD payments as SUCCESS
+      this.prisma.payment.updateMany({
+        where:  { orderId: { in: orderIds }, method: 'COD' },
+        data:   { status: PaymentStatus.SUCCESS, paidAt: new Date() },
+      }),
+    ]);
+
+    this.logger.log(`Admin confirmed remittance ${remittanceId} — ${orderIds.length} orders marked paid`);
+    return { message: `Remittance confirmed. ${orderIds.length} order(s) marked as paid.` };
   }
 }

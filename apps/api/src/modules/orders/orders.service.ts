@@ -19,10 +19,13 @@ import type { UpdateDeliveryStatusDto } from './dto/update-delivery-status.dto';
 import { CouponsService } from '../coupons/coupons.service';
 import { PaymentsService } from '../payments/payments.service';
 import { NotificationsService } from '../notifications/notifications.service';
+import { TenantService } from '../tenant/tenant.service';
+import { EventsGateway, WsEvents } from '../events/events.gateway';
 import { NotificationType } from '@jewellery/types';
 
 // ─── Constants ────────────────────────────────────────────────────────────────
 
+const DEFAULT_STORE_ID = '00000000-0000-0000-0000-000000000001';
 const FREE_SHIPPING_THRESHOLD = 999;
 const SHIPPING_CHARGE = 49;
 const TRANSACTION_TIMEOUT_MS = 10_000;
@@ -82,11 +85,16 @@ export class OrdersService {
     private readonly coupons: CouponsService,
     @Inject(forwardRef(() => PaymentsService)) private readonly payments: PaymentsService,
     private readonly notifications: NotificationsService,
+    private readonly tenant: TenantService,
+    private readonly gateway: EventsGateway,
   ) {}
 
   // ─── Customer: Place Order ─────────────────────────────────────────────────
 
-  async placeOrder(userId: string, dto: CreateOrderDto) {
+  async placeOrder(userId: string, dto: CreateOrderDto, storeId = DEFAULT_STORE_ID) {
+    // 0. Enforce monthly order quota before doing anything else
+    await this.tenant.checkOrderQuota(storeId);
+
     // 1. Validate address ownership
     const address = await this.prisma.address.findFirst({
       where: { id: dto.addressId, userId },
@@ -167,6 +175,7 @@ export class OrdersService {
         // Create order record
         const newOrder = await tx.order.create({
           data: {
+            storeId,
             userId,
             addressId: dto.addressId,
             status: dto.paymentMethod === PaymentMethod.COD ? OrderStatus.CONFIRMED : OrderStatus.PENDING,
@@ -204,8 +213,9 @@ export class OrdersService {
             gateway: dto.paymentMethod === PaymentMethod.COD ? 'cod' : 'razorpay',
             razorpayOrderId,
             amount: new Prisma.Decimal(total),
-            status: dto.paymentMethod === PaymentMethod.COD ? 'SUCCESS' : 'PENDING',
-            paidAt: dto.paymentMethod === PaymentMethod.COD ? new Date() : null,
+            // COD stays PENDING until agent collects and admin confirms remittance
+            status: 'PENDING',
+            paidAt: null,
           },
         });
 
@@ -249,7 +259,12 @@ export class OrdersService {
       { timeout: TRANSACTION_TIMEOUT_MS },
     );
 
-    this.emitOrderEvent('order:placed', { orderId: order.id, userId, total });
+    // Fire-and-forget: increment order counter after successful placement
+    this.tenant.incrementOrderCount(storeId).catch((e) =>
+      this.logger.warn(`Failed to increment orderCount for store ${storeId}: ${(e as Error).message}`),
+    );
+
+    this.emitOrderEvent(WsEvents.ORDER_PLACED, { orderId: order.id, storeId, userId, total });
 
     this.logger.log(
       `Order placed: ${order.orderNumber} by user ${userId}. Total: ₹${total}. ` +
@@ -270,7 +285,7 @@ export class OrdersService {
 
   async findMyOrders(userId: string, dto: QueryOrdersDto) {
     const page = dto.page ?? 1;
-    const limit = dto.limit ?? 10;
+    const limit = Math.min(dto.limit ?? 10, 100);
     const skip = (page - 1) * limit;
 
     const where: Prisma.OrderWhereInput = { userId };
@@ -337,7 +352,7 @@ export class OrdersService {
       }
     });
 
-    this.emitOrderEvent('order:cancelled', { orderId, userId });
+    this.emitOrderEvent(WsEvents.ORDER_CANCELLED, { orderId, userId });
     this.logger.log(`Order ${order.orderNumber} cancelled by customer ${userId}. Reason: ${dto.reason}`);
 
     return { message: 'Order cancelled successfully' };
@@ -358,7 +373,7 @@ export class OrdersService {
       data: { status: OrderStatus.RETURN_REQUESTED, notes: `Return requested: ${dto.reason}` },
     });
 
-    this.emitOrderEvent('order:return_requested', { orderId, userId });
+    this.emitOrderEvent(WsEvents.ORDER_RETURN_REQUESTED, { orderId, userId });
     this.logger.log(`Return requested for order ${order.orderNumber} by user ${userId}. Reason: ${dto.reason}`);
 
     return { message: 'Return request submitted successfully' };
@@ -366,12 +381,12 @@ export class OrdersService {
 
   // ─── Admin: List All Orders ────────────────────────────────────────────────
 
-  async adminListOrders(dto: QueryOrdersDto) {
+  async adminListOrders(dto: QueryOrdersDto, storeId = DEFAULT_STORE_ID) {
     const page = dto.page ?? 1;
-    const limit = dto.limit ?? 10;
+    const limit = Math.min(dto.limit ?? 10, 100);
     const skip = (page - 1) * limit;
 
-    const where: Prisma.OrderWhereInput = {};
+    const where: Prisma.OrderWhereInput = { storeId };
     if (dto.status) where.status = dto.status;
     if (dto.from || dto.to) {
       where.createdAt = {
@@ -407,9 +422,9 @@ export class OrdersService {
 
   // ─── Admin: Get Single Order ───────────────────────────────────────────────
 
-  async adminGetOrder(orderId: string) {
-    const order = await this.prisma.order.findUnique({
-      where: { id: orderId },
+  async adminGetOrder(orderId: string, storeId = DEFAULT_STORE_ID) {
+    const order = await this.prisma.order.findFirst({
+      where: { id: orderId, storeId },
       select: {
         ...ORDER_SUMMARY_SELECT,
         user: { select: { id: true, name: true, email: true, phone: true } },
@@ -421,9 +436,9 @@ export class OrdersService {
 
   // ─── Admin: Update Order Status ────────────────────────────────────────────
 
-  async adminUpdateStatus(orderId: string, dto: UpdateOrderStatusDto) {
-    const order = await this.prisma.order.findUnique({
-      where: { id: orderId },
+  async adminUpdateStatus(orderId: string, dto: UpdateOrderStatusDto, storeId = DEFAULT_STORE_ID) {
+    const order = await this.prisma.order.findFirst({
+      where: { id: orderId, storeId },
       include: { items: true },
     });
     if (!order) throw new NotFoundException('Order not found');
@@ -464,7 +479,7 @@ export class OrdersService {
       }
     });
 
-    this.emitOrderEvent('order:status_changed', { orderId, status: dto.status });
+    this.emitOrderEvent(WsEvents.ORDER_STATUS_CHANGED, { orderId, storeId, status: dto.status });
     this.logger.log(`Order ${order.orderNumber} status → ${dto.status}`);
 
     return { message: `Order status updated to ${dto.status}` };
@@ -504,7 +519,7 @@ export class OrdersService {
       },
     });
 
-    this.emitOrderEvent('delivery:assigned', { orderId, agentId: dto.agentId });
+    this.gateway.emitDeliveryEvent(WsEvents.DELIVERY_ASSIGNED, { orderId, agentId: dto.agentId ?? undefined });
     this.logger.log(`Delivery for order ${orderId} assigned to agent ${dto.agentId ?? 'third-party'}`);
 
     // Notify the assigned agent of the new delivery (push + in-app).
@@ -534,7 +549,7 @@ export class OrdersService {
 
   async agentListOrders(agentId: string, dto: QueryOrdersDto) {
     const page = dto.page ?? 1;
-    const limit = dto.limit ?? 10;
+    const limit = Math.min(dto.limit ?? 10, 100);
     const skip = (page - 1) * limit;
 
     // Find delivery agent record by userId
@@ -621,7 +636,7 @@ export class OrdersService {
       }
     });
 
-    this.emitOrderEvent('delivery:status_changed', { orderId, status: dto.status });
+    this.gateway.emitDeliveryEvent(WsEvents.DELIVERY_STATUS_CHANGED, { orderId, status: dto.status });
     this.logger.log(`Delivery for order ${orderId} status → ${dto.status} by agent ${agentUserId}`);
 
     return { message: `Delivery status updated to ${dto.status}` };
@@ -641,7 +656,7 @@ export class OrdersService {
       });
     });
 
-    this.emitOrderEvent('order:payment_confirmed', { orderId });
+    this.emitOrderEvent(WsEvents.ORDER_PAYMENT_CONFIRMED, { orderId });
     this.logger.log(`Payment confirmed for order ${orderId}. RzpPayId: ${razorpayPayId}`);
   }
 
@@ -676,13 +691,34 @@ export class OrdersService {
     this.logger.log(`Order ${orderId} marked refunded. RefundId: ${refundId}, Amount: ₹${refundAmount}`);
   }
 
-  // ─── WebSocket / Queue Event Placeholder ──────────────────────────────────
+  // ─── WebSocket event emission ─────────────────────────────────────────────
 
   private emitOrderEvent(event: string, payload: Record<string, unknown>): void {
-    // TODO (Phase 2): emit via Socket.IO gateway and/or push to BullMQ queue
-    // Example:
-    //   this.orderGateway.emit(event, payload)
-    //   this.notificationQueue.add('send-notification', { event, ...payload })
-    this.logger.debug(`[EVENT] ${event} ${JSON.stringify(payload)}`);
+    // Resolve storeId if not already in the payload — needed to reach the store admin room
+    const resolvedPayload = payload as {
+      orderId: string;
+      storeId?: string;
+      userId?:  string;
+      [key: string]: unknown;
+    };
+
+    if (!resolvedPayload.storeId) {
+      // Look up storeId asynchronously (fire-and-forget): gateway handles null gracefully
+      this.prisma.order
+        .findUnique({ where: { id: resolvedPayload.orderId }, select: { storeId: true, userId: true } })
+        .then((o) => {
+          if (o) {
+            this.gateway.emitOrderEvent(event, {
+              ...resolvedPayload,
+              storeId: o.storeId,
+              userId:  resolvedPayload.userId ?? o.userId,
+            });
+          }
+        })
+        .catch((e) => this.logger.warn(`emitOrderEvent lookup failed: ${(e as Error).message}`));
+      return;
+    }
+
+    this.gateway.emitOrderEvent(event, resolvedPayload);
   }
 }

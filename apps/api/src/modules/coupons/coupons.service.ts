@@ -10,6 +10,8 @@ import { PrismaService } from '../../prisma/prisma.service';
 import type { CreateCouponDto } from './dto/create-coupon.dto';
 import type { ValidateCouponDto } from './dto/validate-coupon.dto';
 
+const DEFAULT_STORE_ID = '00000000-0000-0000-0000-000000000001';
+
 export interface CouponValidationResult {
   valid: true;
   coupon: {
@@ -30,9 +32,9 @@ export class CouponsService {
 
   // ─── Public — Validate at checkout ────────────────────────────────────────
 
-  async validate(dto: ValidateCouponDto): Promise<CouponValidationResult> {
-    const coupon = await this.prisma.coupon.findUnique({
-      where: { code: dto.code.toUpperCase().trim() },
+  async validate(dto: ValidateCouponDto, storeId = DEFAULT_STORE_ID): Promise<CouponValidationResult> {
+    const coupon = await this.prisma.coupon.findFirst({
+      where: { storeId, code: dto.code.toUpperCase().trim() },
     });
 
     if (!coupon || !coupon.isActive) {
@@ -80,17 +82,19 @@ export class CouponsService {
 
   // ─── Admin ────────────────────────────────────────────────────────────────
 
-  async adminFindAll() {
+  async adminFindAll(storeId = DEFAULT_STORE_ID, limit = 200) {
     return this.prisma.coupon.findMany({
+      where: { storeId },
       orderBy: { isActive: 'desc' },
       include: { _count: { select: { orders: true } } },
+      take: Math.min(limit, 500),
     });
   }
 
-  async create(dto: CreateCouponDto) {
+  async create(dto: CreateCouponDto, storeId = DEFAULT_STORE_ID) {
     const code = dto.code.toUpperCase().trim();
 
-    const existing = await this.prisma.coupon.findUnique({ where: { code } });
+    const existing = await this.prisma.coupon.findFirst({ where: { storeId, code } });
     if (existing) throw new ConflictException(`Coupon code '${code}' already exists`);
 
     // Validate PERCENT type cap
@@ -100,6 +104,7 @@ export class CouponsService {
 
     return this.prisma.coupon.create({
       data: {
+        storeId,
         code,
         type: dto.type,
         value: dto.value,
@@ -112,13 +117,13 @@ export class CouponsService {
     });
   }
 
-  async update(id: string, dto: Partial<CreateCouponDto>) {
-    const coupon = await this.prisma.coupon.findUnique({ where: { id } });
+  async update(id: string, dto: Partial<CreateCouponDto>, storeId = DEFAULT_STORE_ID) {
+    const coupon = await this.prisma.coupon.findFirst({ where: { id, storeId } });
     if (!coupon) throw new NotFoundException('Coupon not found');
 
     if (dto.code && dto.code.toUpperCase() !== coupon.code) {
-      const existing = await this.prisma.coupon.findUnique({
-        where: { code: dto.code.toUpperCase() },
+      const existing = await this.prisma.coupon.findFirst({
+        where: { storeId, code: dto.code.toUpperCase() },
       });
       if (existing) throw new ConflictException('Coupon code already taken');
     }

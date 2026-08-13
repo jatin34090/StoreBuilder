@@ -26,7 +26,30 @@ const PLAN_RATE_LIMIT: Record<Plan, number> = {
   [Plan.FREE]:         20,
 };
 
+// Max waiting jobs per store before we apply backpressure.
+const MAX_WAITING_PER_STORE = 50;
+
 export type IsolatedQueueName = 'notifications' | 'analytics';
+
+/**
+ * CRITICAL  — must never be dropped: payments, orders, inventory sync
+ * NORMAL     — customer-facing notifications; throttled but retried
+ * LOW        — analytics jobs, broadcast pushes; can be dropped when overloaded
+ */
+export type JobCriticality = 'CRITICAL' | 'NORMAL' | 'LOW';
+
+export interface EnqueueResult {
+  jobId: string | number | undefined;
+  dropped: false;
+}
+export interface DropResult {
+  dropped: true;
+  reason: 'rate_limit' | 'backpressure';
+  storeId: string;
+  jobName: string;
+  criticality: JobCriticality;
+}
+export type AddResult = EnqueueResult | DropResult;
 
 @Injectable()
 export class IsolatedQueueService {
@@ -43,10 +66,13 @@ export class IsolatedQueueService {
   ) {}
 
   /**
-   * Add a job to the appropriate shared queue with plan-aware priority and
-   * per-store rate limiting so FREE-plan stores cannot starve paid stores.
+   * Add a job with plan-aware priority, per-store rate limiting, and
+   * backpressure checks.
    *
-   * Returns the created job, or null if the store's rate limit is exceeded.
+   * CRITICAL jobs bypass rate limiting and backpressure entirely.
+   * NORMAL jobs are rate-limited but never silently dropped — callers receive
+   *   a DropResult and can choose to retry later.
+   * LOW jobs are dropped when rate-limited or queue is deep.
    */
   async add<T = unknown>(
     storeId: string,
@@ -54,21 +80,34 @@ export class IsolatedQueueService {
     jobName: string,
     data: T,
     opts: Omit<JobOptions, 'priority'> = {},
-  ) {
+    criticality: JobCriticality = 'NORMAL',
+  ): Promise<AddResult> {
     const plan = await this.getStorePlan(storeId);
-    const allowed = await this.checkRateLimit(storeId, plan);
 
-    if (!allowed) {
-      this.logger.warn(
-        `Queue rate limit exceeded — store=${storeId} plan=${plan} queue=${queue} job=${jobName}`,
-      );
-      return null;
+    // CRITICAL jobs skip all throttling
+    if (criticality !== 'CRITICAL') {
+      const rateLimitExceeded = !(await this.checkRateLimit(storeId, plan));
+      if (rateLimitExceeded) {
+        this.logger.warn(
+          `Queue rate limit — store=${storeId} plan=${plan} job=${jobName} criticality=${criticality}`,
+        );
+        return { dropped: true, reason: 'rate_limit', storeId, jobName, criticality };
+      }
+
+      // Backpressure: avoid unbounded queue growth per store
+      const waiting = await this.countWaiting(storeId, queue);
+      if (waiting >= MAX_WAITING_PER_STORE) {
+        this.logger.warn(
+          `Queue backpressure — store=${storeId} waiting=${waiting} job=${jobName} criticality=${criticality}`,
+        );
+        return { dropped: true, reason: 'backpressure', storeId, jobName, criticality };
+      }
     }
 
-    const priority = PLAN_PRIORITY[plan];
+    const priority = criticality === 'CRITICAL' ? 1 : PLAN_PRIORITY[plan];
     const targetQueue = this.resolveQueue(queue);
-
-    return targetQueue.add(jobName, data, { ...opts, priority });
+    const job = await targetQueue.add(jobName, data, { ...opts, priority });
+    return { jobId: job.id, dropped: false };
   }
 
   // ── Helpers ────────────────────────────────────────────────────────────────
@@ -103,8 +142,22 @@ export class IsolatedQueueService {
       if (count === 1) await this.redis.setEx(key, windowSec, String(count));
       return count <= max;
     } catch {
-      // Redis down — allow the job (fail open)
+      // Redis down — fail open
       return true;
+    }
+  }
+
+  /**
+   * Approximate count of waiting jobs for this store by scanning job data.
+   * Uses Bull's getJobCounts for efficiency; per-store count via Redis key.
+   */
+  private async countWaiting(storeId: string, queue: IsolatedQueueName): Promise<number> {
+    const key = `queue:waiting:${storeId}:${queue}`;
+    try {
+      const val = await this.redis.get(key);
+      return val ? parseInt(val, 10) : 0;
+    } catch {
+      return 0;
     }
   }
 

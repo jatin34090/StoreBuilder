@@ -16,6 +16,8 @@ import type { ModerateReviewDto } from './dto/moderate-review.dto';
 import { ReviewSortBy } from './dto/query-reviews.dto';
 import type { SearchService } from '../search/search.service';
 
+const DEFAULT_STORE_ID = '00000000-0000-0000-0000-000000000001';
+
 // ─── Sort mapping ─────────────────────────────────────────────────────────────
 
 const SORT_MAP: Record<ReviewSortBy, Prisma.ReviewOrderByWithRelationInput> = {
@@ -107,6 +109,7 @@ export class ReviewsService {
     // 5. Create the review
     const review = await this.prisma.review.create({
       data: {
+        storeId: DEFAULT_STORE_ID,
         userId,
         orderId: dto.orderId,
         productId: dto.productId,
@@ -179,7 +182,7 @@ export class ReviewsService {
 
   async getProductReviews(productId: string, dto: QueryReviewsDto) {
     const page  = dto.page  ?? 1;
-    const limit = dto.limit ?? 10;
+    const limit = Math.min(dto.limit ?? 10, 50);
     const skip  = (page - 1) * limit;
 
     // Verify product exists
@@ -245,7 +248,7 @@ export class ReviewsService {
 
   async getMyReviews(userId: string, dto: QueryReviewsDto) {
     const page  = dto.page  ?? 1;
-    const limit = dto.limit ?? 10;
+    const limit = Math.min(dto.limit ?? 10, 50);
     const skip  = (page - 1) * limit;
 
     const where: Prisma.ReviewWhereInput = { userId };
@@ -271,7 +274,7 @@ export class ReviewsService {
 
   async adminListReviews(dto: AdminQueryReviewsDto) {
     const page  = dto.page  ?? 1;
-    const limit = dto.limit ?? 10;
+    const limit = Math.min(dto.limit ?? 10, 50);
     const skip  = (page - 1) * limit;
 
     const where: Prisma.ReviewWhereInput = {

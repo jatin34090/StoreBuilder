@@ -88,7 +88,7 @@ export class SearchController {
       'Use after Typesense data loss, schema migration, or first-time setup. ' +
       'Processes in batches of 500 — may take several seconds for large catalogues.',
   })
-  reindex() {
-    return this.searchService.adminReindex();
+  reindex(@CurrentStoreId() storeId: string) {
+    return this.searchService.adminReindex(storeId);
   }
 }

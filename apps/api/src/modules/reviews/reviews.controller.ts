@@ -26,6 +26,7 @@ import { UpdateReviewDto } from './dto/update-review.dto';
 import { QueryReviewsDto, AdminQueryReviewsDto } from './dto/query-reviews.dto';
 import { ModerateReviewDto } from './dto/moderate-review.dto';
 import { CurrentUser } from '../../common/decorators/current-user.decorator';
+import { CurrentStoreId } from '../../common/decorators/current-store.decorator';
 import { Roles } from '../../common/decorators/roles.decorator';
 import { RequirePermission } from '../../common/decorators/require-permission.decorator';
 import { Public } from '../../common/decorators/public.decorator';
@@ -82,8 +83,8 @@ export class ReviewsController {
       'One review per (user, order, product) combination — returns 409 on duplicate.',
   })
   @ApiCreatedResponse({ description: 'Review created' })
-  createReview(@CurrentUser() user: AuthUser, @Body() dto: CreateReviewDto) {
-    return this.reviewsService.createReview(user.id, dto);
+  createReview(@CurrentUser() user: AuthUser, @CurrentStoreId() storeId: string, @Body() dto: CreateReviewDto) {
+    return this.reviewsService.createReview(user.id, storeId, dto);
   }
 
   // ─── Customer: My Reviews ──────────────────────────────────────────────────
@@ -133,8 +134,8 @@ export class ReviewsController {
     summary: 'Admin: list all reviews with filters',
     description: 'Filter by productId, userId, isVisible status, and star rating.',
   })
-  adminListReviews(@Query() query: AdminQueryReviewsDto) {
-    return this.reviewsService.adminListReviews(query);
+  adminListReviews(@Query() query: AdminQueryReviewsDto, @CurrentStoreId() storeId: string) {
+    return this.reviewsService.adminListReviews(query, storeId);
   }
 
   // ─── Admin: Moderate Review ────────────────────────────────────────────────
@@ -153,8 +154,9 @@ export class ReviewsController {
   moderateReview(
     @Param('id') id: string,
     @Body() dto: ModerateReviewDto,
+    @CurrentStoreId() storeId: string,
   ) {
-    return this.reviewsService.moderateReview(id, dto);
+    return this.reviewsService.moderateReview(id, storeId, dto);
   }
 
   // ─── Admin: Hard-delete Review ─────────────────────────────────────────────
@@ -168,7 +170,7 @@ export class ReviewsController {
     description: 'Hard delete — cannot be undone. Prefer /visibility for reversible moderation.',
   })
   @ApiParam({ name: 'id', description: 'Review UUID', format: 'uuid' })
-  adminDeleteReview(@Param('id') id: string) {
-    return this.reviewsService.adminDeleteReview(id);
+  adminDeleteReview(@Param('id') id: string, @CurrentStoreId() storeId: string) {
+    return this.reviewsService.adminDeleteReview(id, storeId);
   }
 }

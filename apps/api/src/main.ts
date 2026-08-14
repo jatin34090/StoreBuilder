@@ -35,7 +35,7 @@ async function bootstrap() {
     origin: corsOrigins.split(',').map((o) => o.trim()),
     credentials: true,
     methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'],
-    allowedHeaders: ['Content-Type', 'Authorization', 'x-razorpay-signature'],
+    allowedHeaders: ['Content-Type', 'Authorization', 'x-razorpay-signature', 'x-store-slug', 'x-store-id'],
   });
 
   // Cookie parsing

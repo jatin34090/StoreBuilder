@@ -51,10 +51,10 @@ export class ReviewsService {
 
   // ─── Customer: Create Review ───────────────────────────────────────────────
 
-  async createReview(userId: string, dto: CreateReviewDto) {
-    // 1. Verify the order exists, belongs to this user, and is DELIVERED
+  async createReview(userId: string, storeId: string, dto: CreateReviewDto) {
+    // 1. Verify the order exists, belongs to this user and store, and is DELIVERED
     const order = await this.prisma.order.findFirst({
-      where: { id: dto.orderId, userId },
+      where: { id: dto.orderId, userId, storeId },
       select: {
         id: true,
         status: true,
@@ -99,17 +99,18 @@ export class ReviewsService {
       throw new ConflictException('You have already reviewed this product for this order');
     }
 
-    // 4. Verify the product exists
+    // 4. Verify the product exists and belongs to this store
     const product = await this.prisma.product.findUnique({
       where: { id: dto.productId },
-      select: { id: true, name: true },
+      select: { id: true, name: true, storeId: true },
     });
     if (!product) throw new NotFoundException('Product not found');
+    if (product.storeId !== storeId) throw new NotFoundException('Product not found');
 
     // 5. Create the review
     const review = await this.prisma.review.create({
       data: {
-        storeId: DEFAULT_STORE_ID,
+        storeId,
         userId,
         orderId: dto.orderId,
         productId: dto.productId,
@@ -272,12 +273,13 @@ export class ReviewsService {
 
   // ─── Admin: List All Reviews ───────────────────────────────────────────────
 
-  async adminListReviews(dto: AdminQueryReviewsDto) {
+  async adminListReviews(dto: AdminQueryReviewsDto, storeId: string) {
     const page  = dto.page  ?? 1;
     const limit = Math.min(dto.limit ?? 10, 50);
     const skip  = (page - 1) * limit;
 
     const where: Prisma.ReviewWhereInput = {
+      storeId,
       ...(dto.productId  && { productId: dto.productId }),
       ...(dto.userId     && { userId: dto.userId }),
       ...(dto.isVisible !== undefined && { isVisible: dto.isVisible }),
@@ -303,12 +305,12 @@ export class ReviewsService {
 
   // ─── Admin: Moderate (show/hide) ───────────────────────────────────────────
 
-  async moderateReview(reviewId: string, dto: ModerateReviewDto) {
+  async moderateReview(reviewId: string, storeId: string, dto: ModerateReviewDto) {
     const review = await this.prisma.review.findUnique({
       where: { id: reviewId },
-      select: { id: true, productId: true, isVisible: true },
+      select: { id: true, productId: true, storeId: true, isVisible: true },
     });
-    if (!review) throw new NotFoundException('Review not found');
+    if (!review || review.storeId !== storeId) throw new NotFoundException('Review not found');
 
     if (review.isVisible === dto.isVisible) {
       return { message: `Review is already ${dto.isVisible ? 'visible' : 'hidden'}` };
@@ -329,12 +331,12 @@ export class ReviewsService {
 
   // ─── Admin: Delete Any Review ──────────────────────────────────────────────
 
-  async adminDeleteReview(reviewId: string) {
+  async adminDeleteReview(reviewId: string, storeId: string) {
     const review = await this.prisma.review.findUnique({
       where: { id: reviewId },
-      select: { id: true, productId: true },
+      select: { id: true, productId: true, storeId: true },
     });
-    if (!review) throw new NotFoundException('Review not found');
+    if (!review || review.storeId !== storeId) throw new NotFoundException('Review not found');
 
     await this.prisma.review.delete({ where: { id: reviewId } });
 

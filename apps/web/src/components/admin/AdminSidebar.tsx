@@ -5,11 +5,12 @@ import { usePathname } from 'next/navigation';
 import {
   LayoutDashboard, Package, Tags, ShoppingBag, Users, Warehouse,
   Ticket, Bell, Truck, Star, Gem, ChevronLeft, ChevronRight,
-  BarChart2, Settings, Palette, Globe, CreditCard, Zap,
+  BarChart2, Settings, Palette, Globe, CreditCard,
   ExternalLink, ChevronDown, ChevronRight as ChevronRightSmall,
+  UserCheck,
 } from 'lucide-react';
 import { useState } from 'react';
-import { useAdminAuthStore } from '../../store/adminAuthStore';
+import { useAdminAuthStore, type Permission } from '../../store/adminAuthStore';
 
 interface AdminSidebarProps {
   collapsed: boolean;
@@ -21,6 +22,7 @@ interface NavItem {
   label: string;
   icon: React.ElementType;
   exact?: boolean;
+  permission?: Permission;
 }
 
 interface NavGroup {
@@ -28,37 +30,44 @@ interface NavGroup {
   items: NavItem[];
 }
 
-const navGroups: NavGroup[] = [
+const NAV_GROUPS: NavGroup[] = [
   {
     label: 'Catalog',
     items: [
-      { href: '/admin/products',   label: 'Products',   icon: Package },
-      { href: '/admin/categories', label: 'Categories', icon: Tags },
-      { href: '/admin/inventory',  label: 'Inventory',  icon: Warehouse },
-      { href: '/admin/reviews',    label: 'Reviews',    icon: Star },
+      { href: '/admin/products',   label: 'Products',   icon: Package,   permission: 'products.read' },
+      { href: '/admin/categories', label: 'Categories', icon: Tags,      permission: 'categories.read' },
+      { href: '/admin/inventory',  label: 'Inventory',  icon: Warehouse, permission: 'inventory.read' },
+      { href: '/admin/reviews',    label: 'Reviews',    icon: Star,      permission: 'reviews.read' },
     ],
   },
   {
     label: 'Sales',
     items: [
-      { href: '/admin/orders',        label: 'Orders',    icon: ShoppingBag },
-      { href: '/admin/users',         label: 'Customers', icon: Users },
-      { href: '/admin/coupons',       label: 'Coupons',   icon: Ticket },
+      { href: '/admin/orders',   label: 'Orders',    icon: ShoppingBag, permission: 'orders.read' },
+      { href: '/admin/users',    label: 'Customers', icon: Users,       permission: 'customers.read' },
+      { href: '/admin/coupons',  label: 'Coupons',   icon: Ticket,      permission: 'coupons.read' },
     ],
   },
   {
     label: 'Website',
     items: [
-      { href: '/admin/customize', label: 'Theme',       icon: Palette },
-      { href: '/admin/settings',  label: 'Pages',       icon: Globe },
+      { href: '/admin/customize', label: 'Theme', icon: Palette, permission: 'theme.read' },
+      { href: '/admin/pages',     label: 'Pages', icon: Globe,   permission: 'website.read' },
     ],
   },
   {
     label: 'Operations',
     items: [
-      { href: '/admin/delivery',      label: 'Shipping',      icon: Truck },
+      { href: '/admin/delivery',      label: 'Shipping',      icon: Truck,      permission: 'shipping.read' },
       { href: '/admin/notifications', label: 'Notifications', icon: Bell },
-      { href: '/admin/remittances',   label: 'Payments',      icon: CreditCard },
+      { href: '/admin/remittances',   label: 'Payments',      icon: CreditCard, permission: 'payments.read' },
+    ],
+  },
+  {
+    label: 'Settings',
+    items: [
+      { href: '/admin/settings/store',  label: 'Store Settings', icon: Settings },
+      { href: '/admin/settings/staff',  label: 'Staff',          icon: UserCheck, permission: 'staff.read' },
     ],
   },
 ];
@@ -79,8 +88,9 @@ function StatusBadge({ status }: { status: string }) {
 export function AdminSidebar({ collapsed, onToggle }: AdminSidebarProps) {
   const pathname = usePathname();
   const adminStore = useAdminAuthStore((s) => s.adminStore);
+  const hasPermission = useAdminAuthStore((s) => s.hasPermission);
   const [expandedGroups, setExpandedGroups] = useState<Record<string, boolean>>({
-    Catalog: true, Sales: true, Website: true, Operations: false,
+    Catalog: true, Sales: true, Website: true, Operations: false, Settings: false,
   });
 
   const isActive = (href: string, exact?: boolean) => {
@@ -95,6 +105,13 @@ export function AdminSidebar({ collapsed, onToggle }: AdminSidebarProps) {
   const storeUrl = adminStore?.slug
     ? `${process.env['NEXT_PUBLIC_ROOT_DOMAIN'] ? `https://${adminStore.slug}.${process.env['NEXT_PUBLIC_ROOT_DOMAIN']}` : `http://${adminStore.slug}.localhost:3000`}`
     : null;
+
+  const visibleGroups = NAV_GROUPS.map((group) => ({
+    ...group,
+    items: group.items.filter(
+      (item) => !item.permission || hasPermission(item.permission),
+    ),
+  })).filter((group) => group.items.length > 0);
 
   return (
     <aside
@@ -128,7 +145,7 @@ export function AdminSidebar({ collapsed, onToggle }: AdminSidebarProps) {
 
       {/* Navigation */}
       <nav className="flex-1 overflow-y-auto py-3 px-2 space-y-0.5 scrollbar-thin scrollbar-track-transparent scrollbar-thumb-white/10">
-        {/* Dashboard */}
+        {/* Dashboard — always visible */}
         <Link
           href="/admin"
           title={collapsed ? 'Dashboard' : undefined}
@@ -142,8 +159,8 @@ export function AdminSidebar({ collapsed, onToggle }: AdminSidebarProps) {
           {!collapsed && <span className="truncate">Dashboard</span>}
         </Link>
 
-        {/* Grouped sections */}
-        {navGroups.map((group) => (
+        {/* Permission-filtered grouped sections */}
+        {visibleGroups.map((group) => (
           <div key={group.label} className="mt-2">
             {!collapsed && (
               <button
@@ -181,47 +198,28 @@ export function AdminSidebar({ collapsed, onToggle }: AdminSidebarProps) {
           </div>
         ))}
 
-        {/* Analytics */}
-        <div className="mt-2">
-          {!collapsed && (
-            <div className="px-3 py-1 mb-0.5 text-xs font-semibold text-slate-500 uppercase tracking-wider">
-              Analytics
-            </div>
-          )}
-          <Link
-            href="/admin/analytics"
-            title={collapsed ? 'Analytics' : undefined}
-            className={`flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium transition-all duration-150 group ${
-              isActive('/admin/analytics')
-                ? 'bg-primary text-primary-foreground shadow-lg shadow-black/20'
-                : 'text-slate-400 hover:text-white hover:bg-white/8'
-            } ${collapsed ? 'justify-center' : ''}`}
-          >
-            <BarChart2 className={`w-5 h-5 flex-shrink-0 ${isActive('/admin/analytics') ? 'text-primary-foreground opacity-90' : 'text-slate-500 group-hover:text-slate-300'}`} />
-            {!collapsed && <span className="truncate">Analytics</span>}
-          </Link>
-        </div>
-
-        {/* Settings */}
-        <div className="mt-2">
-          {!collapsed && (
-            <div className="px-3 py-1 mb-0.5 text-xs font-semibold text-slate-500 uppercase tracking-wider">
-              Settings
-            </div>
-          )}
-          <Link
-            href="/admin/settings/store"
-            title={collapsed ? 'Store Settings' : undefined}
-            className={`flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium transition-all duration-150 group ${
-              isActive('/admin/settings')
-                ? 'bg-primary text-primary-foreground shadow-lg shadow-black/20'
-                : 'text-slate-400 hover:text-white hover:bg-white/8'
-            } ${collapsed ? 'justify-center' : ''}`}
-          >
-            <Settings className={`w-5 h-5 flex-shrink-0 ${isActive('/admin/settings') ? 'text-primary-foreground opacity-90' : 'text-slate-500 group-hover:text-slate-300'}`} />
-            {!collapsed && <span className="truncate">Settings</span>}
-          </Link>
-        </div>
+        {/* Analytics — permission gated */}
+        {hasPermission('analytics.read') && (
+          <div className="mt-2">
+            {!collapsed && (
+              <div className="px-3 py-1 mb-0.5 text-xs font-semibold text-slate-500 uppercase tracking-wider">
+                Analytics
+              </div>
+            )}
+            <Link
+              href="/admin/analytics"
+              title={collapsed ? 'Analytics' : undefined}
+              className={`flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium transition-all duration-150 group ${
+                isActive('/admin/analytics')
+                  ? 'bg-primary text-primary-foreground shadow-lg shadow-black/20'
+                  : 'text-slate-400 hover:text-white hover:bg-white/8'
+              } ${collapsed ? 'justify-center' : ''}`}
+            >
+              <BarChart2 className={`w-5 h-5 flex-shrink-0 ${isActive('/admin/analytics') ? 'text-primary-foreground opacity-90' : 'text-slate-500 group-hover:text-slate-300'}`} />
+              {!collapsed && <span className="truncate">Analytics</span>}
+            </Link>
+          </div>
+        )}
       </nav>
 
       {/* View Store + Collapse */}

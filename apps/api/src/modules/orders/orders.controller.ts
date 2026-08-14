@@ -29,6 +29,7 @@ import { AssignDeliveryDto } from './dto/assign-delivery.dto';
 import { UpdateDeliveryStatusDto } from './dto/update-delivery-status.dto';
 import { CurrentUser } from '../../common/decorators/current-user.decorator';
 import { Roles } from '../../common/decorators/roles.decorator';
+import { RequirePermission } from '../../common/decorators/require-permission.decorator';
 import { type AuthUser } from '../../common/decorators/current-user.decorator';
 import { CurrentStoreId } from '../../common/decorators/current-store.decorator';
 
@@ -106,6 +107,7 @@ export class OrdersController {
 
   @Get('admin/orders')
   @Roles(Role.ADMIN)
+  @RequirePermission('orders.read')
   @ApiOperation({
     summary: 'Admin: list all orders with search, status filter, and date range',
   })
@@ -115,6 +117,7 @@ export class OrdersController {
 
   @Get('admin/orders/:id')
   @Roles(Role.ADMIN)
+  @RequirePermission('orders.read')
   @ApiOperation({ summary: 'Admin: get full order details including user info' })
   @ApiParam({ name: 'id', description: 'Order UUID', format: 'uuid' })
   adminGetOrder(@Param('id') id: string, @CurrentStoreId() storeId: string) {
@@ -123,6 +126,7 @@ export class OrdersController {
 
   @Patch('admin/orders/:id/status')
   @Roles(Role.ADMIN)
+  @RequirePermission('orders.update')
   @HttpCode(HttpStatus.OK)
   @ApiOperation({
     summary: 'Admin: update order status',
@@ -141,6 +145,7 @@ export class OrdersController {
 
   @Patch('admin/orders/:id/delivery')
   @Roles(Role.ADMIN)
+  @RequirePermission('orders.update')
   @HttpCode(HttpStatus.OK)
   @ApiOperation({
     summary: 'Admin: assign or update delivery details',

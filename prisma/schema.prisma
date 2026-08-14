@@ -24,8 +24,15 @@ enum Plan {
 enum StoreRole {
   OWNER
   ADMIN
+  MANAGER
   STAFF
   DELIVERY_AGENT
+}
+
+enum StoreUserStatus {
+  PENDING   // invitation sent, not yet accepted
+  ACTIVE    // active member
+  INACTIVE  // deactivated by owner
 }
 
 enum Role {
@@ -155,6 +162,7 @@ model Store {
   apiLogs        TenantApiLog[]
   subscription   StoreSubscription?
   onboarding     OnboardingState?
+  auditLogs      StoreAuditLog[]
 
   @@index([slug])
   @@index([customDomain])
@@ -164,18 +172,46 @@ model Store {
 
 // Store membership — users can belong to many stores with different roles
 model StoreUser {
-  id        String    @id @default(uuid())
-  storeId   String
-  userId    String
-  role      StoreRole @default(STAFF)
-  createdAt DateTime  @default(now())
+  id                String          @id @default(uuid())
+  storeId           String
+  userId            String
+  role              StoreRole       @default(STAFF)
+  status            StoreUserStatus @default(ACTIVE)
+  // Invitation fields — populated when member was invited by email
+  invitationEmail   String?
+  invitationToken   String?         @unique
+  invitationExpires DateTime?
+  invitedByUserId   String?
+  invitedAt         DateTime?
+  joinedAt          DateTime?
+  createdAt         DateTime        @default(now())
+  updatedAt         DateTime        @updatedAt
 
-  store Store @relation(fields: [storeId], references: [id], onDelete: Cascade)
-  user  User  @relation(fields: [userId], references: [id], onDelete: Cascade)
+  store     Store  @relation(fields: [storeId], references: [id], onDelete: Cascade)
+  user      User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+  invitedBy User?  @relation("InvitedStaffMembers", fields: [invitedByUserId], references: [id])
 
   @@unique([storeId, userId])
   @@index([storeId, role])
+  @@index([storeId, status])
   @@index([userId])
+  @@index([invitationToken])
+}
+
+// Audit log for important staff actions within a store
+model StoreAuditLog {
+  id           String   @id @default(uuid())
+  storeId      String
+  actorUserId  String
+  action       String   // e.g. INVITE_SENT, ROLE_CHANGED, MEMBER_REMOVED
+  targetUserId String?
+  metadata     Json?    // {oldRole, newRole, invitationEmail, etc.}
+  createdAt    DateTime @default(now())
+
+  store Store @relation(fields: [storeId], references: [id], onDelete: Cascade)
+
+  @@index([storeId, createdAt])
+  @@index([actorUserId])
 }
 
 // Per-store settings (replaces global SiteSetting for tenant-owned config)
@@ -308,8 +344,9 @@ model User {
   reviews       Review[]
   refreshTokens RefreshToken[]
   notifications Notification[]
-  deliveryAgent DeliveryAgent?
-  storeUsers    StoreUser[]
+  deliveryAgent        DeliveryAgent?
+  storeUsers           StoreUser[]
+  invitedStaffMembers  StoreUser[] @relation("InvitedStaffMembers")
 
   @@index([email, phone])
   @@index([role])

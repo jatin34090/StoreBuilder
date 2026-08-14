@@ -15,6 +15,7 @@ import { CreateCategoryDto } from './dto/create-category.dto';
 import { UpdateCategoryDto } from './dto/update-category.dto';
 import { Public } from '../../common/decorators/public.decorator';
 import { Roles } from '../../common/decorators/roles.decorator';
+import { RequirePermission } from '../../common/decorators/require-permission.decorator';
 import { CurrentStoreId } from '../../common/decorators/current-store.decorator';
 import { Role } from '@jewellery/types';
 
@@ -44,6 +45,7 @@ export class CategoriesController {
 
   @Get('admin/categories')
   @Roles(Role.ADMIN)
+  @RequirePermission('categories.read')
   @ApiBearerAuth('access-token')
   @ApiOperation({ summary: '[Admin] List all categories for this store' })
   adminListAll(@CurrentStoreId() storeId: string) {
@@ -52,6 +54,7 @@ export class CategoriesController {
 
   @Post('admin/categories')
   @Roles(Role.ADMIN)
+  @RequirePermission('categories.create')
   @ApiBearerAuth('access-token')
   @ApiOperation({ summary: '[Admin] Create a category in this store' })
   create(@Body() dto: CreateCategoryDto, @CurrentStoreId() storeId: string) {
@@ -60,6 +63,7 @@ export class CategoriesController {
 
   @Patch('admin/categories/:id')
   @Roles(Role.ADMIN)
+  @RequirePermission('categories.update')
   @ApiBearerAuth('access-token')
   @ApiOperation({ summary: '[Admin] Update a category (store-scoped)' })
   @ApiParam({ name: 'id', description: 'Category UUID' })
@@ -73,6 +77,7 @@ export class CategoriesController {
 
   @Delete('admin/categories/:id')
   @Roles(Role.ADMIN)
+  @RequirePermission('categories.delete')
   @ApiBearerAuth('access-token')
   @HttpCode(HttpStatus.OK)
   @ApiOperation({ summary: '[Admin] Delete a category (store-scoped)' })

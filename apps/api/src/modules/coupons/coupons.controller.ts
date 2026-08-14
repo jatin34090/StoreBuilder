@@ -16,6 +16,7 @@ import { CreateCouponDto } from './dto/create-coupon.dto';
 import { ValidateCouponDto } from './dto/validate-coupon.dto';
 import { QueryCouponsDto } from './dto/query-coupons.dto';
 import { Roles } from '../../common/decorators/roles.decorator';
+import { RequirePermission } from '../../common/decorators/require-permission.decorator';
 import { Role } from '@jewellery/types';
 import { CurrentStoreId } from '../../common/decorators/current-store.decorator';
 
@@ -38,6 +39,7 @@ export class CouponsController {
 
   @Get('admin/coupons')
   @Roles(Role.ADMIN)
+  @RequirePermission('coupons.read')
   @ApiBearerAuth('access-token')
   @ApiOperation({ summary: '[Admin] List all coupons with usage stats' })
   adminFindAll(@CurrentStoreId() storeId: string, @Query() query: QueryCouponsDto) {
@@ -46,6 +48,7 @@ export class CouponsController {
 
   @Post('admin/coupons')
   @Roles(Role.ADMIN)
+  @RequirePermission('coupons.create')
   @ApiBearerAuth('access-token')
   @ApiOperation({ summary: '[Admin] Create a new coupon code' })
   create(@Body() dto: CreateCouponDto, @CurrentStoreId() storeId: string) {
@@ -54,6 +57,7 @@ export class CouponsController {
 
   @Patch('admin/coupons/:id')
   @Roles(Role.ADMIN)
+  @RequirePermission('coupons.update')
   @ApiBearerAuth('access-token')
   @ApiOperation({ summary: '[Admin] Update coupon (value, expiry, status, etc.)' })
   @ApiParam({ name: 'id', description: 'Coupon UUID' })

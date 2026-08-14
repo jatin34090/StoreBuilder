@@ -21,7 +21,10 @@ import { QueryStoresDto } from './dto/query-stores.dto';
 import { UpsertSettingDto } from './dto/upsert-setting.dto';
 import { Roles } from '../../common/decorators/roles.decorator';
 import { CurrentStoreId } from '../../common/decorators/current-store.decorator';
+import { CurrentUser, type AuthUser } from '../../common/decorators/current-user.decorator';
 import { Role } from '@jewellery/types';
+import { SetMetadata } from '@nestjs/common';
+import { SKIP_TENANT_RATE_LIMIT } from '../../common/guards/tenant-rate-limit.guard';
 
 // ─── Super Admin Routes (/super-admin/stores) ─────────────────────────────────
 
@@ -110,34 +113,46 @@ export class SuperAdminStoresController {
 }
 
 // ─── Admin Routes (/admin/store) — store owner manages their own store ─────────
+// All methods use @CurrentUser() to derive storeId from the JWT directly.
+// SKIP_TENANT_RATE_LIMIT is set at the class level so the guard does not check
+// x-store-slug ownership for these endpoints (storeId comes from JWT, not header).
 
 @ApiTags('Admin — Store Management')
 @ApiBearerAuth('access-token')
+@SetMetadata(SKIP_TENANT_RATE_LIMIT, true)
 @Controller('admin/store')
 export class AdminStoreController {
   constructor(private readonly storesService: StoresService) {}
 
   @Get()
   @Roles(Role.ADMIN)
-  @ApiOperation({ summary: 'Get the current store details' })
-  getMyStore(@CurrentStoreId() storeId: string) {
-    return this.storesService.findOne(storeId);
+  @ApiOperation({ summary: 'Get own store details (resolved from JWT storeId)' })
+  getMyStore(@CurrentUser() user: AuthUser) {
+    return this.storesService.findOne(user.storeId!);
   }
 
   @Patch()
   @Roles(Role.ADMIN)
-  @ApiOperation({ summary: 'Update store branding (name, logo, favicon, custom domain)' })
-  updateMyStore(@CurrentStoreId() storeId: string, @Body() dto: UpdateStoreDto) {
-    // Strip plan/isActive — only super admin can change those
+  @ApiOperation({ summary: 'Update store business info and branding' })
+  updateMyStore(@CurrentUser() user: AuthUser, @Body() dto: UpdateStoreDto) {
+    // Strip plan/isActive/status — only super admin can change those
     const { plan: _p, isActive: _a, ...safeDto } = dto;
-    return this.storesService.update(storeId, safeDto);
+    return this.storesService.update(user.storeId!, safeDto);
+  }
+
+  @Patch('launch')
+  @Roles(Role.ADMIN)
+  @HttpCode(HttpStatus.OK)
+  @ApiOperation({ summary: 'Launch store (SETUP/DRAFT → ACTIVE)' })
+  launchStore(@CurrentUser() user: AuthUser) {
+    return this.storesService.launch(user.storeId!);
   }
 
   @Get('usage')
   @Roles(Role.ADMIN)
   @ApiOperation({ summary: 'View your plan usage vs limits' })
-  getUsage(@CurrentStoreId() storeId: string) {
-    return this.storesService.getUsage(storeId);
+  getUsage(@CurrentUser() user: AuthUser) {
+    return this.storesService.getUsage(user.storeId!);
   }
 
   // ─── Settings ───────────────────────────────────────────────────────────
@@ -145,15 +160,15 @@ export class AdminStoreController {
   @Get('settings')
   @Roles(Role.ADMIN)
   @ApiOperation({ summary: 'Get all store settings as a key-value map' })
-  getSettings(@CurrentStoreId() storeId: string) {
-    return this.storesService.getSettings(storeId);
+  getSettings(@CurrentUser() user: AuthUser) {
+    return this.storesService.getSettings(user.storeId!);
   }
 
   @Post('settings')
   @Roles(Role.ADMIN)
   @ApiOperation({ summary: 'Create or update a store setting' })
-  upsertSetting(@CurrentStoreId() storeId: string, @Body() dto: UpsertSettingDto) {
-    return this.storesService.upsertSetting(storeId, dto);
+  upsertSetting(@CurrentUser() user: AuthUser, @Body() dto: UpsertSettingDto) {
+    return this.storesService.upsertSetting(user.storeId!, dto);
   }
 
   @Delete('settings/:key')
@@ -161,8 +176,8 @@ export class AdminStoreController {
   @HttpCode(HttpStatus.OK)
   @ApiOperation({ summary: 'Delete a store setting by key' })
   @ApiParam({ name: 'key', description: 'Setting key' })
-  deleteSetting(@CurrentStoreId() storeId: string, @Param('key') key: string) {
-    return this.storesService.deleteSetting(storeId, key);
+  deleteSetting(@CurrentUser() user: AuthUser, @Param('key') key: string) {
+    return this.storesService.deleteSetting(user.storeId!, key);
   }
 
   // ─── Team Members ────────────────────────────────────────────────────────
@@ -170,19 +185,19 @@ export class AdminStoreController {
   @Get('members')
   @Roles(Role.ADMIN)
   @ApiOperation({ summary: 'List all staff members of this store' })
-  listMembers(@CurrentStoreId() storeId: string) {
-    return this.storesService.listMembers(storeId);
+  listMembers(@CurrentUser() user: AuthUser) {
+    return this.storesService.listMembers(user.storeId!);
   }
 
   @Post('members')
   @Roles(Role.ADMIN)
   @ApiOperation({ summary: 'Add a user as a staff member' })
   addMember(
-    @CurrentStoreId() storeId: string,
+    @CurrentUser() user: AuthUser,
     @Body('userId') userId: string,
     @Body('role') role: StoreRole,
   ) {
-    return this.storesService.addMember(storeId, userId, role ?? StoreRole.STAFF);
+    return this.storesService.addMember(user.storeId!, userId, role ?? StoreRole.STAFF);
   }
 
   @Patch('members/:userId/role')
@@ -190,11 +205,11 @@ export class AdminStoreController {
   @ApiOperation({ summary: 'Change a member role' })
   @ApiParam({ name: 'userId', description: 'User UUID' })
   updateMemberRole(
-    @CurrentStoreId() storeId: string,
+    @CurrentUser() user: AuthUser,
     @Param('userId') userId: string,
     @Body('role') role: StoreRole,
   ) {
-    return this.storesService.updateMemberRole(storeId, userId, role);
+    return this.storesService.updateMemberRole(user.storeId!, userId, role);
   }
 
   @Delete('members/:userId')
@@ -202,8 +217,8 @@ export class AdminStoreController {
   @HttpCode(HttpStatus.OK)
   @ApiOperation({ summary: 'Remove a staff member from this store' })
   @ApiParam({ name: 'userId', description: 'User UUID' })
-  removeMember(@CurrentStoreId() storeId: string, @Param('userId') userId: string) {
-    return this.storesService.removeMember(storeId, userId);
+  removeMember(@CurrentUser() user: AuthUser, @Param('userId') userId: string) {
+    return this.storesService.removeMember(user.storeId!, userId);
   }
 }
 

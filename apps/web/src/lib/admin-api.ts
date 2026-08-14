@@ -541,6 +541,49 @@ export const adminSearchApi = {
   reindex: () => api.post('/admin/search/reindex'),
 };
 
+// ─── Store (own store management) ─────────────────────────────────────────────
+
+export interface StoreDetail {
+  id: string;
+  name: string;
+  slug: string;
+  status: string;
+  plan: string;
+  businessName?: string | null;
+  industry?: string | null;
+  description?: string | null;
+  contactEmail?: string | null;
+  phone?: string | null;
+  address?: string | null;
+  country?: string;
+  currency?: string;
+  timezone?: string;
+  logoUrl?: string | null;
+  faviconUrl?: string | null;
+  customDomain?: string | null;
+  isActive: boolean;
+  _count?: { products?: number; orders?: number };
+  quota?: { productCount: number; orderCount: number; storageBytes: string };
+}
+
+export interface OnboardingProgress {
+  steps: Array<{ key: string; label: string; done: boolean }>;
+  percent: number;
+}
+
+export const adminStoreApi = {
+  get: (): Promise<StoreDetail> =>
+    unwrap<StoreDetail>(api.get('/admin/store')),
+  update: (data: Partial<StoreDetail>): Promise<StoreDetail> =>
+    unwrap<StoreDetail>(api.patch('/admin/store', data)),
+  launch: (): Promise<{ success: boolean; message: string; slug: string }> =>
+    unwrap(api.patch('/admin/store/launch')),
+  usage: () =>
+    unwrap<unknown>(api.get('/admin/store/usage')),
+  onboardingProgress: (): Promise<OnboardingProgress> =>
+    unwrap<OnboardingProgress>(api.get('/onboarding/progress')),
+};
+
 // ─── Unified adminApi object ──────────────────────────────────────────────────
 
 const adminRemittancesApi = {
@@ -560,18 +603,19 @@ const adminSettingsApi = {
 };
 
 export const adminApi = {
-  analytics:   adminAnalyticsApi,
-  products:    adminProductsApi,
-  categories:  adminCategoriesApi,
-  orders:      adminOrdersApi,
-  users:       adminUsersApi,
-  inventory:   adminInventoryApi,
-  coupons:     adminCouponsApi,
+  analytics:     adminAnalyticsApi,
+  products:      adminProductsApi,
+  categories:    adminCategoriesApi,
+  orders:        adminOrdersApi,
+  users:         adminUsersApi,
+  inventory:     adminInventoryApi,
+  coupons:       adminCouponsApi,
   notifications: adminNotificationsApi,
-  delivery:    adminDeliveryApi,
-  payments:    adminPaymentsApi,
-  reviews:     adminReviewsApi,
-  search:      adminSearchApi,
-  remittances: adminRemittancesApi,
-  settings:    adminSettingsApi,
+  delivery:      adminDeliveryApi,
+  payments:      adminPaymentsApi,
+  reviews:       adminReviewsApi,
+  search:        adminSearchApi,
+  remittances:   adminRemittancesApi,
+  settings:      adminSettingsApi,
+  store:         adminStoreApi,
 };

@@ -1,15 +1,15 @@
-﻿'use client';
+'use client';
 
+import { useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import dynamic from 'next/dynamic';
-import { TrendingUp, TrendingDown, ShoppingBag, Users, AlertTriangle, IndianRupee } from 'lucide-react';
+import { TrendingUp, TrendingDown, ShoppingBag, Users, AlertTriangle, IndianRupee, Package } from 'lucide-react';
 import { Card, CardContent, CardHeader, CardTitle } from '../../../components/ui/card';
 import { Badge } from '../../../components/ui/badge';
 import { KpiCardSkeleton } from '../../../components/admin/LoadingSkeleton';
 import { adminAnalyticsApi } from '../../../lib/admin-api';
+import { useAdminAuthStore } from '../../../store/adminAuthStore';
 
-// All heavy widgets are lazy-loaded — page shell compiles in ~2s,
-// charts/tables compile asynchronously after first paint.
 const RevenueTrendChart = dynamic(
   () => import('../../../components/admin/DashboardCharts').then((m) => ({ default: m.RevenueTrendChart })),
   { ssr: false, loading: () => <div className="h-64 w-full rounded-lg bg-slate-100 animate-pulse" /> },
@@ -27,7 +27,59 @@ const LowStockTable = dynamic(
   { ssr: false, loading: () => <div className="h-64 w-full rounded-lg bg-slate-100 animate-pulse" /> },
 );
 
-// ─── KPI Card ────────────────────────────────────────────────────────────────
+// ─── Date Range ───────────────────────────────────────────────────────────────
+
+type DateRangeKey = 'today' | 'yesterday' | '7d' | '30d' | 'month' | 'last_month';
+
+interface DateRange { from: string; to: string; label: string }
+
+function getDateRange(key: DateRangeKey): DateRange {
+  const now  = new Date();
+  const pad  = (n: number) => String(n).padStart(2, '0');
+  const fmt  = (d: Date)   => `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
+
+  const today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+
+  switch (key) {
+    case 'today': {
+      const s = fmt(today);
+      return { from: s, to: s, label: 'Today' };
+    }
+    case 'yesterday': {
+      const d = new Date(today); d.setDate(d.getDate() - 1);
+      const s = fmt(d);
+      return { from: s, to: s, label: 'Yesterday' };
+    }
+    case '7d': {
+      const d = new Date(today); d.setDate(d.getDate() - 6);
+      return { from: fmt(d), to: fmt(today), label: 'Last 7 days' };
+    }
+    case '30d': {
+      const d = new Date(today); d.setDate(d.getDate() - 29);
+      return { from: fmt(d), to: fmt(today), label: 'Last 30 days' };
+    }
+    case 'month': {
+      const d = new Date(today.getFullYear(), today.getMonth(), 1);
+      return { from: fmt(d), to: fmt(today), label: 'This month' };
+    }
+    case 'last_month': {
+      const first = new Date(today.getFullYear(), today.getMonth() - 1, 1);
+      const last  = new Date(today.getFullYear(), today.getMonth(), 0);
+      return { from: fmt(first), to: fmt(last), label: 'Last month' };
+    }
+  }
+}
+
+const DATE_OPTIONS: { key: DateRangeKey; label: string }[] = [
+  { key: 'today',      label: 'Today' },
+  { key: 'yesterday',  label: 'Yesterday' },
+  { key: '7d',         label: 'Last 7 days' },
+  { key: '30d',        label: 'Last 30 days' },
+  { key: 'month',      label: 'This month' },
+  { key: 'last_month', label: 'Last month' },
+];
+
+// ─── KPI Card ─────────────────────────────────────────────────────────────────
 
 interface KpiCardProps {
   title: string;
@@ -53,13 +105,11 @@ function KpiCard({ title, value, change, icon, iconBg, badge }: KpiCardProps) {
         <p className="text-2xl font-bold text-slate-900 mb-1">{value}</p>
         {change !== undefined && (
           <div className="flex items-center gap-1">
-            {isPositive ? (
-              <TrendingUp className="w-3.5 h-3.5 text-green-500" />
-            ) : (
-              <TrendingDown className="w-3.5 h-3.5 text-red-500" />
-            )}
+            {isPositive
+              ? <TrendingUp className="w-3.5 h-3.5 text-green-500" />
+              : <TrendingDown className="w-3.5 h-3.5 text-red-500" />}
             <span className={`text-xs font-medium ${isPositive ? 'text-green-600' : 'text-red-600'}`}>
-              {isPositive ? '+' : ''}{change.toFixed(1)}% from last month
+              {isPositive ? '+' : ''}{change.toFixed(1)}% vs prior period
             </span>
           </div>
         )}
@@ -70,30 +120,65 @@ function KpiCard({ title, value, change, icon, iconBg, badge }: KpiCardProps) {
 
 function formatCurrency(value: number) {
   if (value >= 100_000) return `₹${(value / 100_000).toFixed(1)}L`;
-  if (value >= 1_000) return `₹${(value / 1_000).toFixed(1)}K`;
+  if (value >= 1_000)   return `₹${(value / 1_000).toFixed(1)}K`;
   return `₹${value.toFixed(0)}`;
 }
 
 // ─── Dashboard Page ───────────────────────────────────────────────────────────
 
 export default function AdminDashboardPage() {
+  const [rangeKey, setRangeKey] = useState<DateRangeKey>('30d');
+  const range = getDateRange(rangeKey);
+
+  // Include store slug in query keys so each tenant gets its own cache entry
+  const adminStore = useAdminAuthStore((s) => s.adminStore);
+  const storeSlug  = adminStore?.slug ?? 'unknown';
+
   const { data: overview, isLoading: overviewLoading } = useQuery({
-    queryKey: ['admin', 'analytics', 'overview'],
-    queryFn: () => adminAnalyticsApi.overview(),
+    queryKey: ['admin', storeSlug, 'analytics', 'overview', range.from, range.to],
+    queryFn:  () => adminAnalyticsApi.overview(),
+    enabled:  !!adminStore,
   });
 
   const { data: trend, isLoading: salesLoading } = useQuery({
-    queryKey: ['admin', 'analytics', 'sales-trend'],
-    queryFn: () => adminAnalyticsApi.salesTrend({ granularity: 'day' }),
+    queryKey: ['admin', storeSlug, 'analytics', 'sales-trend', range.from, range.to],
+    queryFn:  () => adminAnalyticsApi.salesTrend({ from: range.from, to: range.to, granularity: 'day' }),
+    enabled:  !!adminStore,
   });
 
   const { data: statuses, isLoading: statusLoading } = useQuery({
-    queryKey: ['admin', 'analytics', 'order-status'],
-    queryFn: () => adminAnalyticsApi.orderStatus(),
+    queryKey: ['admin', storeSlug, 'analytics', 'order-status', range.from, range.to],
+    queryFn:  () => adminAnalyticsApi.orderStatus(),
+    enabled:  !!adminStore,
   });
 
   return (
     <div className="space-y-6">
+      {/* Header row with date filter */}
+      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
+        <div>
+          <h1 className="text-xl font-bold text-slate-900">
+            {adminStore?.businessName ?? adminStore?.name ?? 'Dashboard'}
+          </h1>
+          <p className="text-sm text-slate-500 mt-0.5">Store overview · {range.label}</p>
+        </div>
+        <div className="flex flex-wrap gap-1.5">
+          {DATE_OPTIONS.map(({ key, label }) => (
+            <button
+              key={key}
+              onClick={() => setRangeKey(key)}
+              className={`px-3 py-1.5 rounded-lg text-xs font-medium transition-colors ${
+                rangeKey === key
+                  ? 'bg-primary text-primary-foreground shadow-sm'
+                  : 'bg-white border border-slate-200 text-slate-600 hover:bg-slate-50'
+              }`}
+            >
+              {label}
+            </button>
+          ))}
+        </div>
+      </div>
+
       {/* KPI Cards */}
       <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-4">
         {overviewLoading ? (
@@ -115,24 +200,17 @@ export default function AdminDashboardPage() {
               icon={<ShoppingBag className="w-5 h-5 text-blue-600" />}
             />
             <KpiCard
-              title="Total Customers"
+              title="Customers"
               value={(overview?.totalCustomers ?? 0).toLocaleString()}
               change={overview?.customersChange}
               iconBg="bg-green-100"
               icon={<Users className="w-5 h-5 text-green-600" />}
             />
             <KpiCard
-              title="Low Stock Items"
+              title="Active Products"
               value={(overview?.activeProducts ?? 0).toString()}
-              iconBg="bg-red-100"
-              icon={<AlertTriangle className="w-5 h-5 text-red-500" />}
-              badge={
-                (overview?.activeProducts ?? 0) > 0 ? (
-                  <Badge className="bg-red-100 text-red-700 border-0 text-xs px-1.5 py-0">
-                    Action needed
-                  </Badge>
-                ) : undefined
-              }
+              iconBg="bg-violet-100"
+              icon={<Package className="w-5 h-5 text-violet-600" />}
             />
           </>
         )}
@@ -143,7 +221,7 @@ export default function AdminDashboardPage() {
         <Card className="lg:col-span-2 border-0 shadow-sm bg-white">
           <CardHeader className="pb-2">
             <CardTitle className="text-base font-semibold text-slate-800">
-              Revenue Trend (Last 30 Days)
+              Revenue Trend · {range.label}
             </CardTitle>
           </CardHeader>
           <CardContent>
@@ -161,7 +239,7 @@ export default function AdminDashboardPage() {
         </Card>
       </div>
 
-      {/* Tables row — lazy-loaded so initial compile only covers the shell above */}
+      {/* Tables row */}
       <div className="grid grid-cols-1 xl:grid-cols-2 gap-6">
         <RecentOrdersTable />
         <LowStockTable />
@@ -169,4 +247,3 @@ export default function AdminDashboardPage() {
     </div>
   );
 }
-

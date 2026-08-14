@@ -6,12 +6,12 @@ import { useAdminAuthStore } from '../../../store/adminAuthStore';
 import { AdminSidebar } from '../../../components/admin/AdminSidebar';
 import { AdminTopbar } from '../../../components/admin/AdminTopbar';
 import { Sheet, SheetContent } from '../../../components/ui/sheet';
-import { api } from '../../../lib/api';
+import { api, setAdminStoreSlug } from '../../../lib/api';
 
 export default function AdminLayout({ children }: { children: React.ReactNode }) {
   const router = useRouter();
   const pathname = usePathname();
-  const { isAdminAuthenticated, clearAdminAuth } = useAdminAuthStore();
+  const { isAdminAuthenticated, setAdminAuth, setAdminStore, clearAdminAuth } = useAdminAuthStore();
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
   const [mobileOpen, setMobileOpen] = useState(false);
   const [verified, setVerified] = useState(false);
@@ -24,31 +24,68 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
       return;
     }
 
-    // Verify the current cookie actually belongs to an ADMIN — Zustand state
-    // can be stale if the user logged in as a customer in another tab.
+    // 1. Verify the JWT belongs to an ADMIN role
     api.get('/users/me')
-      .then((res) => {
+      .then(async (res) => {
         const user = res.data?.data ?? res.data;
         if (user?.role !== 'ADMIN') {
           clearAdminAuth();
           router.replace('/admin/login');
-        } else {
-          setVerified(true);
+          return;
         }
+
+        setAdminAuth({
+          id:     user.id,
+          name:   user.name,
+          email:  user.email,
+          role:   'ADMIN',
+          avatar: user.avatar ?? undefined,
+        });
+
+        // 2. Bootstrap store context from JWT storeId (no x-store-slug needed here;
+        //    AdminStoreController falls back to user.storeId from the JWT).
+        if (user.storeId) {
+          try {
+            const storeRes = await api.get('/admin/store');
+            const store = storeRes.data?.data ?? storeRes.data;
+            if (store?.slug) {
+              setAdminStore({
+                id:          store.id,
+                name:        store.name,
+                slug:        store.slug,
+                status:      store.status,
+                plan:        store.plan,
+                businessName: store.businessName ?? null,
+                industry:    store.industry ?? null,
+                logoUrl:     store.logoUrl ?? null,
+              });
+              // From this point, all /admin/* API calls include x-store-slug
+              setAdminStoreSlug(store.slug);
+            }
+          } catch {
+            // Store fetch failed — still allow layout to render (user may not have a store yet)
+          }
+        }
+
+        setVerified(true);
       })
       .catch(() => {
         clearAdminAuth();
         router.replace('/admin/login');
       });
-  }, [isLoginPage, clearAdminAuth, router]);
+  }, [isLoginPage, clearAdminAuth, setAdminAuth, setAdminStore, router]);
 
+  // Re-sync the module-level slug whenever the adminStore changes in Zustand
+  // (e.g. after a store settings update that changes the slug).
+  const adminStore = useAdminAuthStore((s) => s.adminStore);
+  useEffect(() => {
+    if (adminStore?.slug) setAdminStoreSlug(adminStore.slug);
+  }, [adminStore?.slug]);
 
-  // Login page: render without admin chrome
   if (isLoginPage) {
     return <>{children}</>;
   }
 
-  // Show spinner while verifying the JWT role against the API
   if (!verified) {
     return (
       <div className="min-h-screen bg-slate-50 flex items-center justify-center">
@@ -60,9 +97,7 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
     );
   }
 
-  if (!isAdminAuthenticated) {
-    return null;
-  }
+  if (!isAdminAuthenticated) return null;
 
   return (
     <div className="min-h-screen bg-slate-50">
@@ -82,11 +117,7 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
       </Sheet>
 
       {/* Main content area */}
-      <div
-        className={`transition-all duration-300 ${
-          sidebarCollapsed ? 'lg:ml-16' : 'lg:ml-64'
-        }`}
-      >
+      <div className={`transition-all duration-300 ${sidebarCollapsed ? 'lg:ml-16' : 'lg:ml-64'}`}>
         <AdminTopbar onMobileMenuToggle={() => setMobileOpen(true)} />
         <main className="p-4 sm:p-6 min-h-[calc(100vh-4rem)] scrollbar-thin">{children}</main>
       </div>

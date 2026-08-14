@@ -108,11 +108,20 @@ enum RemittanceStatus {
 enum SubscriptionStatus {
   CREATED
   AUTHENTICATED
+  TRIALING
   ACTIVE
+  PAST_DUE
   PAUSED
   CANCELLED
   COMPLETED
   EXPIRED
+}
+
+enum InvoiceStatus {
+  PENDING
+  PAID
+  FAILED
+  VOID
 }
 
 enum StoreStatus {
@@ -161,6 +170,7 @@ model Store {
   quota          StoreQuotaUsage?
   apiLogs        TenantApiLog[]
   subscription   StoreSubscription?
+  invoices       Invoice[]
   onboarding     OnboardingState?
   auditLogs      StoreAuditLog[]
 
@@ -230,13 +240,25 @@ model StoreSetting {
 // ─── 2. Plan Limits (configurable by super-admin) ────────────────────────────
 
 model PlanLimit {
-  plan           Plan @id
-  maxProducts    Int  @default(100)
-  maxStaff       Int  @default(3)
-  maxStorageGB   Int  @default(5)
-  maxApiPerDay   Int  @default(10000)
-  maxApiPerMonth Int  @default(200000)
-  maxOrders      Int? // null = unlimited
+  plan           Plan    @id
+  maxProducts    Int     @default(100)
+  maxStaff       Int     @default(3)
+  maxStorageGB   Int     @default(5)
+  maxApiPerDay   Int     @default(10000)
+  maxApiPerMonth Int     @default(200000)
+  maxOrders      Int?    // null = unlimited
+  // Billing / display fields (editable by Super Admin)
+  priceMonthly   Int     @default(0)   // in paise (₹0 = FREE)
+  priceYearly    Int     @default(0)   // in paise
+  currency       String  @default("INR")
+  displayName    String  @default("")  // "Free", "Starter", etc.
+  description    String?
+  features       Json    @default("[]") // string[] of feature slugs
+  isActive       Boolean @default(true)
+  sortOrder      Int     @default(0)
+  trialDays      Int     @default(0)   // 0 = no trial
+  taxRatePct     Int     @default(18)  // GST % — Super Admin configurable
+  updatedAt      DateTime @updatedAt
 }
 
 // ─── 3. Store Subscription (Razorpay SaaS billing) ───────────────────────────
@@ -249,17 +271,23 @@ model StoreSubscription {
   razorpayPlanId         String?                     // plan_xxx (null for FREE plan)
   plan                   Plan
   status                 SubscriptionStatus @default(CREATED)
+  billingCycle           String             @default("MONTHLY") // "MONTHLY" | "YEARLY"
   currentPeriodStart     DateTime?
   currentPeriodEnd       DateTime?
+  trialStart             DateTime?
+  trialEnd               DateTime?
   cancelAtPeriodEnd      Boolean            @default(false)
+  cancelledAt            DateTime?
   chargeAt               DateTime?          // next billing date from Razorpay
   createdAt              DateTime           @default(now())
   updatedAt              DateTime           @updatedAt
 
-  store Store @relation(fields: [storeId], references: [id], onDelete: Cascade)
+  store    Store     @relation(fields: [storeId], references: [id], onDelete: Cascade)
+  invoices Invoice[]
 
   @@index([razorpaySubId])
   @@index([storeId, status])
+  @@index([status, trialEnd])  // for cron: find expiring trials
 }
 
 // ─── 4. Per-Tenant Quota Usage (counters updated in real-time) ───────────────
@@ -277,6 +305,61 @@ model StoreQuotaUsage {
   updatedAt      DateTime @updatedAt
 
   store Store @relation(fields: [storeId], references: [id], onDelete: Cascade)
+}
+
+// ─── 5. Invoices (immutable billing records) ─────────────────────────────────
+
+model Invoice {
+  id                 String        @id @default(uuid())
+  invoiceNumber      String        @unique // INV-2026-000001
+  storeId            String
+  subscriptionId     String?
+  plan               Plan
+  planSnapshot       Json          @default("{}") // plan config at time of invoice
+  amount             Int           @default(0)    // total in paise
+  tax                Int           @default(0)    // tax in paise
+  currency           String        @default("INR")
+  status             InvoiceStatus @default(PENDING)
+  billingPeriodStart DateTime?
+  billingPeriodEnd   DateTime?
+  providerInvoiceId  String?       @unique
+  issuedAt           DateTime      @default(now())
+  paidAt             DateTime?
+
+  store        Store              @relation(fields: [storeId], references: [id], onDelete: Cascade)
+  subscription StoreSubscription? @relation(fields: [subscriptionId], references: [id])
+
+  @@index([storeId, issuedAt])
+  @@index([subscriptionId])
+}
+
+// ─── 6. Webhook Event (idempotency log) ──────────────────────────────────────
+
+model WebhookEvent {
+  id          String   @id @default(uuid())
+  provider    String   // "razorpay"
+  eventId     String   // provider-supplied event/payment ID
+  eventType   String   // "subscription.charged" etc.
+  payload     Json     @default("{}")
+  processedAt DateTime @default(now())
+
+  @@unique([provider, eventId])
+  @@index([provider, processedAt])
+}
+
+// ─── 7. Billing Audit Log ────────────────────────────────────────────────────
+
+model BillingAuditLog {
+  id        String   @id @default(uuid())
+  storeId   String?
+  actorId   String?  // null = system/webhook
+  action    String   // "plan.upgraded", "trial.started", "subscription.cancelled", …
+  oldValue  Json?
+  newValue  Json?
+  metadata  Json?
+  createdAt DateTime @default(now())
+
+  @@index([storeId, createdAt])
 }
 
 // Tenant API request log (for billing / monitoring — rolling 30-day window)

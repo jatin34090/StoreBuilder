@@ -66,8 +66,9 @@ const NAV_GROUPS: NavGroup[] = [
   {
     label: 'Settings',
     items: [
-      { href: '/admin/settings/store',  label: 'Store Settings', icon: Settings },
-      { href: '/admin/settings/staff',  label: 'Staff',          icon: UserCheck, permission: 'staff.read' },
+      { href: '/admin/settings/store',         label: 'Store Settings', icon: Settings },
+      { href: '/admin/settings/staff',         label: 'Staff',          icon: UserCheck,  permission: 'staff.read' },
+      { href: '/admin/settings/subscription',  label: 'Subscription',   icon: CreditCard, permission: 'subscription.read' },
     ],
   },
 ];

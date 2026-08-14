@@ -7,7 +7,9 @@ import {
 import { Plan, StoreRole, StoreStatus } from '@prisma/client';
 import { PrismaService } from '../../prisma/prisma.service';
 import { TenantService } from '../tenant/tenant.service';
+import { BillingService } from '../billing/billing.service';
 import { getTemplate } from './industry-templates';
+import { DEFAULT_PLAN_LIMITS, DEFAULT_PLAN_DISPLAY } from '../../common/constants/plan-config';
 
 export interface ProvisionStoreInput {
   name: string;
@@ -34,15 +36,6 @@ export interface ProvisionedStore {
   plan: Plan;
 }
 
-const DEFAULT_PLAN_LIMITS: Record<Plan, {
-  maxProducts: number; maxOrders: number | null; maxStorageGB: number;
-  maxStaff: number; maxApiPerDay: number; maxApiPerMonth: number;
-}> = {
-  FREE:         { maxProducts: 50,    maxOrders: 100,   maxStorageGB: 1,   maxStaff: 2,  maxApiPerDay: 1000,   maxApiPerMonth: 20000 },
-  STARTER:      { maxProducts: 500,   maxOrders: 1000,  maxStorageGB: 10,  maxStaff: 5,  maxApiPerDay: 5000,   maxApiPerMonth: 100000 },
-  PROFESSIONAL: { maxProducts: 5000,  maxOrders: 10000, maxStorageGB: 100, maxStaff: 20, maxApiPerDay: 20000,  maxApiPerMonth: 500000 },
-  ENTERPRISE:   { maxProducts: -1,    maxOrders: null,  maxStorageGB: 500, maxStaff: -1, maxApiPerDay: 100000, maxApiPerMonth: 2000000 },
-};
 
 @Injectable()
 export class StoreProvisioningService {
@@ -51,6 +44,7 @@ export class StoreProvisioningService {
   constructor(
     private readonly prisma: PrismaService,
     private readonly tenant: TenantService,
+    private readonly billing: BillingService,
   ) {}
 
   async provision(input: ProvisionStoreInput): Promise<ProvisionedStore> {
@@ -115,21 +109,7 @@ export class StoreProvisioningService {
         data: { storeId: created.id, userId: input.ownerUserId, role: StoreRole.OWNER },
       });
 
-      // 3. Subscription (FREE plan — no Razorpay needed)
-      await tx.storeSubscription.create({
-        data: {
-          storeId:           created.id,
-          plan,
-          status:            'ACTIVE',
-          razorpaySubId:     null,
-          razorpayCustomerId: null,
-          razorpayPlanId:    null,
-          currentPeriodStart: new Date(),
-          currentPeriodEnd:   null,
-        },
-      });
-
-      // 4. Usage counters
+      // 3. Usage counters
       await tx.storeQuotaUsage.create({
         data: {
           storeId:      created.id,
@@ -165,17 +145,32 @@ export class StoreProvisioningService {
         },
       });
 
-      // 8. Seed plan limits if missing
+      // 8. Seed plan limits if missing (centralized defaults)
+      const display = DEFAULT_PLAN_DISPLAY[plan];
       await tx.planLimit.upsert({
         where:  { plan },
         update: {},
-        create: { plan, ...DEFAULT_PLAN_LIMITS[plan] },
+        create: {
+          plan,
+          ...DEFAULT_PLAN_LIMITS[plan],
+          displayName:  display.name,
+          description:  display.description,
+          priceMonthly: display.priceMonthly,
+          priceYearly:  display.priceYearly,
+          trialDays:    display.trialDays,
+          sortOrder:    display.sortOrder,
+          features:     display.features as unknown as object[],
+          isActive:     true,
+        },
       });
 
       return created;
     });
 
-    // 9. Industry categories (outside transaction — non-critical, can be added later)
+    // 9. Initialize subscription (handles FREE/trial logic via BillingService)
+    await this.billing.initStoreSubscription(store.id, plan);
+
+    // 10. Industry categories (outside transaction — non-critical)
     if (template.categories.length > 0) {
       await this.seedCategories(store.id, template.categories);
     }

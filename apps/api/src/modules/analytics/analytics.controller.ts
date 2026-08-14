@@ -4,12 +4,14 @@ import { Role } from '@prisma/client';
 import { AnalyticsService } from './analytics.service';
 import { AnalyticsQueryDto } from './dto/analytics-query.dto';
 import { Roles } from '../../common/decorators/roles.decorator';
+import { RequirePermission } from '../../common/decorators/require-permission.decorator';
 import { CurrentStoreId } from '../../common/decorators/current-store.decorator';
 import { RateCategory } from '../../common/decorators/rate-category.decorator';
 
 @ApiTags('Analytics')
 @ApiBearerAuth('access-token')
 @Roles(Role.ADMIN)
+@RequirePermission('analytics.read')
 @RateCategory('analytics')
 @Controller('admin/analytics')
 export class AnalyticsController {

@@ -22,9 +22,11 @@ import { UpsertSettingDto } from './dto/upsert-setting.dto';
 import { Roles } from '../../common/decorators/roles.decorator';
 import { CurrentStoreId } from '../../common/decorators/current-store.decorator';
 import { CurrentUser, type AuthUser } from '../../common/decorators/current-user.decorator';
+import { RequirePermission } from '../../common/decorators/require-permission.decorator';
 import { Role } from '@jewellery/types';
 import { SetMetadata } from '@nestjs/common';
 import { SKIP_TENANT_RATE_LIMIT } from '../../common/guards/tenant-rate-limit.guard';
+import { InviteStaffDto } from './dto/invite-staff.dto';
 
 // ─── Super Admin Routes (/super-admin/stores) ─────────────────────────────────
 
@@ -180,28 +182,46 @@ export class AdminStoreController {
     return this.storesService.deleteSetting(user.storeId!, key);
   }
 
-  // ─── Team Members ────────────────────────────────────────────────────────
+  // ─── Admin Me ─────────────────────────────────────────────────────────────
 
-  @Get('members')
+  @Get('me')
   @Roles(Role.ADMIN)
+  @ApiOperation({ summary: 'Get authenticated admin user, store, role, and permissions' })
+  getAdminMe(@CurrentUser() user: AuthUser) {
+    return this.storesService.getAdminMe(user.id, user.storeId!);
+  }
+
+  // ─── Staff Management ─────────────────────────────────────────────────────
+
+  @Get('staff')
+  @Roles(Role.ADMIN)
+  @RequirePermission('staff.read')
   @ApiOperation({ summary: 'List all staff members of this store' })
   listMembers(@CurrentUser() user: AuthUser) {
     return this.storesService.listMembers(user.storeId!);
   }
 
-  @Post('members')
+  @Post('staff/invite')
   @Roles(Role.ADMIN)
-  @ApiOperation({ summary: 'Add a user as a staff member' })
-  addMember(
-    @CurrentUser() user: AuthUser,
-    @Body('userId') userId: string,
-    @Body('role') role: StoreRole,
-  ) {
-    return this.storesService.addMember(user.storeId!, userId, role ?? StoreRole.STAFF);
+  @RequirePermission('staff.invite')
+  @ApiOperation({ summary: 'Invite a new staff member by email' })
+  inviteStaff(@CurrentUser() user: AuthUser, @Body() dto: InviteStaffDto) {
+    return this.storesService.inviteStaff(user.storeId!, user.id, dto.email, dto.role, dto.name);
   }
 
-  @Patch('members/:userId/role')
+  @Post('staff/:userId/resend-invite')
   @Roles(Role.ADMIN)
+  @RequirePermission('staff.invite')
+  @HttpCode(HttpStatus.OK)
+  @ApiOperation({ summary: 'Resend invitation to a pending staff member' })
+  @ApiParam({ name: 'userId', description: 'User UUID' })
+  resendInvite(@CurrentUser() user: AuthUser, @Param('userId') userId: string) {
+    return this.storesService.resendInvitation(user.storeId!, userId, user.id);
+  }
+
+  @Patch('staff/:userId/role')
+  @Roles(Role.ADMIN)
+  @RequirePermission('staff.update')
   @ApiOperation({ summary: 'Change a member role' })
   @ApiParam({ name: 'userId', description: 'User UUID' })
   updateMemberRole(
@@ -209,16 +229,52 @@ export class AdminStoreController {
     @Param('userId') userId: string,
     @Body('role') role: StoreRole,
   ) {
-    return this.storesService.updateMemberRole(user.storeId!, userId, role);
+    return this.storesService.updateMemberRoleWithAudit(user.storeId!, userId, role, user.id);
   }
 
-  @Delete('members/:userId')
+  @Delete('staff/:userId')
   @Roles(Role.ADMIN)
+  @RequirePermission('staff.remove')
   @HttpCode(HttpStatus.OK)
-  @ApiOperation({ summary: 'Remove a staff member from this store' })
+  @ApiOperation({ summary: 'Deactivate a staff member from this store' })
   @ApiParam({ name: 'userId', description: 'User UUID' })
   removeMember(@CurrentUser() user: AuthUser, @Param('userId') userId: string) {
-    return this.storesService.removeMember(user.storeId!, userId);
+    return this.storesService.removeMember(user.storeId!, userId, user.id);
+  }
+
+  @Get('audit-log')
+  @Roles(Role.ADMIN)
+  @RequirePermission('staff.read')
+  @ApiOperation({ summary: 'Get store audit log' })
+  getAuditLog(@CurrentUser() user: AuthUser) {
+    return this.storesService.getAuditLog(user.storeId!);
+  }
+}
+
+// ─── Public Invitation Routes (/stores/invitations) ─────────────────────────
+
+@ApiTags('Public — Store Invitations')
+@Controller('stores/invitations')
+export class InvitationController {
+  constructor(private readonly storesService: StoresService) {}
+
+  @Get(':token')
+  @Public()
+  @ApiOperation({ summary: 'Validate an invitation token and return store + email info' })
+  @ApiParam({ name: 'token', description: '64-char hex invitation token' })
+  async getInvitation(@Param('token') token: string) {
+    const { PrismaService } = await import('../../prisma/prisma.service');
+    // We can't inject PrismaService directly in this inline approach — delegate to storesService
+    return (this.storesService as any).getInvitationInfo(token);
+  }
+
+  @Post(':token/accept')
+  @Public()
+  @HttpCode(HttpStatus.OK)
+  @ApiOperation({ summary: 'Accept an invitation and set account password' })
+  @ApiParam({ name: 'token', description: '64-char hex invitation token' })
+  acceptInvitation(@Param('token') token: string, @Body('password') password: string) {
+    return this.storesService.acceptInvitation(token, password);
   }
 }
 

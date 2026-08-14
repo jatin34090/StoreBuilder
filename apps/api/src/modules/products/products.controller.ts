@@ -20,6 +20,7 @@ import { CreateVariantDto } from './dto/product-variant.dto';
 import { ReorderImagesDto } from './dto/reorder-images.dto';
 import { Public } from '../../common/decorators/public.decorator';
 import { Roles } from '../../common/decorators/roles.decorator';
+import { RequirePermission } from '../../common/decorators/require-permission.decorator';
 import { CurrentUser, type AuthUser } from '../../common/decorators/current-user.decorator';
 import { CurrentStoreId } from '../../common/decorators/current-store.decorator';
 import { Role } from '@jewellery/types';
@@ -93,6 +94,7 @@ export class ProductsController {
 
   @Get('admin/products')
   @Roles(Role.ADMIN)
+  @RequirePermission('products.read')
   @ApiBearerAuth('access-token')
   @ApiOperation({ summary: '[Admin] List all products for this store' })
   adminFindAll(@Query() query: QueryProductsDto, @CurrentStoreId() storeId: string) {
@@ -101,6 +103,7 @@ export class ProductsController {
 
   @Get('admin/products/:id')
   @Roles(Role.ADMIN)
+  @RequirePermission('products.read')
   @ApiBearerAuth('access-token')
   @ApiOperation({ summary: '[Admin] Get product by ID (store-scoped)' })
   @ApiParam({ name: 'id', description: 'Product UUID' })
@@ -110,6 +113,7 @@ export class ProductsController {
 
   @Post('admin/products')
   @Roles(Role.ADMIN)
+  @RequirePermission('products.create')
   @ApiBearerAuth('access-token')
   @ApiOperation({ summary: '[Admin] Create product for this store' })
   create(@Body() dto: CreateProductDto, @CurrentStoreId() storeId: string) {
@@ -118,6 +122,7 @@ export class ProductsController {
 
   @Patch('admin/products/:id')
   @Roles(Role.ADMIN)
+  @RequirePermission('products.update')
   @ApiBearerAuth('access-token')
   @ApiOperation({ summary: '[Admin] Update product (store-scoped)' })
   @ApiParam({ name: 'id', description: 'Product UUID' })
@@ -131,6 +136,7 @@ export class ProductsController {
 
   @Delete('admin/products/:id')
   @Roles(Role.ADMIN)
+  @RequirePermission('products.delete')
   @ApiBearerAuth('access-token')
   @HttpCode(HttpStatus.OK)
   @ApiOperation({ summary: '[Admin] Soft-delete product (store-scoped)' })
@@ -143,6 +149,7 @@ export class ProductsController {
 
   @Post('admin/products/:id/variants')
   @Roles(Role.ADMIN)
+  @RequirePermission('products.update')
   @ApiBearerAuth('access-token')
   @ApiOperation({ summary: '[Admin] Add a new variant to an existing product' })
   @ApiParam({ name: 'id', description: 'Product UUID' })
@@ -155,6 +162,7 @@ export class ProductsController {
 
   @Patch('admin/products/:id/variants/:variantId')
   @Roles(Role.ADMIN)
+  @RequirePermission('products.update')
   @ApiBearerAuth('access-token')
   @ApiOperation({ summary: '[Admin] Update a variant (price, stock, SKU, etc.)' })
   @ApiParam({ name: 'id', description: 'Product UUID' })
@@ -169,6 +177,7 @@ export class ProductsController {
 
   @Delete('admin/products/:id/variants/:variantId')
   @Roles(Role.ADMIN)
+  @RequirePermission('products.delete')
   @ApiBearerAuth('access-token')
   @HttpCode(HttpStatus.OK)
   @ApiOperation({ summary: '[Admin] Delete a product variant (must have at least 2)' })
@@ -185,6 +194,7 @@ export class ProductsController {
 
   @Delete('admin/products/:id/images/:imgId')
   @Roles(Role.ADMIN)
+  @RequirePermission('products.update')
   @ApiBearerAuth('access-token')
   @HttpCode(HttpStatus.OK)
   @ApiOperation({ summary: '[Admin] Remove product image record' })
@@ -199,6 +209,7 @@ export class ProductsController {
 
   @Patch('admin/products/:id/images/:imgId/variant')
   @Roles(Role.ADMIN)
+  @RequirePermission('products.update')
   @ApiBearerAuth('access-token')
   @ApiOperation({ summary: '[Admin] Assign (or unassign) a product image to a variant' })
   @ApiParam({ name: 'id', description: 'Product UUID' })
@@ -213,6 +224,7 @@ export class ProductsController {
 
   @Patch('admin/products/:id/images/reorder')
   @Roles(Role.ADMIN)
+  @RequirePermission('products.update')
   @ApiBearerAuth('access-token')
   @ApiOperation({ summary: '[Admin] Reorder product images (first ID becomes primary)' })
   @ApiParam({ name: 'id', description: 'Product UUID' })

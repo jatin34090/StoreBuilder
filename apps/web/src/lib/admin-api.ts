@@ -571,9 +571,39 @@ export interface OnboardingProgress {
   percent: number;
 }
 
+export interface StaffMember {
+  id: string;
+  userId: string;
+  storeId: string;
+  role: 'OWNER' | 'ADMIN' | 'MANAGER' | 'STAFF';
+  status: 'PENDING' | 'ACTIVE' | 'INACTIVE';
+  invitationEmail?: string | null;
+  invitedAt?: string | null;
+  joinedAt?: string | null;
+  createdAt: string;
+  user: {
+    id: string;
+    name: string;
+    email?: string | null;
+    phone?: string | null;
+    avatar?: string | null;
+    role: string;
+  };
+}
+
+export interface AdminMeResponse {
+  user: { id: string; name: string; email?: string | null; avatar?: string | null; role: string };
+  store: StoreDetail;
+  role: 'OWNER' | 'ADMIN' | 'MANAGER' | 'STAFF';
+  permissions: string[];
+  membership: { role: string; status: string; joinedAt?: string | null; createdAt: string } | null;
+}
+
 export const adminStoreApi = {
   get: (): Promise<StoreDetail> =>
     unwrap<StoreDetail>(api.get('/admin/store')),
+  me: (): Promise<AdminMeResponse> =>
+    unwrap<AdminMeResponse>(api.get('/admin/store/me')),
   update: (data: Partial<StoreDetail>): Promise<StoreDetail> =>
     unwrap<StoreDetail>(api.patch('/admin/store', data)),
   launch: (): Promise<{ success: boolean; message: string; slug: string }> =>
@@ -582,6 +612,22 @@ export const adminStoreApi = {
     unwrap<unknown>(api.get('/admin/store/usage')),
   onboardingProgress: (): Promise<OnboardingProgress> =>
     unwrap<OnboardingProgress>(api.get('/onboarding/progress')),
+
+  // Staff management
+  listStaff: (): Promise<StaffMember[]> =>
+    unwrap<StaffMember[]>(api.get('/admin/store/staff')),
+  inviteStaff: (data: { email: string; role: 'ADMIN' | 'MANAGER' | 'STAFF'; name?: string }) =>
+    unwrap<{ invitationToken?: string; email: string; role: string; message: string }>(
+      api.post('/admin/store/staff/invite', data),
+    ),
+  updateStaffRole: (userId: string, role: 'ADMIN' | 'MANAGER' | 'STAFF') =>
+    unwrap(api.patch(`/admin/store/staff/${userId}/role`, { role })),
+  removeStaff: (userId: string) =>
+    unwrap(api.delete(`/admin/store/staff/${userId}`)),
+  resendInvite: (userId: string) =>
+    unwrap(api.post(`/admin/store/staff/${userId}/resend-invite`)),
+  getAuditLog: () =>
+    unwrap<unknown[]>(api.get('/admin/store/audit-log')),
 };
 
 // ─── Unified adminApi object ──────────────────────────────────────────────────

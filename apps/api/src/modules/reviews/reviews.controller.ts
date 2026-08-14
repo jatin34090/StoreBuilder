@@ -27,6 +27,7 @@ import { QueryReviewsDto, AdminQueryReviewsDto } from './dto/query-reviews.dto';
 import { ModerateReviewDto } from './dto/moderate-review.dto';
 import { CurrentUser } from '../../common/decorators/current-user.decorator';
 import { Roles } from '../../common/decorators/roles.decorator';
+import { RequirePermission } from '../../common/decorators/require-permission.decorator';
 import { Public } from '../../common/decorators/public.decorator';
 import { type AuthUser } from '../../common/decorators/current-user.decorator';
 
@@ -127,6 +128,7 @@ export class ReviewsController {
 
   @Get('admin/reviews')
   @Roles(Role.ADMIN)
+  @RequirePermission('reviews.read')
   @ApiOperation({
     summary: 'Admin: list all reviews with filters',
     description: 'Filter by productId, userId, isVisible status, and star rating.',
@@ -139,6 +141,7 @@ export class ReviewsController {
 
   @Patch('admin/reviews/:id/visibility')
   @Roles(Role.ADMIN)
+  @RequirePermission('reviews.update')
   @HttpCode(HttpStatus.OK)
   @ApiOperation({
     summary: 'Admin: show or hide a review',
@@ -158,6 +161,7 @@ export class ReviewsController {
 
   @Delete('admin/reviews/:id')
   @Roles(Role.ADMIN)
+  @RequirePermission('reviews.delete')
   @HttpCode(HttpStatus.OK)
   @ApiOperation({
     summary: 'Admin: permanently delete a review',

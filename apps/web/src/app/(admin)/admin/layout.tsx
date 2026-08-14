@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from 'react';
 import { useRouter, usePathname } from 'next/navigation';
-import { useAdminAuthStore } from '../../../store/adminAuthStore';
+import { useAdminAuthStore, type StoreRole, type Permission } from '../../../store/adminAuthStore';
 import { AdminSidebar } from '../../../components/admin/AdminSidebar';
 import { AdminTopbar } from '../../../components/admin/AdminTopbar';
 import { Sheet, SheetContent } from '../../../components/ui/sheet';
@@ -11,7 +11,7 @@ import { api, setAdminStoreSlug } from '../../../lib/api';
 export default function AdminLayout({ children }: { children: React.ReactNode }) {
   const router = useRouter();
   const pathname = usePathname();
-  const { isAdminAuthenticated, setAdminAuth, setAdminStore, clearAdminAuth } = useAdminAuthStore();
+  const { isAdminAuthenticated, setAdminAuth, setAdminStore, setAdminRoleData, clearAdminAuth } = useAdminAuthStore();
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
   const [mobileOpen, setMobileOpen] = useState(false);
   const [verified, setVerified] = useState(false);
@@ -42,25 +42,26 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
           avatar: user.avatar ?? undefined,
         });
 
-        // 2. Bootstrap store context from JWT storeId (no x-store-slug needed here;
-        //    AdminStoreController falls back to user.storeId from the JWT).
+        // 2. Bootstrap store context + role + permissions from /admin/store/me
+        //    This endpoint uses JWT storeId directly (no x-store-slug needed).
         if (user.storeId) {
           try {
-            const storeRes = await api.get('/admin/store');
-            const store = storeRes.data?.data ?? storeRes.data;
-            if (store?.slug) {
+            const meRes = await api.get('/admin/store/me');
+            const me = meRes.data?.data ?? meRes.data;
+            if (me?.store?.slug) {
               setAdminStore({
-                id:          store.id,
-                name:        store.name,
-                slug:        store.slug,
-                status:      store.status,
-                plan:        store.plan,
-                businessName: store.businessName ?? null,
-                industry:    store.industry ?? null,
-                logoUrl:     store.logoUrl ?? null,
+                id:          me.store.id,
+                name:        me.store.name,
+                slug:        me.store.slug,
+                status:      me.store.status,
+                plan:        me.store.plan,
+                businessName: me.store.businessName ?? null,
+                industry:    me.store.industry ?? null,
+                logoUrl:     me.store.logoUrl ?? null,
               });
+              setAdminRoleData(me.role as StoreRole, (me.permissions ?? []) as Permission[]);
               // From this point, all /admin/* API calls include x-store-slug
-              setAdminStoreSlug(store.slug);
+              setAdminStoreSlug(me.store.slug);
             }
           } catch {
             // Store fetch failed — still allow layout to render (user may not have a store yet)

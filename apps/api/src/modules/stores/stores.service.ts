@@ -5,7 +5,8 @@ import {
   BadRequestException,
   Logger,
 } from '@nestjs/common';
-import { Prisma, Plan, StoreRole, StoreStatus } from '@prisma/client';
+import { Prisma, Plan, StoreRole, StoreStatus, StoreUserStatus } from '@prisma/client';
+import * as crypto from 'crypto';
 import { PrismaService } from '../../prisma/prisma.service';
 import { TenantService } from '../tenant/tenant.service';
 import { EventsGateway, WsEvents } from '../events/events.gateway';
@@ -374,15 +375,254 @@ export class StoresService {
     });
   }
 
-  async removeMember(storeId: string, userId: string) {
+  async removeMember(storeId: string, userId: string, actorUserId: string) {
     const member = await this.prisma.storeUser.findUnique({
       where: { storeId_userId: { storeId, userId } },
     });
     if (!member) throw new NotFoundException('Member not found');
     if (member.role === StoreRole.OWNER) throw new BadRequestException('Cannot remove the store owner');
+    if (userId === actorUserId) throw new BadRequestException('You cannot remove yourself');
 
-    await this.prisma.storeUser.delete({ where: { storeId_userId: { storeId, userId } } });
-    return { message: 'Member removed' };
+    await this.prisma.storeUser.update({
+      where: { storeId_userId: { storeId, userId } },
+      data: { status: StoreUserStatus.INACTIVE },
+    });
+    await this.logAudit(storeId, actorUserId, 'MEMBER_DEACTIVATED', userId, {});
+    return { message: 'Member deactivated' };
+  }
+
+  async updateMemberRoleWithAudit(storeId: string, userId: string, role: StoreRole, actorUserId: string) {
+    const member = await this.prisma.storeUser.findUnique({
+      where: { storeId_userId: { storeId, userId } },
+    });
+    if (!member) throw new NotFoundException('Member not found in this store');
+    if (member.role === StoreRole.OWNER) throw new BadRequestException('Cannot change the role of the store owner');
+    if (userId === actorUserId) throw new BadRequestException('Cannot change your own role');
+    if (role === StoreRole.OWNER) throw new BadRequestException('Cannot promote to OWNER via role change — use ownership transfer');
+
+    const updated = await this.prisma.storeUser.update({
+      where: { storeId_userId: { storeId, userId } },
+      data: { role },
+    });
+    await this.logAudit(storeId, actorUserId, 'ROLE_CHANGED', userId, { oldRole: member.role, newRole: role });
+    return updated;
+  }
+
+  // ─── Staff Invitation ─────────────────────────────────────────────────────
+
+  async inviteStaff(storeId: string, actorUserId: string, email: string, role: 'ADMIN' | 'MANAGER' | 'STAFF', name?: string) {
+    // Check staff quota
+    await this.tenant.checkStaffQuota(storeId);
+
+    email = email.toLowerCase().trim();
+
+    // Check if user already exists on platform
+    const existingUser = await this.prisma.user.findUnique({ where: { email } });
+
+    if (existingUser) {
+      // Check if already a member
+      const existingMembership = await this.prisma.storeUser.findUnique({
+        where: { storeId_userId: { storeId, userId: existingUser.id } },
+      });
+      if (existingMembership && existingMembership.status === StoreUserStatus.ACTIVE) {
+        throw new ConflictException('This user is already an active member of this store');
+      }
+      if (existingMembership) {
+        // Reactivate deactivated membership
+        const updated = await this.prisma.storeUser.update({
+          where: { storeId_userId: { storeId, userId: existingUser.id } },
+          data: { role: role as StoreRole, status: StoreUserStatus.ACTIVE, joinedAt: new Date() },
+          include: { user: { select: { id: true, name: true, email: true } } },
+        });
+        await this.logAudit(storeId, actorUserId, 'MEMBER_REACTIVATED', existingUser.id, { role });
+        return { ...updated, invitationToken: null };
+      }
+      // Existing user with no membership — add directly as ACTIVE
+      const membership = await this.prisma.storeUser.create({
+        data: {
+          storeId, userId: existingUser.id,
+          role: role as StoreRole, status: StoreUserStatus.ACTIVE,
+          invitedByUserId: actorUserId, invitedAt: new Date(), joinedAt: new Date(),
+        },
+        include: { user: { select: { id: true, name: true, email: true } } },
+      });
+      await this.logAudit(storeId, actorUserId, 'MEMBER_ADDED', existingUser.id, { role });
+      return { ...membership, invitationToken: null };
+    }
+
+    // New user — create a pending invitation
+    const token = crypto.randomBytes(32).toString('hex');
+    const expires = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000); // 7 days
+
+    // Check for an existing pending invite to this email in this store
+    const pendingInvite = await this.prisma.storeUser.findFirst({
+      where: { storeId, invitationEmail: email, status: StoreUserStatus.PENDING },
+    });
+    if (pendingInvite) {
+      // Refresh the token
+      await this.prisma.storeUser.update({
+        where: { id: pendingInvite.id },
+        data: { invitationToken: token, invitationExpires: expires, role: role as StoreRole },
+      });
+      this.logger.log(`Invitation refreshed for ${email} → store ${storeId} | token: ${token}`);
+      return { invitationToken: token, email, role, message: 'Invitation refreshed' };
+    }
+
+    // Create a placeholder storeUser with no userId (userId defaults to a placeholder for now)
+    // We use a temporary user record tied to the invitation
+    const placeholderUser = await this.prisma.user.create({
+      data: {
+        name: name ?? email.split('@')[0],
+        email,
+        role: 'ADMIN',
+        isVerified: false,
+      },
+    });
+
+    await this.prisma.storeUser.create({
+      data: {
+        storeId,
+        userId: placeholderUser.id,
+        role: role as StoreRole,
+        status: StoreUserStatus.PENDING,
+        invitationEmail: email,
+        invitationToken: token,
+        invitationExpires: expires,
+        invitedByUserId: actorUserId,
+        invitedAt: new Date(),
+      },
+    });
+
+    await this.logAudit(storeId, actorUserId, 'INVITE_SENT', placeholderUser.id, { email, role });
+    this.logger.log(`Invitation sent to ${email} for store ${storeId} | token: ${token}`);
+
+    // In production, send an email here. In dev, we return the token.
+    return { invitationToken: token, email, role, message: 'Invitation sent' };
+  }
+
+  async getInvitationInfo(token: string) {
+    const membership = await this.prisma.storeUser.findUnique({
+      where: { invitationToken: token },
+      include: { store: { select: { id: true, name: true, slug: true, logoUrl: true } } },
+    });
+    if (!membership) throw new NotFoundException('Invalid invitation token');
+    if (membership.status !== StoreUserStatus.PENDING) throw new BadRequestException('This invitation has already been used');
+    if (membership.invitationExpires && membership.invitationExpires < new Date()) {
+      throw new BadRequestException('This invitation has expired');
+    }
+    return {
+      store: membership.store,
+      email: membership.invitationEmail,
+      role: membership.role,
+      expiresAt: membership.invitationExpires,
+    };
+  }
+
+  async acceptInvitation(token: string, password: string) {
+    const membership = await this.prisma.storeUser.findUnique({
+      where: { invitationToken: token },
+      include: { user: true, store: { select: { id: true, name: true, slug: true } } },
+    });
+
+    if (!membership) throw new NotFoundException('Invalid or expired invitation token');
+    if (membership.status !== StoreUserStatus.PENDING) throw new BadRequestException('This invitation has already been used');
+    if (membership.invitationExpires && membership.invitationExpires < new Date()) {
+      throw new BadRequestException('This invitation has expired');
+    }
+
+    const bcrypt = await import('bcrypt');
+    const passwordHash = await bcrypt.hash(password, 10);
+
+    // Activate the user account and membership
+    await this.prisma.$transaction([
+      this.prisma.user.update({
+        where: { id: membership.userId },
+        data: { passwordHash, isVerified: true },
+      }),
+      this.prisma.storeUser.update({
+        where: { id: membership.id },
+        data: {
+          status: StoreUserStatus.ACTIVE,
+          invitationToken: null,
+          invitationExpires: null,
+          joinedAt: new Date(),
+        },
+      }),
+    ]);
+
+    await this.logAudit(membership.storeId, membership.userId, 'INVITE_ACCEPTED', membership.userId, {});
+
+    return {
+      message: 'Invitation accepted. You can now log in.',
+      store: membership.store,
+      email: membership.invitationEmail,
+    };
+  }
+
+  async resendInvitation(storeId: string, userId: string, actorUserId: string) {
+    const member = await this.prisma.storeUser.findUnique({
+      where: { storeId_userId: { storeId, userId } },
+    });
+    if (!member || member.status !== StoreUserStatus.PENDING) {
+      throw new BadRequestException('No pending invitation found for this user');
+    }
+
+    const token = crypto.randomBytes(32).toString('hex');
+    const expires = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000);
+
+    await this.prisma.storeUser.update({
+      where: { id: member.id },
+      data: { invitationToken: token, invitationExpires: expires },
+    });
+
+    this.logger.log(`Invitation resent to ${member.invitationEmail} | token: ${token}`);
+    return { invitationToken: token, message: 'Invitation resent' };
+  }
+
+  // ─── Admin Me endpoint ────────────────────────────────────────────────────
+
+  async getAdminMe(userId: string, storeId: string) {
+    const [user, membership, store] = await Promise.all([
+      this.prisma.user.findUnique({
+        where: { id: userId },
+        select: { id: true, name: true, email: true, phone: true, avatar: true, role: true },
+      }),
+      this.prisma.storeUser.findUnique({
+        where: { storeId_userId: { storeId, userId } },
+        select: { role: true, status: true, joinedAt: true, createdAt: true },
+      }),
+      this.prisma.store.findUnique({
+        where: { id: storeId },
+        select: { id: true, name: true, slug: true, status: true, plan: true, businessName: true, logoUrl: true },
+      }),
+    ]);
+
+    if (!user) throw new NotFoundException('User not found');
+    if (!store) throw new NotFoundException('Store not found');
+
+    const { getPermissionsForRole } = await import('../../common/permissions/permissions');
+    const storeRole = membership?.role ?? 'STAFF';
+    const permissions = getPermissionsForRole(storeRole);
+
+    return { user, store, role: storeRole, permissions, membership };
+  }
+
+  // ─── Audit Log ────────────────────────────────────────────────────────────
+
+  async getAuditLog(storeId: string, limit = 50) {
+    return this.prisma.storeAuditLog.findMany({
+      where: { storeId },
+      orderBy: { createdAt: 'desc' },
+      take: limit,
+    });
+  }
+
+  private async logAudit(storeId: string, actorUserId: string, action: string, targetUserId?: string, metadata?: Record<string, unknown>) {
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const meta: any = metadata ?? null;
+    await this.prisma.storeAuditLog.create({
+      data: { id: crypto.randomUUID(), storeId, actorUserId, action, targetUserId, metadata: meta },
+    }).catch(() => {}); // never block on audit log failure
   }
 
   // ─── Public: check slug availability ─────────────────────────────────────

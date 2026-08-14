@@ -180,15 +180,31 @@ export class UsersService {
 
     const where: Record<string, unknown> = {};
 
-    // Scope to users who have placed orders in this store or are StoreUsers of it
+    // Scope to users who have placed orders in this store or are StoreUsers of it.
+    // When search is combined with storeId, use AND to preserve tenant isolation.
     if (storeId) {
-      where['OR'] = [
-        { orders: { some: { storeId } } },
-        { storeUsers: { some: { storeId } } },
-      ];
-    }
-
-    if (dto.search) {
+      const tenantScope = {
+        OR: [
+          { orders: { some: { storeId } } },
+          { storeUsers: { some: { storeId } } },
+        ],
+      };
+      if (dto.search) {
+        const s = dto.search.trim();
+        where['AND'] = [
+          tenantScope,
+          {
+            OR: [
+              { name: { contains: s, mode: 'insensitive' } },
+              { email: { contains: s, mode: 'insensitive' } },
+              { phone: { contains: s } },
+            ],
+          },
+        ];
+      } else {
+        Object.assign(where, tenantScope);
+      }
+    } else if (dto.search) {
       const s = dto.search.trim();
       where['OR'] = [
         { name: { contains: s, mode: 'insensitive' } },

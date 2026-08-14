@@ -156,8 +156,9 @@ export class ProductsController {
   addVariant(
     @Param('id') id: string,
     @Body() dto: CreateVariantDto,
+    @CurrentStoreId() storeId: string,
   ) {
-    return this.productsService.addVariant(id, dto);
+    return this.productsService.addVariant(id, storeId, dto);
   }
 
   @Patch('admin/products/:id/variants/:variantId')
@@ -171,8 +172,9 @@ export class ProductsController {
     @Param('id') id: string,
     @Param('variantId') variantId: string,
     @Body() dto: CreateVariantDto,
+    @CurrentStoreId() storeId: string,
   ) {
-    return this.productsService.updateVariant(id, variantId, dto);
+    return this.productsService.updateVariant(id, variantId, storeId, dto);
   }
 
   @Delete('admin/products/:id/variants/:variantId')
@@ -186,8 +188,9 @@ export class ProductsController {
   deleteVariant(
     @Param('id') id: string,
     @Param('variantId') variantId: string,
+    @CurrentStoreId() storeId: string,
   ) {
-    return this.productsService.deleteVariant(id, variantId);
+    return this.productsService.deleteVariant(id, variantId, storeId);
   }
 
   // ─── Admin — Images (metadata only — actual upload via UploadModule) ──────
@@ -203,8 +206,9 @@ export class ProductsController {
   removeImage(
     @Param('id') id: string,
     @Param('imgId') imgId: string,
+    @CurrentStoreId() storeId: string,
   ) {
-    return this.productsService.removeImage(id, imgId);
+    return this.productsService.removeImage(id, imgId, storeId);
   }
 
   @Patch('admin/products/:id/images/:imgId/variant')
@@ -231,7 +235,8 @@ export class ProductsController {
   reorderImages(
     @Param('id') id: string,
     @Body() dto: ReorderImagesDto,
+    @CurrentStoreId() storeId: string,
   ) {
-    return this.productsService.reorderImages(id, dto);
+    return this.productsService.reorderImages(id, storeId, dto);
   }
 }

@@ -83,7 +83,7 @@ export class UploadController {
     // Track storage usage per tenant
     if (storeId) await this.tenant.incrementStorageBytes(storeId, result.bytes);
 
-    const image = await this.products.addImage(productId, result.publicId, result.secureUrl, primary, variantId);
+    const image = await this.products.addImage(productId, storeId, result.publicId, result.secureUrl, primary, variantId);
     return { image, upload: result };
   }
 
@@ -96,11 +96,12 @@ export class UploadController {
   async deleteProductImage(
     @Param('productId') productId: string,
     @Param('imageId') imageId: string,
+    @CurrentStoreId() storeId: string,
   ) {
     const image = await this.products.getImageOrThrow(productId, imageId);
     await Promise.all([
       this.cloudinary.deleteImage(image.publicId),
-      this.products.removeImage(productId, imageId),
+      this.products.removeImage(productId, imageId, storeId),
     ]);
     return { message: 'Image deleted' };
   }

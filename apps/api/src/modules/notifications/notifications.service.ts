@@ -333,19 +333,22 @@ export class NotificationsService {
     });
   }
 
-  async notifyOfferCreated(couponCode: string, description: string, expiresAt?: Date) {
+  async notifyOfferCreated(storeId: string, couponCode: string, description: string, expiresAt?: Date) {
     const expiry = expiresAt
       ? ` Valid until ${expiresAt.toLocaleDateString('en-IN')}.`
       : '';
+    // Scope to customers who have interacted with THIS store only
+    const customers = await this.prisma.user.findMany({
+      where: {
+        isBlocked: false,
+        orders: { some: { storeId } },
+      },
+      select: { id: true },
+      take: 5000,
+    });
     await this.prisma.notification.createMany({
-      data: (
-        await this.prisma.user.findMany({
-          where: { role: Role.CUSTOMER, isBlocked: false },
-          select: { id: true },
-          take: 5000,
-        })
-      ).map((u) => ({
-        storeId: DEFAULT_STORE_ID,
+      data: customers.map((u) => ({
+        storeId,
         userId: u.id,
         type: NotificationType.OFFER,
         title: `New Offer: ${couponCode}`,
@@ -355,7 +358,7 @@ export class NotificationsService {
       })),
       skipDuplicates: true,
     });
-    this.logger.log(`Offer notification broadcast: coupon=${couponCode}`);
+    this.logger.log(`Offer notification broadcast: store=${storeId} coupon=${couponCode} recipients=${customers.length}`);
   }
 
   async notifyReviewApproved(userId: string, productName: string) {

@@ -157,8 +157,9 @@ export class OrdersController {
   adminAssignDelivery(
     @Param('id') id: string,
     @Body() dto: AssignDeliveryDto,
+    @CurrentStoreId() storeId: string,
   ) {
-    return this.ordersService.adminAssignDelivery(id, dto);
+    return this.ordersService.adminAssignDelivery(id, storeId, dto);
   }
 
   // ─── Delivery Agent Routes ─────────────────────────────────────────────────

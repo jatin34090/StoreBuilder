@@ -242,15 +242,16 @@ export class SearchService implements OnModuleInit {
 
   // ─── Admin: Full Reindex ──────────────────────────────────────────────────
 
-  async adminReindex(): Promise<{ indexed: number; errors: number; total: number }> {
+  async adminReindex(storeId: string): Promise<{ indexed: number; errors: number; total: number }> {
     if (!this.client) {
       this.logger.warn('adminReindex: Typesense not configured — skipping');
       return { indexed: 0, errors: 0, total: 0 };
     }
-    this.logger.log('Starting full Typesense reindex...');
+    this.logger.log(`Starting Typesense reindex for store ${storeId}...`);
 
-    // Fetch ALL products (active and inactive so admin can search them)
+    // Scope to the requesting store's products only
     const products = await this.prisma.product.findMany({
+      where: { storeId },
       include: PRODUCT_FOR_INDEX_INCLUDE,
     });
 

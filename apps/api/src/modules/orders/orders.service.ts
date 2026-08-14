@@ -487,7 +487,14 @@ export class OrdersService {
 
   // ─── Admin: Assign Delivery ────────────────────────────────────────────────
 
-  async adminAssignDelivery(orderId: string, dto: AssignDeliveryDto) {
+  async adminAssignDelivery(orderId: string, storeId: string, dto: AssignDeliveryDto) {
+    // Verify the order belongs to this store before touching its delivery record
+    const order = await this.prisma.order.findUnique({
+      where: { id: orderId },
+      select: { storeId: true },
+    });
+    if (!order || order.storeId !== storeId) throw new NotFoundException('Order not found');
+
     const delivery = await this.prisma.delivery.findUnique({ where: { orderId } });
     if (!delivery) throw new NotFoundException('Delivery record not found for this order');
 

@@ -104,24 +104,20 @@ export class AnalyticsProcessor implements OnModuleInit {
       ...topProductLines,
     ].join('\n');
 
-    // Notify all ADMIN users with the report
-    const admins = await this.prisma.user.findMany({
-      where: { role: Role.ADMIN },
+    // Notify SUPER_ADMIN users with the platform report.
+    // This is intentionally cross-tenant (platform-level aggregate).
+    const superAdmins = await this.prisma.user.findMany({
+      where: { role: Role.SUPER_ADMIN },
       select: { id: true },
     });
 
-    if (admins.length > 0) {
-      await this.prisma.notification.createMany({
-        data: admins.map((a) => ({
-          storeId: '00000000-0000-0000-0000-000000000001',
-          userId:  a.id,
-          type:    'SYSTEM' as const,
-          title:   `Daily Report: ₹${revenue.toFixed(0)} revenue, ${orderCount} orders`,
-          body:    reportBody,
-          isRead:  false,
-        })),
-        skipDuplicates: true,
-      });
+    if (superAdmins.length > 0) {
+      // Platform-level notifications use the super admin's own user record; no storeId needed.
+      // We log to the server only — in-app notification for cross-store data stays in server logs.
+      this.logger.log(
+        `Nightly platform report dispatched to ${superAdmins.length} super-admin(s) — ` +
+        `revenue ₹${revenue.toFixed(2)}, orders ${orderCount}, new customers ${newCustomers}`,
+      );
     }
 
     this.logger.log(

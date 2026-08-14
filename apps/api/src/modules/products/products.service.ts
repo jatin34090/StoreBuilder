@@ -276,7 +276,7 @@ export class ProductsService {
     }
 
     const updated = await this.prisma.product.update({
-      where: { id },
+      where: { id, storeId },
       data: {
         ...(dto.name && { name: dto.name.trim(), slug }),
         ...(dto.description && { description: dto.description }),
@@ -300,10 +300,10 @@ export class ProductsService {
     return updated;
   }
 
-  async softDelete(id: string, storeId = DEFAULT_STORE_ID) {
+  async softDelete(id: string, storeId: string) {
     await this.findProductOrThrow(id, storeId);
     await this.prisma.product.update({
-      where: { id },
+      where: { id, storeId },
       data: { isActive: false },
     });
     this.search?.indexProduct(id).catch((e) => this.logger.error('Search index after softDelete failed', e));
@@ -312,8 +312,8 @@ export class ProductsService {
 
   // ─── Variants ─────────────────────────────────────────────────────────────
 
-  async addVariant(productId: string, dto: CreateVariantDto) {
-    await this.findProductOrThrow(productId);
+  async addVariant(productId: string, storeId: string, dto: CreateVariantDto) {
+    await this.findProductOrThrow(productId, storeId);
 
     const existing = await this.prisma.productVariant.findUnique({
       where: { sku: dto.sku },
@@ -335,7 +335,8 @@ export class ProductsService {
     return variant;
   }
 
-  async updateVariant(productId: string, variantId: string, dto: CreateVariantDto) {
+  async updateVariant(productId: string, variantId: string, storeId: string, dto: CreateVariantDto) {
+    await this.findProductOrThrow(productId, storeId);
     const variant = await this.prisma.productVariant.findFirst({
       where: { id: variantId, productId },
     });
@@ -366,7 +367,8 @@ export class ProductsService {
     return updated;
   }
 
-  async deleteVariant(productId: string, variantId: string) {
+  async deleteVariant(productId: string, variantId: string, storeId: string) {
+    await this.findProductOrThrow(productId, storeId);
     const variant = await this.prisma.productVariant.findFirst({
       where: { id: variantId, productId },
     });
@@ -385,8 +387,8 @@ export class ProductsService {
 
   // ─── Images ───────────────────────────────────────────────────────────────
 
-  async addImage(productId: string, publicId: string, url: string, isPrimary = false, variantId?: string) {
-    await this.findProductOrThrow(productId);
+  async addImage(productId: string, storeId: string, publicId: string, url: string, isPrimary = false, variantId?: string) {
+    await this.findProductOrThrow(productId, storeId);
 
     const imageCount = await this.prisma.productImage.count({ where: { productId } });
     if (imageCount >= 10) {
@@ -416,7 +418,8 @@ export class ProductsService {
     return image;
   }
 
-  async removeImage(productId: string, imageId: string) {
+  async removeImage(productId: string, imageId: string, storeId: string) {
+    await this.findProductOrThrow(productId, storeId);
     const image = await this.prisma.productImage.findFirst({
       where: { id: imageId, productId },
     });
@@ -442,8 +445,8 @@ export class ProductsService {
     return { message: 'Image removed' };
   }
 
-  async reorderImages(productId: string, dto: ReorderImagesDto) {
-    await this.findProductOrThrow(productId);
+  async reorderImages(productId: string, storeId: string, dto: ReorderImagesDto) {
+    await this.findProductOrThrow(productId, storeId);
 
     await this.prisma.$transaction(
       dto.imageIds.map((id, index) =>

@@ -11,9 +11,9 @@ export const api = axios.create({
 // Tokens are now httpOnly cookies — the browser sends them automatically.
 // withCredentials: true (set on the axios instance) is all that's needed.
 
-// ─── Store tenant header ──────────────────────────────────────────────────────
-// Middleware sets a client-readable 'store-id' cookie for the current subdomain.
-// Forward it as X-Store-Id so the API TenantMiddleware can scope requests.
+// ─── Store tenant headers ─────────────────────────────────────────────────────
+// For storefront pages: middleware sets a 'store-id' cookie (from subdomain resolution).
+// For admin pages: we set the store slug via setAdminStoreSlug() after login.
 
 function getStoreIdCookie(): string | undefined {
   if (typeof document === 'undefined') return undefined;
@@ -21,10 +21,22 @@ function getStoreIdCookie(): string | undefined {
   return match?.[1];
 }
 
+// Slug of the currently-authenticated admin's store. Set by admin layout after
+// loading /admin/store. All /admin/* requests forward this as x-store-slug so
+// the API TenantMiddleware scopes them to the right tenant.
+let _adminStoreSlug: string | undefined;
+export function setAdminStoreSlug(slug: string | undefined) { _adminStoreSlug = slug; }
+export function getAdminStoreSlug(): string | undefined { return _adminStoreSlug; }
+
 api.interceptors.request.use((config) => {
-  const storeId = getStoreIdCookie();
-  if (storeId) {
-    config.headers['X-Store-Id'] = storeId;
+  const url = config.url ?? '';
+  const isAdminRoute = url.startsWith('/admin/') || url.startsWith('admin/');
+
+  if (isAdminRoute && _adminStoreSlug) {
+    config.headers['x-store-slug'] = _adminStoreSlug;
+  } else if (!isAdminRoute) {
+    const storeId = getStoreIdCookie();
+    if (storeId) config.headers['X-Store-Id'] = storeId;
   }
   return config;
 });

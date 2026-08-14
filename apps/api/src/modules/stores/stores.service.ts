@@ -159,10 +159,25 @@ export class StoresService {
       if (exists) throw new ConflictException(`Domain '${dto.customDomain}' is already registered`);
     }
 
+    if (dto.slug && dto.slug !== store.slug) {
+      const slugExists = await this.prisma.store.findUnique({ where: { slug: dto.slug } });
+      if (slugExists) throw new ConflictException(`Slug '${dto.slug}' is already taken`);
+    }
+
     const updated = await this.prisma.store.update({
       where: { id },
       data: {
         ...(dto.name         !== undefined && { name:         dto.name.trim() }),
+        ...(dto.slug         !== undefined && { slug:         dto.slug.toLowerCase().trim() }),
+        ...(dto.businessName !== undefined && { businessName: dto.businessName }),
+        ...(dto.industry     !== undefined && { industry:     dto.industry }),
+        ...(dto.description  !== undefined && { description:  dto.description }),
+        ...(dto.contactEmail !== undefined && { contactEmail: dto.contactEmail }),
+        ...(dto.phone        !== undefined && { phone:        dto.phone }),
+        ...(dto.address      !== undefined && { address:      dto.address }),
+        ...(dto.country      !== undefined && { country:      dto.country }),
+        ...(dto.currency     !== undefined && { currency:     dto.currency }),
+        ...(dto.timezone     !== undefined && { timezone:     dto.timezone }),
         ...(dto.plan         !== undefined && { plan:         dto.plan }),
         ...(dto.customDomain !== undefined && { customDomain: dto.customDomain }),
         ...(dto.logoUrl      !== undefined && { logoUrl:      dto.logoUrl }),
@@ -171,9 +186,39 @@ export class StoresService {
       },
     });
 
+    // If slug changed, invalidate old slug cache too
     this.tenant.invalidateStoreCache(id, store.slug);
+    if (dto.slug && dto.slug !== store.slug) this.tenant.invalidateStoreCache(id, dto.slug);
     this.logger.log(`Store updated: ${store.slug}`);
     return updated;
+  }
+
+  async launch(id: string) {
+    const store = await this.prisma.store.findUnique({
+      where: { id },
+      select: { id: true, slug: true, status: true, isActive: true },
+    });
+    if (!store) throw new NotFoundException('Store not found');
+    if (store.status === StoreStatus.SUSPENDED) {
+      throw new BadRequestException('Store is suspended by the platform. Contact support to reinstate.');
+    }
+    if (store.status === StoreStatus.ACTIVE) {
+      return { success: true, message: 'Store is already active', slug: store.slug };
+    }
+
+    await this.prisma.store.update({
+      where: { id },
+      data: { status: StoreStatus.ACTIVE, isActive: true },
+    });
+
+    await this.prisma.onboardingState.update({
+      where: { storeId: id },
+      data: { launched: true, completedAt: new Date() },
+    }).catch(() => {});
+
+    this.tenant.invalidateStoreCache(id, store.slug);
+    this.logger.log(`Store launched: ${store.slug}`);
+    return { success: true, message: 'Store launched successfully', slug: store.slug };
   }
 
   async suspend(id: string) {

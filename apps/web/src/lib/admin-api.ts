@@ -630,6 +630,80 @@ export const adminStoreApi = {
     unwrap<unknown[]>(api.get('/admin/store/audit-log')),
 };
 
+// ─── Billing types + API ─────────────────────────────────────────────────────
+
+export interface PlanOption {
+  plan:         string;
+  name:         string;
+  description:  string | null;
+  priceMonthly: number; // paise
+  priceYearly:  number;
+  currency:     string;
+  trialDays:    number;
+  features:     string[];
+  limits: {
+    maxProducts:    number;
+    maxStaff:       number;
+    maxStorageGB:   number;
+    maxOrders:      number | null;
+    maxApiPerDay:   number;
+    maxApiPerMonth: number;
+  };
+}
+
+export interface BillingStatus {
+  plan:         string;
+  subscription: {
+    id:                 string;
+    status:             string;
+    billingCycle:       string;
+    currentPeriodStart: string | null;
+    currentPeriodEnd:   string | null;
+    trialStart:         string | null;
+    trialEnd:           string | null;
+    cancelAtPeriodEnd:  boolean;
+    cancelledAt:        string | null;
+  } | null;
+  usage: {
+    products:    { used: number; max: number };
+    staff:       { used: number; max: number };
+    storageGB:   { used: number; maxGB: number };
+    ordersMonth: { used: number; max: number | null };
+    apiToday:    { used: number; max: number };
+  } | null;
+  limits: Record<string, number | null> | null;
+  plans:  PlanOption[];
+}
+
+export interface BillingInvoice {
+  id:                 string;
+  invoiceNumber:      string;
+  plan:               string;
+  amount:             number; // paise
+  tax:                number;
+  currency:           string;
+  status:             string;
+  billingPeriodStart: string | null;
+  billingPeriodEnd:   string | null;
+  issuedAt:           string;
+  paidAt:             string | null;
+}
+
+export const adminBillingApi = {
+  listPlans:    (): Promise<PlanOption[]> =>
+    unwrap<PlanOption[]>(api.get('/billing/plans')),
+  getStatus:    (): Promise<BillingStatus> =>
+    unwrap<BillingStatus>(api.get('/admin/billing/status')),
+  getInvoices:  (): Promise<BillingInvoice[]> =>
+    unwrap<BillingInvoice[]>(api.get('/admin/billing/invoices')),
+  subscribe:    (plan: string) =>
+    unwrap<{ subscriptionId: string; shortUrl: string; razorpayKeyId: string; plan: string }>(
+      api.post('/admin/billing/subscribe', { plan }),
+    ),
+  cancel:       () => unwrap(api.delete('/admin/billing/cancel')),
+  reactivate:   () => unwrap(api.post('/admin/billing/reactivate')),
+};
+
 // ─── Unified adminApi object ──────────────────────────────────────────────────
 
 const adminRemittancesApi = {
@@ -664,4 +738,5 @@ export const adminApi = {
   remittances:   adminRemittancesApi,
   settings:      adminSettingsApi,
   store:         adminStoreApi,
+  billing:       adminBillingApi,
 };

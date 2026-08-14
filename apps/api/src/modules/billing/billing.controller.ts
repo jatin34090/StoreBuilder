@@ -18,16 +18,49 @@ import { CurrentStoreId } from '../../common/decorators/current-store.decorator'
 import { Roles } from '../../common/decorators/roles.decorator';
 import { Public } from '../../common/decorators/public.decorator';
 import { Role } from '@jewellery/types';
+import { RequirePermission } from '../../common/decorators/require-permission.decorator';
 
 @ApiTags('Billing')
 @Controller()
 export class BillingController {
   constructor(private readonly billing: BillingService) {}
 
+  // ─── Public: list plans (used by plan comparison UI) ─────────────────────
+
+  @Get('billing/plans')
+  @Public()
+  @ApiOperation({ summary: 'List all active subscription plans' })
+  listPlans() {
+    return this.billing.listPlans();
+  }
+
+  // ─── Store owner: full billing status + usage ────────────────────────────
+
+  @Get('admin/billing/status')
+  @Roles(Role.ADMIN)
+  @RequirePermission('subscription.read')
+  @ApiBearerAuth()
+  @ApiOperation({ summary: 'Get subscription status, usage, and all plan options' })
+  getStatus(@CurrentStoreId() storeId: string) {
+    return this.billing.getStatus(storeId);
+  }
+
+  // ─── Store owner: invoice/billing history ────────────────────────────────
+
+  @Get('admin/billing/invoices')
+  @Roles(Role.ADMIN)
+  @RequirePermission('subscription.read')
+  @ApiBearerAuth()
+  @ApiOperation({ summary: 'Get billing history (invoices) for this store' })
+  getInvoices(@CurrentStoreId() storeId: string) {
+    return this.billing.getInvoices(storeId);
+  }
+
   // ─── Store owner: create / upgrade subscription ───────────────────────────
 
   @Post('admin/billing/subscribe')
   @Roles(Role.ADMIN)
+  @RequirePermission('subscription.update')
   @ApiBearerAuth()
   @ApiOperation({ summary: 'Create or upgrade a Razorpay subscription for this store' })
   createSubscription(
@@ -41,6 +74,7 @@ export class BillingController {
 
   @Delete('admin/billing/cancel')
   @Roles(Role.ADMIN)
+  @RequirePermission('subscription.update')
   @ApiBearerAuth()
   @HttpCode(HttpStatus.OK)
   @ApiOperation({ summary: 'Cancel subscription at the end of the current billing period' })
@@ -48,17 +82,18 @@ export class BillingController {
     return this.billing.cancelSubscription(storeId);
   }
 
-  // ─── Store owner: subscription status + quota ─────────────────────────────
+  // ─── Store owner: reactivate scheduled cancellation ──────────────────────
 
-  @Get('admin/billing/status')
+  @Post('admin/billing/reactivate')
   @Roles(Role.ADMIN)
+  @RequirePermission('subscription.update')
   @ApiBearerAuth()
-  @ApiOperation({ summary: 'Get current subscription status, quota usage, and plan limits' })
-  getStatus(@CurrentStoreId() storeId: string) {
-    return this.billing.getStatus(storeId);
+  @ApiOperation({ summary: 'Undo a pending cancellation (if not yet lapsed)' })
+  reactivateSubscription(@CurrentStoreId() storeId: string) {
+    return this.billing.reactivateSubscription(storeId);
   }
 
-  // ─── Public Razorpay webhook (no JWT, raw body required) ─────────────────
+  // ─── Public: Razorpay webhook (no JWT, raw body required) ─────────────────
 
   @Post('billing/webhook')
   @Public()
@@ -69,9 +104,7 @@ export class BillingController {
     @Headers('x-razorpay-signature') signature: string,
   ) {
     const rawBody = req.rawBody;
-    if (!rawBody) {
-      return; // no-op — should not happen in production (rawBody must be enabled in main.ts)
-    }
+    if (!rawBody) return;
     return this.billing.handleWebhook(rawBody, signature);
   }
 }

@@ -33,6 +33,7 @@ import { JwtAuthGuard } from './common/guards/jwt-auth.guard';
 import { RolesGuard } from './common/guards/roles.guard';
 import { TenantRateLimitGuard } from './common/guards/tenant-rate-limit.guard';
 import { PermissionGuard } from './common/guards/permission.guard';
+import { FeatureGuard } from './common/guards/feature.guard';
 import { TenantMiddleware } from './common/middleware/tenant.middleware';
 import { TenantApiLogInterceptor } from './common/interceptors/tenant-api-log.interceptor';
 
@@ -103,6 +104,7 @@ import { TenantApiLogInterceptor } from './common/interceptors/tenant-api-log.in
     { provide: APP_GUARD,       useClass: TenantRateLimitGuard },
     { provide: APP_GUARD,       useClass: RolesGuard },
     { provide: APP_GUARD,       useClass: PermissionGuard },
+    { provide: APP_GUARD,       useClass: FeatureGuard },
     // Log every request with tenant context (fire-and-forget)
     { provide: APP_INTERCEPTOR, useClass: TenantApiLogInterceptor },
   ],

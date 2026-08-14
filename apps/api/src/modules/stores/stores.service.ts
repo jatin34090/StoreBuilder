@@ -14,15 +14,7 @@ import type { CreateStoreDto } from './dto/create-store.dto';
 import type { UpdateStoreDto } from './dto/update-store.dto';
 import type { QueryStoresDto } from './dto/query-stores.dto';
 import type { UpsertSettingDto } from './dto/upsert-setting.dto';
-
-// ─── Default plan limits (mirrors PlanLimit seed in migration) ────────────────
-
-const PLAN_DEFAULTS: Record<Plan, { plan: Plan; maxProducts: number; maxOrders: number | null; maxStorageGB: number; maxStaff: number; maxApiPerDay: number; maxApiPerMonth: number }> = {
-  [Plan.FREE]:         { plan: Plan.FREE,         maxProducts: 50,    maxOrders: 100,    maxStorageGB: 1,   maxStaff: 2,  maxApiPerDay: 1000,  maxApiPerMonth: 20000 },
-  [Plan.STARTER]:      { plan: Plan.STARTER,      maxProducts: 500,   maxOrders: 1000,   maxStorageGB: 10,  maxStaff: 5,  maxApiPerDay: 5000,  maxApiPerMonth: 100000 },
-  [Plan.PROFESSIONAL]: { plan: Plan.PROFESSIONAL, maxProducts: 5000,  maxOrders: 10000,  maxStorageGB: 100, maxStaff: 20, maxApiPerDay: 20000, maxApiPerMonth: 500000 },
-  [Plan.ENTERPRISE]:   { plan: Plan.ENTERPRISE,   maxProducts: -1,    maxOrders: null,   maxStorageGB: 500, maxStaff: -1, maxApiPerDay: 100000, maxApiPerMonth: 2000000 },
-};
+import { DEFAULT_PLAN_LIMITS, DEFAULT_PLAN_DISPLAY } from '../../common/constants/plan-config';
 
 @Injectable()
 export class StoresService {
@@ -78,10 +70,22 @@ export class StoresService {
     }
 
     // Seed default plan limits row if not already present
+    const display = DEFAULT_PLAN_DISPLAY[plan];
     await this.prisma.planLimit.upsert({
       where:  { plan },
       update: {},
-      create: PLAN_DEFAULTS[plan],
+      create: {
+        plan,
+        ...DEFAULT_PLAN_LIMITS[plan],
+        displayName:  display.name,
+        description:  display.description,
+        priceMonthly: display.priceMonthly,
+        priceYearly:  display.priceYearly,
+        trialDays:    display.trialDays,
+        sortOrder:    display.sortOrder,
+        features:     display.features as unknown as object[],
+        isActive:     true,
+      },
     });
 
     this.logger.log(`Store created: ${store.slug} (${store.id}) — plan: ${plan}`);

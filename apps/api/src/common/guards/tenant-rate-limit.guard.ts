@@ -60,12 +60,19 @@ export class TenantRateLimitGuard implements CanActivate {
     const storeId = req.storeId;
     if (!storeId) return true; // no tenant context — skip
 
-    // Store ownership check: ADMIN users may only access their own store context.
-    // SUPER_ADMIN is exempt. Unauthenticated requests fall through to JWT guard.
+    const DEFAULT_STORE_ID = '00000000-0000-0000-0000-000000000001';
+
+    // Store ownership check: non-super-admins may only operate in their own store context.
+    // Only enforce when a real store is targeted (not the DEFAULT_STORE_ID fallback —
+    // that sentinel means no x-store-slug header was sent, e.g. user-level endpoints).
     const user = req.user;
-    // Block any non-super-admin store member from accessing a different store's context.
-    // Covers ADMIN, CUSTOMER (staff), and any other role that has a storeId in their JWT.
-    if (user && user.role !== 'SUPER_ADMIN' && user.storeId && user.storeId !== storeId) {
+    if (
+      user &&
+      user.role !== 'SUPER_ADMIN' &&
+      user.storeId &&
+      storeId !== DEFAULT_STORE_ID &&
+      user.storeId !== storeId
+    ) {
       throw new HttpException(
         { message: 'You are not authorized to access this store.', storeId },
         HttpStatus.FORBIDDEN,

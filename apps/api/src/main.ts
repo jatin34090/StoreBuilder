@@ -4,6 +4,8 @@ import { SwaggerModule, DocumentBuilder } from '@nestjs/swagger';
 import { ConfigService } from '@nestjs/config';
 import cookieParser from 'cookie-parser';
 import helmet from 'helmet';
+import { randomUUID } from 'node:crypto';
+import type { Request, Response, NextFunction } from 'express';
 import { AppModule } from './app.module';
 import { AllExceptionsFilter } from './common/filters/all-exceptions.filter';
 import { ResponseInterceptor } from './common/interceptors/response.interceptor';
@@ -29,13 +31,22 @@ async function bootstrap() {
   const port = configService.get<number>('PORT', 3001);
   const corsOrigins = configService.get<string>('CORS_ORIGINS', 'http://localhost:3000');
 
+  // Request ID — generate or forward X-Request-ID for log correlation
+  app.use((req: Request, res: Response, next: NextFunction) => {
+    const id = (req.headers['x-request-id'] as string | undefined)?.slice(0, 64) || randomUUID();
+    (req as Request & { requestId: string }).requestId = id;
+    res.setHeader('X-Request-ID', id);
+    next();
+  });
+
   // Security
   app.use(helmet());
   app.enableCors({
     origin: corsOrigins.split(',').map((o) => o.trim()),
     credentials: true,
     methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'],
-    allowedHeaders: ['Content-Type', 'Authorization', 'x-razorpay-signature', 'x-store-slug', 'x-store-id'],
+    allowedHeaders: ['Content-Type', 'Authorization', 'x-razorpay-signature', 'x-store-slug', 'x-store-id', 'x-request-id'],
+    exposedHeaders: ['X-Request-ID'],
   });
 
   // Cookie parsing
@@ -92,10 +103,13 @@ async function bootstrap() {
     });
   }
 
+  // Graceful shutdown — drain in-flight requests and close DB/Redis cleanly on SIGTERM/SIGINT
+  app.enableShutdownHooks();
+
   await app.listen(port);
-  console.log(`🚀 API running on http://localhost:${port}/api/v1`);
+  console.log(`API running on http://localhost:${port}/api/v1`);
   if (nodeEnv !== 'production') {
-    console.log(`📚 Swagger docs at http://localhost:${port}/api/docs`);
+    console.log(`Swagger docs at http://localhost:${port}/api/docs`);
   }
 }
 

@@ -185,8 +185,9 @@ export class TenantService {
     return this.prisma.planLimit.findUnique({ where: { plan: store.plan } });
   }
 
-  invalidateStoreCache(storeId: string, slug?: string): void {
+  invalidateStoreCache(storeId: string, slug?: string, customDomain?: string): void {
     void this.redis.del(`store:id:${storeId}`);
     if (slug) void this.redis.del(`store:slug:${slug}`);
+    if (customDomain) void this.redis.del(`store:domain:${customDomain}`);
   }
 }

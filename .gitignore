@@ -8,11 +8,15 @@ dist
 .turbo
 out
 
-# Environment
+# Environment — never commit secrets
 .env
 .env.local
+.env.production
+.env.staging
 .env.*.local
 !.env.example
+!.env.production.example
+!.env.staging.example
 
 # Prisma
 prisma/migrations/dev.db

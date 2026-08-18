@@ -365,7 +365,8 @@ export class BillingService {
           }),
           this.prisma.store.update({
             where: { id: sub.storeId },
-            data:  { plan: Plan.FREE },
+            // Deactivate storefront — expired stores must upgrade to go back live
+            data:  { plan: Plan.FREE, isActive: false },
           }),
         ]);
         this.tenant.invalidateStoreCache(sub.storeId, sub.store.slug);

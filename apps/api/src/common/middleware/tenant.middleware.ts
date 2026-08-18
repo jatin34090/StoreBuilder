@@ -1,6 +1,7 @@
 import { Injectable, NestMiddleware, Logger } from '@nestjs/common';
 import type { Request, Response, NextFunction } from 'express';
 import { TenantService } from '../../modules/tenant/tenant.service';
+import { RESERVED_SUBDOMAINS } from '../../common/constants/domains';
 import type { Store } from '@prisma/client';
 
 // Extend Express Request to carry tenant context
@@ -28,7 +29,14 @@ export class TenantMiddleware implements NestMiddleware {
       const store = await this.resolveStore(req);
       if (store) {
         if (!store.isActive) {
-          res.status(503).json({ statusCode: 503, message: 'This store is currently suspended' });
+          // Distinguish trial expiry (402) from admin suspension (503)
+          // Trial-expired stores have plan=FREE and isActive=false due to expireTrials()
+          const isSuspended = store.status === 'SUSPENDED';
+          if (isSuspended) {
+            res.status(503).json({ statusCode: 503, message: 'This store is currently suspended. Contact support.' });
+          } else {
+            res.status(402).json({ statusCode: 402, message: 'Your trial has expired. Please upgrade to reactivate your store.' });
+          }
           return;
         }
         req.store   = store;
@@ -64,8 +72,8 @@ export class TenantMiddleware implements NestMiddleware {
 
     // Subdomain match: store-slug.platform.com
     if (hostname.endsWith(`.${PLATFORM_DOMAIN}`)) {
-      const slug = hostname.replace(`.${PLATFORM_DOMAIN}`, '');
-      if (slug && slug !== 'www' && slug !== 'api' && slug !== 'admin') {
+      const slug = hostname.slice(0, hostname.length - PLATFORM_DOMAIN.length - 1);
+      if (slug && !RESERVED_SUBDOMAINS.has(slug)) {
         const bySlug = await this.tenantService.resolveBySlug(slug);
         if (bySlug) return bySlug;
       }

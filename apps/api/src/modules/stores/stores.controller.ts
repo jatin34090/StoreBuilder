@@ -150,6 +150,22 @@ export class AdminStoreController {
     return this.storesService.launch(user.storeId!);
   }
 
+  @Patch('publish')
+  @Roles(Role.ADMIN)
+  @HttpCode(HttpStatus.OK)
+  @ApiOperation({ summary: 'Publish store — make it publicly accessible' })
+  publishStore(@CurrentUser() user: AuthUser) {
+    return this.storesService.publish(user.storeId!);
+  }
+
+  @Patch('unpublish')
+  @Roles(Role.ADMIN)
+  @HttpCode(HttpStatus.OK)
+  @ApiOperation({ summary: 'Unpublish store — take it offline temporarily without suspending' })
+  unpublishStore(@CurrentUser() user: AuthUser) {
+    return this.storesService.unpublish(user.storeId!);
+  }
+
   @Get('usage')
   @Roles(Role.ADMIN)
   @ApiOperation({ summary: 'View your plan usage vs limits' })

@@ -15,7 +15,7 @@ export interface StorePublicInfo {
  * Custom domain: anything that isn't the root domain or www.
  */
 export function parseHostname(hostname: string): { slug: string | null; isCustomDomain: boolean } {
-  const rootDomain = process.env['NEXT_PUBLIC_ROOT_DOMAIN'] ?? 'jewellery.yourdomain.in';
+  const rootDomain = process.env['NEXT_PUBLIC_ROOT_DOMAIN'] ?? '';
 
   // Strip port for local dev
   const host = hostname.split(':')[0];
@@ -49,7 +49,8 @@ async function resolveStore(params: { slug?: string; domain?: string }): Promise
       next: { revalidate: 60 },
     });
     if (!res.ok) return null;
-    return res.json() as Promise<StorePublicInfo>;
+    const json = (await res.json()) as { data?: StorePublicInfo };
+    return json.data ?? null;
   } catch {
     return null;
   }

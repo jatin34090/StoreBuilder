@@ -45,7 +45,10 @@ async function bootstrap() {
     origin: corsOrigins.split(',').map((o) => o.trim()),
     credentials: true,
     methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'],
-    allowedHeaders: ['Content-Type', 'Authorization', 'x-razorpay-signature', 'x-store-slug', 'x-store-id', 'x-request-id'],
+    // x-store-id is NOT in allowedHeaders — browsers must go through Next.js middleware
+    // which resolves storeId from subdomain/path (never trusts raw client header).
+    // Server-to-server requests (Next.js → API) still set it via requestHeaders.set().
+    allowedHeaders: ['Content-Type', 'Authorization', 'x-razorpay-signature', 'x-store-slug', 'x-request-id'],
     exposedHeaders: ['X-Request-ID'],
   });
 
@@ -75,8 +78,8 @@ async function bootstrap() {
   // Swagger (dev only)
   if (nodeEnv !== 'production') {
     const swaggerConfig = new DocumentBuilder()
-      .setTitle('Jewellery Platform API')
-      .setDescription('Complete REST API for the B2C artificial jewellery platform')
+      .setTitle('StoreBuilder Platform API')
+      .setDescription('Complete REST API for the multi-tenant ecommerce SaaS platform')
       .setVersion('1.0')
       .addBearerAuth({ type: 'http', scheme: 'bearer', bearerFormat: 'JWT' }, 'access-token')
       .addCookieAuth('refresh_token')

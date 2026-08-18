@@ -226,6 +226,40 @@ export class StoresService {
     return { success: true, message: 'Store launched successfully', slug: store.slug };
   }
 
+  async publish(id: string) {
+    const store = await this.prisma.store.findUnique({
+      where: { id },
+      select: { id: true, slug: true, status: true, isActive: true },
+    });
+    if (!store) throw new NotFoundException('Store not found');
+    if (store.status === StoreStatus.SUSPENDED) {
+      throw new BadRequestException('Store is suspended by the platform. Contact support.');
+    }
+    if (store.isActive) return { success: true, message: 'Store is already published' };
+
+    await this.prisma.store.update({ where: { id }, data: { isActive: true } });
+    this.tenant.invalidateStoreCache(id, store.slug);
+    this.logger.log(`Store published: ${store.slug}`);
+    return { success: true, message: 'Store is now live' };
+  }
+
+  async unpublish(id: string) {
+    const store = await this.prisma.store.findUnique({
+      where: { id },
+      select: { id: true, slug: true, status: true, isActive: true },
+    });
+    if (!store) throw new NotFoundException('Store not found');
+    if (store.status === StoreStatus.SUSPENDED) {
+      throw new BadRequestException('Store is suspended by the platform. Only Super Admin can reinstate.');
+    }
+    if (!store.isActive) return { success: true, message: 'Store is already offline' };
+
+    await this.prisma.store.update({ where: { id }, data: { isActive: false } });
+    this.tenant.invalidateStoreCache(id, store.slug);
+    this.logger.log(`Store unpublished: ${store.slug}`);
+    return { success: true, message: 'Store is now offline. Use /publish to bring it back.' };
+  }
+
   async suspend(id: string) {
     const store = await this.prisma.store.findUnique({ where: { id } });
     if (!store) throw new NotFoundException('Store not found');
@@ -644,8 +678,32 @@ export class StoresService {
       throw new BadRequestException('Provide slug or domain query param');
     }
 
+    let storeId: string | undefined;
+
+    if (domain) {
+      const normalized = domain.toLowerCase().replace(/\.$/, '');
+      // Phase 12: look up via StoreDomain table (ACTIVE only)
+      const storeDomain = await this.prisma.storeDomain.findFirst({
+        where: { normalizedDomain: normalized, status: 'ACTIVE' },
+        select: { storeId: true },
+      });
+      if (storeDomain) {
+        storeId = storeDomain.storeId;
+      } else {
+        // Legacy fallback: direct customDomain on Store
+        const byCustomDomain = await this.prisma.store.findFirst({
+          where: { customDomain: normalized },
+          select: { id: true },
+        });
+        if (byCustomDomain) storeId = byCustomDomain.id;
+      }
+    }
+
+    // If domain was provided but no storeId resolved, return 404 immediately
+    if (domain && !storeId) throw new NotFoundException('Store not found');
+
     const store = await this.prisma.store.findFirst({
-      where: slug ? { slug } : { customDomain: domain },
+      where: storeId ? { id: storeId } : { slug },
       select: {
         id:           true,
         name:         true,

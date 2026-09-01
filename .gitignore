@@ -48,3 +48,6 @@ apps/mobile/android
 # Misc
 *.tgz
 .cache
+
+# Claude Code
+.claude/

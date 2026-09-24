@@ -47,6 +47,7 @@ function LoginPageContent() {
   const [phone, setPhone] = useState('');
   const [showPassword, setShowPassword] = useState(false);
   const [brandName, setBrandName] = useState('YourBrand');
+  const [activeTab, setActiveTab] = useState<'otp' | 'password'>('otp');
 
   useEffect(() => {
     api.get('/settings/site')
@@ -67,11 +68,23 @@ function LoginPageContent() {
     }
   };
 
-  const onLoginSuccess = async (user: { id: string; name: string; email?: string; phone?: string; role: 'CUSTOMER' | 'ADMIN' | 'DELIVERY_AGENT' }) => {
-    setUser(user);
+  const onLoginSuccess = async (user: { id: string; name: string; email?: string; phone?: string; role: 'CUSTOMER' | 'ADMIN' | 'DELIVERY_AGENT' | 'SUPER_ADMIN'; storeId?: string }) => {
+    setUser({ ...user, storeId: user.storeId ?? undefined });
     await mergeGuestCart();
     toast.success(`Welcome back, ${user.name.split(' ')[0]}!`);
-    router.push(redirectTo);
+
+    // Role-based redirect — don't send admins back to the marketing landing page
+    if (redirectTo && redirectTo !== '/') {
+      router.push(redirectTo);
+    } else if (user.role === 'ADMIN') {
+      router.push('/admin');
+    } else if (user.role === 'SUPER_ADMIN') {
+      router.push('/super-admin');
+    } else if (user.role === 'DELIVERY_AGENT') {
+      router.push('/agent');
+    } else {
+      router.push(redirectTo);
+    }
   };
 
   const otpRequestForm = useForm<OtpRequestForm>({ resolver: zodResolver(otpRequestSchema) });
@@ -123,7 +136,7 @@ function LoginPageContent() {
         </div>
 
         <div className="bg-card border rounded-xl p-6 shadow-sm">
-          <Tabs defaultValue="otp">
+          <Tabs value={activeTab} onValueChange={(v) => setActiveTab(v as 'otp' | 'password')}>
             <TabsList className="w-full mb-6">
               <TabsTrigger value="otp" className="flex-1">📱 OTP Login</TabsTrigger>
               <TabsTrigger value="password" className="flex-1">🔒 Password</TabsTrigger>
@@ -243,6 +256,17 @@ function LoginPageContent() {
                 <Button type="submit" className="w-full" disabled={loginForm.formState.isSubmitting}>
                   {loginForm.formState.isSubmitting ? <Loader2 className="h-4 w-4 animate-spin" /> : 'Sign In'}
                 </Button>
+                <p className="text-center text-xs text-muted-foreground pt-1">
+                  New customer?{' '}
+                  <button
+                    type="button"
+                    onClick={() => setActiveTab('otp')}
+                    className="text-primary font-medium hover:underline"
+                  >
+                    Sign up with OTP instead
+                  </button>
+                  {' '}— no password needed.
+                </p>
               </form>
             </TabsContent>
           </Tabs>
@@ -256,7 +280,17 @@ function LoginPageContent() {
           <Button
             variant="outline"
             className="w-full mt-4"
-            onClick={() => (window.location.href = `${process.env['NEXT_PUBLIC_API_URL'] ?? 'http://localhost:3001/api/v1'}/auth/google`)}
+            onClick={() => {
+              // Store the post-login destination before leaving for Google OAuth.
+              // The callback page reads this and redirects the customer back to the
+              // right store page instead of the StoreBuilder home.
+              // Save the return destination before leaving for Google OAuth.
+              // Fall back to the current pathname so the customer returns to the
+              // right store page even when no ?redirect= param was provided.
+              const returnTo = (redirectTo && redirectTo !== '/') ? redirectTo : window.location.pathname;
+              try { sessionStorage.setItem('oauth_return_to', returnTo); } catch { /* private mode */ }
+              window.location.href = `${process.env['NEXT_PUBLIC_API_URL'] ?? 'http://localhost:3001/api/v1'}/auth/google`;
+            }}
           >
             <svg className="h-4 w-4 mr-2" viewBox="0 0 24 24">
               <path d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z" fill="#4285F4"/>
@@ -269,10 +303,7 @@ function LoginPageContent() {
         </div>
 
         <p className="text-center text-sm text-muted-foreground mt-6">
-          New to {brandName}?{' '}
-          <Link href="/auth/login" className="text-primary font-medium hover:underline">
-            Create an account
-          </Link>
+          New here? Enter your phone number above — your account is created automatically on first login.
         </p>
       </div>
     </div>

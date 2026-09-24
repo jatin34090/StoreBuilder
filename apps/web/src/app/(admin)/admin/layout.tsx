@@ -70,9 +70,17 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
 
         setVerified(true);
       })
-      .catch(() => {
-        clearAdminAuth();
-        router.replace('/admin/login');
+      .catch((err: { response?: { status?: number } }) => {
+        const status = err?.response?.status;
+        if (status === 401 || status === 403) {
+          // Confirmed invalid/expired session → send to login
+          clearAdminAuth();
+          router.replace('/admin/login');
+        } else {
+          // Server error or network failure — keep the existing cached state,
+          // don't falsely log the user out on a temporary server hiccup.
+          setVerified(true);
+        }
       });
   }, [isLoginPage, clearAdminAuth, setAdminAuth, setAdminStore, router]);
 

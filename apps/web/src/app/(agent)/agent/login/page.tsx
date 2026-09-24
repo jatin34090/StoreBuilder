@@ -61,7 +61,7 @@ export default function AgentLoginPage() {
             <Truck className="w-8 h-8 text-white" />
           </div>
           <h1 className="text-2xl font-bold text-white">Delivery Agent</h1>
-          <p className="text-slate-400 text-sm mt-1">YourBrand Logistics Portal</p>
+          <p className="text-slate-400 text-sm mt-1">Logistics Portal</p>
         </div>
 
         <div className="bg-white/5 backdrop-blur border border-white/10 rounded-2xl p-6 shadow-2xl">

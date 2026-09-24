@@ -14,24 +14,27 @@ const playfair = Playfair_Display({
 
 export async function generateMetadata(): Promise<Metadata> {
   const tenant = await getTenant();
-  const storeName = tenant?.name ?? 'YourBrand Jewellery';
   const baseUrl = process.env['NEXT_PUBLIC_WEB_URL'] ?? 'https://yourdomain.in';
+
+  // On the platform root (no store context) metadata comes from page-level exports.
+  // On store subdomains/custom domains the tenant name is used.
+  const storeName = tenant?.name;
+  const defaultTitle = storeName ? `${storeName} — Online Store` : 'StoreBuilder';
+  const defaultDesc = storeName
+    ? `Shop online at ${storeName}.`
+    : 'The all-in-one ecommerce SaaS platform for Indian businesses.';
 
   return {
     metadataBase: new URL(baseUrl),
     title: {
-      default: `${storeName} — Artificial Jewellery Online`,
-      template: `%s | ${storeName}`,
+      default: defaultTitle,
+      template: storeName ? `%s | ${storeName}` : `%s | StoreBuilder`,
     },
-    description:
-      'Shop beautiful artificial jewellery online. Earrings, necklaces, bangles and more at affordable prices.',
-    keywords: ['artificial jewellery', 'fashion jewellery', 'imitation jewellery', 'buy online india'],
-    authors: [{ name: storeName }],
-    creator: storeName,
+    description: defaultDesc,
     openGraph: {
       type: 'website',
       locale: 'en_IN',
-      siteName: storeName,
+      siteName: storeName ?? 'StoreBuilder',
     },
     twitter: { card: 'summary_large_image' },
     robots: { index: true, follow: true },

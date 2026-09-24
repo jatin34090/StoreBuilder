@@ -29,12 +29,20 @@ export function setAdminStoreSlug(slug: string | undefined) { _adminStoreSlug = 
 export function getAdminStoreSlug(): string | undefined { return _adminStoreSlug; }
 
 api.interceptors.request.use((config) => {
-  const url = config.url ?? '';
-  const isAdminRoute = url.startsWith('/admin/') || url.startsWith('admin/');
+  // For file uploads (FormData), remove the default 'application/json' Content-Type so
+  // the browser/axios can set 'multipart/form-data; boundary=...' automatically.
+  // axios 1.x: config.headers is an AxiosHeaders instance — use its .delete() method
+  // rather than the JS `delete` operator so the internal header registry is correctly
+  // updated before toJSON() serialisation (used by the XHR adapter).
+  if (typeof FormData !== 'undefined' && config.data instanceof FormData) {
+    config.headers.delete('Content-Type');
+  }
 
-  if (isAdminRoute && _adminStoreSlug) {
+  if (_adminStoreSlug) {
+    // Admin session: all requests carry x-store-slug so the API resolves the correct tenant.
     config.headers['x-store-slug'] = _adminStoreSlug;
-  } else if (!isAdminRoute) {
+  } else {
+    // Storefront session: inject store-id from the cookie set by Next.js middleware.
     const storeId = getStoreIdCookie();
     if (storeId) config.headers['X-Store-Id'] = storeId;
   }
@@ -181,4 +189,11 @@ export const notificationsApi = {
   list: (params?: Record<string, unknown>) => api.get('/notifications', { params }),
   markRead: (id: string) => api.patch(`/notifications/${id}/read`),
   markAllRead: () => api.patch('/notifications/read-all'),
+};
+
+// ─── Settings ─────────────────────────────────────────────────────────────────
+
+export const settingsApi = {
+  site:     () => api.get('/settings/site'),
+  shipping: () => api.get('/settings/shipping'),
 };

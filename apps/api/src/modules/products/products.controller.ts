@@ -11,7 +11,7 @@ import {
   HttpCode,
   HttpStatus,
 } from '@nestjs/common';
-import { ApiTags, ApiBearerAuth, ApiOperation, ApiParam, ApiBody } from '@nestjs/swagger';
+import { ApiTags, ApiBearerAuth, ApiOperation, ApiParam } from '@nestjs/swagger';
 import { ProductsService } from './products.service';
 import { CreateProductDto } from './dto/create-product.dto';
 import { UpdateProductDto } from './dto/update-product.dto';
@@ -21,7 +21,6 @@ import { ReorderImagesDto } from './dto/reorder-images.dto';
 import { Public } from '../../common/decorators/public.decorator';
 import { Roles } from '../../common/decorators/roles.decorator';
 import { RequirePermission } from '../../common/decorators/require-permission.decorator';
-import { CurrentUser, type AuthUser } from '../../common/decorators/current-user.decorator';
 import { CurrentStoreId } from '../../common/decorators/current-store.decorator';
 import { Role } from '@jewellery/types';
 
@@ -45,49 +44,6 @@ export class ProductsController {
   @ApiParam({ name: 'slug', example: 'gold-plated-kundan-necklace-set' })
   findBySlug(@Param('slug') slug: string, @CurrentStoreId() storeId: string) {
     return this.productsService.findBySlug(slug, storeId);
-  }
-
-  // ─── Customer — Cart ─────────────────────────────────────────────────────
-
-  @Get('cart')
-  @ApiBearerAuth('access-token')
-  @ApiOperation({ summary: 'Get server-synced cart with variant details' })
-  getCart(@CurrentUser() user: AuthUser) {
-    return this.productsService.getCart(user.id);
-  }
-
-  @Post('cart/items')
-  @ApiBearerAuth('access-token')
-  @ApiOperation({ summary: 'Add item to cart or increment quantity' })
-  @ApiBody({ schema: { properties: { variantId: { type: 'string' }, quantity: { type: 'integer', minimum: 1 } } } })
-  addToCart(
-    @CurrentUser() user: AuthUser,
-    @Body('variantId') variantId: string,
-    @Body('quantity') quantity = 1,
-  ) {
-    return this.productsService.addToCart(user.id, variantId, quantity);
-  }
-
-  @Patch('cart/items/:variantId')
-  @ApiBearerAuth('access-token')
-  @ApiOperation({ summary: 'Update cart item quantity (0 = remove)' })
-  updateCartItem(
-    @CurrentUser() user: AuthUser,
-    @Param('variantId') variantId: string,
-    @Body('quantity') quantity: number,
-  ) {
-    return this.productsService.updateCartItem(user.id, variantId, quantity);
-  }
-
-  @Delete('cart/items/:variantId')
-  @ApiBearerAuth('access-token')
-  @HttpCode(HttpStatus.NO_CONTENT)
-  @ApiOperation({ summary: 'Remove item from cart' })
-  removeCartItem(
-    @CurrentUser() user: AuthUser,
-    @Param('variantId') variantId: string,
-  ) {
-    return this.productsService.removeCartItem(user.id, variantId);
   }
 
   // ─── Admin — Product CRUD ─────────────────────────────────────────────────

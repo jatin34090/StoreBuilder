@@ -20,14 +20,13 @@ import { CouponsService } from '../coupons/coupons.service';
 import { PaymentsService } from '../payments/payments.service';
 import { NotificationsService } from '../notifications/notifications.service';
 import { TenantService } from '../tenant/tenant.service';
+import { SettingsService } from '../settings/settings.service';
+import { EmailService, type OrderEmailContext } from '../email/email.service';
 import { EventsGateway, WsEvents } from '../events/events.gateway';
 import { NotificationType } from '@jewellery/types';
 
 // ─── Constants ────────────────────────────────────────────────────────────────
 
-const DEFAULT_STORE_ID = '00000000-0000-0000-0000-000000000001';
-const FREE_SHIPPING_THRESHOLD = 999;
-const SHIPPING_CHARGE = 49;
 const TRANSACTION_TIMEOUT_MS = 10_000;
 
 // ─── Status machine ───────────────────────────────────────────────────────────
@@ -86,12 +85,14 @@ export class OrdersService {
     @Inject(forwardRef(() => PaymentsService)) private readonly payments: PaymentsService,
     private readonly notifications: NotificationsService,
     private readonly tenant: TenantService,
+    private readonly settings: SettingsService,
+    private readonly email: EmailService,
     private readonly gateway: EventsGateway,
   ) {}
 
   // ─── Customer: Place Order ─────────────────────────────────────────────────
 
-  async placeOrder(userId: string, dto: CreateOrderDto, storeId = DEFAULT_STORE_ID) {
+  async placeOrder(userId: string, dto: CreateOrderDto, storeId: string) {
     // 0. Enforce monthly order quota before doing anything else
     await this.tenant.checkOrderQuota(storeId);
 
@@ -104,7 +105,7 @@ export class OrdersService {
     // 2. Fetch all variants with product info + primary image in one query
     const variantIds = dto.items.map((i) => i.variantId);
     const variants = await this.prisma.productVariant.findMany({
-      where: { id: { in: variantIds } },
+      where: { id: { in: variantIds }, product: { storeId } },
       select: {
         id: true,
         sku: true,
@@ -147,7 +148,13 @@ export class OrdersService {
       return sum + price * item.quantity;
     }, 0);
 
-    const shippingCharge = subtotal >= FREE_SHIPPING_THRESHOLD ? 0 : SHIPPING_CHARGE;
+    // Load per-store shipping configuration — server owns the calculation
+    const shippingCfg = await this.settings.getShippingConfig(storeId);
+    const shippingCharge = !shippingCfg.enabled
+      ? 0
+      : shippingCfg.freeThreshold > 0 && subtotal >= shippingCfg.freeThreshold
+        ? 0
+        : shippingCfg.flatRate;
 
     // 5. Validate and apply coupon
     let discountAmount = 0;
@@ -156,7 +163,7 @@ export class OrdersService {
       const couponResult = await this.coupons.validate({
         code: dto.couponCode,
         orderSubtotal: subtotal,
-      });
+      }, storeId);
       discountAmount = couponResult.discountAmount;
       couponId = couponResult.coupon.id;
     }
@@ -243,16 +250,37 @@ export class OrdersService {
           }
         }
 
-        // Consume coupon (increment usedCount)
+        // Atomically consume coupon — re-checks limit inside the transaction to close the TOCTOU window
         if (couponId) {
-          await tx.coupon.update({
+          const couponForLock = await tx.coupon.findUnique({
             where: { id: couponId },
+            select: { usageLimit: true, isActive: true, expiresAt: true },
+          });
+          if (!couponForLock || !couponForLock.isActive) {
+            throw new BadRequestException('Coupon is no longer valid. Please remove it and try again.');
+          }
+          if (couponForLock.expiresAt && couponForLock.expiresAt < new Date()) {
+            throw new BadRequestException('Coupon has expired. Please remove it and try again.');
+          }
+          // Conditional increment: only succeeds if usedCount < usageLimit (or limit is null = unlimited)
+          const couponUpdate = await tx.coupon.updateMany({
+            where: {
+              id: couponId,
+              ...(couponForLock.usageLimit !== null
+                ? { usedCount: { lt: couponForLock.usageLimit } }
+                : {}),
+            },
             data: { usedCount: { increment: 1 } },
           });
+          if (couponForLock.usageLimit !== null && couponUpdate.count === 0) {
+            throw new BadRequestException(
+              'This coupon has just reached its usage limit. Please try a different code.',
+            );
+          }
         }
 
-        // Clear customer cart after successful order
-        await tx.cartItem.deleteMany({ where: { userId } });
+        // Clear only the current store's cart for this customer
+        await tx.cartItem.deleteMany({ where: { userId, storeId } });
 
         return newOrder;
       },
@@ -271,6 +299,13 @@ export class OrdersService {
       `Method: ${dto.paymentMethod}. RzpOrderId: ${razorpayOrderId ?? 'COD'}`,
     );
 
+    // Fire-and-forget confirmation email for COD (non-COD email sent on payment confirmation)
+    if (dto.paymentMethod === PaymentMethod.COD) {
+      this.sendOrderEmail('confirmation', order.id).catch((e) =>
+        this.logger.warn(`Order confirmation email failed: ${(e as Error).message}`),
+      );
+    }
+
     return {
       order,
       payment: {
@@ -283,12 +318,12 @@ export class OrdersService {
 
   // ─── Customer: List My Orders ──────────────────────────────────────────────
 
-  async findMyOrders(userId: string, dto: QueryOrdersDto) {
+  async findMyOrders(userId: string, dto: QueryOrdersDto, storeId: string) {
     const page = dto.page ?? 1;
     const limit = Math.min(dto.limit ?? 10, 100);
     const skip = (page - 1) * limit;
 
-    const where: Prisma.OrderWhereInput = { userId };
+    const where: Prisma.OrderWhereInput = { userId, storeId };
     if (dto.status) where.status = dto.status;
     if (dto.from || dto.to) {
       where.createdAt = {
@@ -355,6 +390,10 @@ export class OrdersService {
     this.emitOrderEvent(WsEvents.ORDER_CANCELLED, { orderId, userId });
     this.logger.log(`Order ${order.orderNumber} cancelled by customer ${userId}. Reason: ${dto.reason}`);
 
+    this.sendOrderEmail('cancelled', orderId, `Cancelled by customer: ${dto.reason}`).catch((e) =>
+      this.logger.warn(`Cancellation email failed: ${(e as Error).message}`),
+    );
+
     return { message: 'Order cancelled successfully' };
   }
 
@@ -381,7 +420,7 @@ export class OrdersService {
 
   // ─── Admin: List All Orders ────────────────────────────────────────────────
 
-  async adminListOrders(dto: QueryOrdersDto, storeId = DEFAULT_STORE_ID) {
+  async adminListOrders(dto: QueryOrdersDto, storeId: string) {
     const page = dto.page ?? 1;
     const limit = Math.min(dto.limit ?? 10, 100);
     const skip = (page - 1) * limit;
@@ -422,7 +461,7 @@ export class OrdersService {
 
   // ─── Admin: Get Single Order ───────────────────────────────────────────────
 
-  async adminGetOrder(orderId: string, storeId = DEFAULT_STORE_ID) {
+  async adminGetOrder(orderId: string, storeId: string) {
     const order = await this.prisma.order.findFirst({
       where: { id: orderId, storeId },
       select: {
@@ -436,7 +475,7 @@ export class OrdersService {
 
   // ─── Admin: Update Order Status ────────────────────────────────────────────
 
-  async adminUpdateStatus(orderId: string, dto: UpdateOrderStatusDto, storeId = DEFAULT_STORE_ID) {
+  async adminUpdateStatus(orderId: string, dto: UpdateOrderStatusDto, storeId: string) {
     const order = await this.prisma.order.findFirst({
       where: { id: orderId, storeId },
       include: { items: true },
@@ -481,6 +520,21 @@ export class OrdersService {
 
     this.emitOrderEvent(WsEvents.ORDER_STATUS_CHANGED, { orderId, storeId, status: dto.status });
     this.logger.log(`Order ${order.orderNumber} status → ${dto.status}`);
+
+    // Fire-and-forget emails on status transitions
+    if (dto.status === OrderStatus.SHIPPED) {
+      this.sendOrderEmail('shipped', orderId).catch((e) =>
+        this.logger.warn(`Shipped email failed: ${(e as Error).message}`),
+      );
+    } else if (dto.status === OrderStatus.DELIVERED) {
+      this.sendOrderEmail('delivered', orderId).catch((e) =>
+        this.logger.warn(`Delivered email failed: ${(e as Error).message}`),
+      );
+    } else if (dto.status === OrderStatus.CANCELLED) {
+      this.sendOrderEmail('cancelled', orderId, dto.notes).catch((e) =>
+        this.logger.warn(`Cancelled email failed: ${(e as Error).message}`),
+      );
+    }
 
     return { message: `Order status updated to ${dto.status}` };
   }
@@ -653,18 +707,28 @@ export class OrdersService {
 
   async confirmPayment(orderId: string, razorpayPayId: string): Promise<void> {
     await this.prisma.$transaction(async (tx) => {
+      // Idempotency: conditional update — only proceeds if still PENDING
+      const updated = await tx.payment.updateMany({
+        where: { orderId, status: 'PENDING' },
+        data: { razorpayPayId, status: 'SUCCESS', paidAt: new Date() },
+      });
+      if (updated.count === 0) {
+        this.logger.warn(`confirmPayment: order ${orderId} already confirmed — skipping`);
+        return;
+      }
       await tx.order.update({
         where: { id: orderId },
         data: { status: OrderStatus.CONFIRMED },
-      });
-      await tx.payment.update({
-        where: { orderId },
-        data: { razorpayPayId, status: 'SUCCESS', paidAt: new Date() },
       });
     });
 
     this.emitOrderEvent(WsEvents.ORDER_PAYMENT_CONFIRMED, { orderId });
     this.logger.log(`Payment confirmed for order ${orderId}. RzpPayId: ${razorpayPayId}`);
+
+    // Fire-and-forget: send order confirmation email after payment
+    this.sendOrderEmail('payment_confirmation', orderId).catch((e) =>
+      this.logger.warn(`Payment confirmation email failed: ${(e as Error).message}`),
+    );
   }
 
   // ─── Internal: Called by PaymentsService for refunds ──────────────────────
@@ -696,6 +760,71 @@ export class OrdersService {
     ]);
 
     this.logger.log(`Order ${orderId} marked refunded. RefundId: ${refundId}, Amount: ₹${refundAmount}`);
+  }
+
+  // ─── Email helper ────────────────────────────────────────────────────────
+  // Fire-and-forget — never throws. Loads order + user + store data in one query.
+
+  private async sendOrderEmail(
+    type: 'confirmation' | 'payment_confirmation' | 'shipped' | 'delivered' | 'cancelled',
+    orderId: string,
+    reason?: string,
+  ): Promise<void> {
+    const order = await this.prisma.order.findUnique({
+      where: { id: orderId },
+      select: {
+        id: true,
+        orderNumber: true,
+        storeId: true,
+        subtotal: true,
+        shippingCharge: true,
+        discountAmount: true,
+        total: true,
+        payment: { select: { method: true } },
+        items: { select: { name: true, quantity: true, price: true, image: true } },
+        address: { select: { name: true, line1: true, city: true, state: true, pincode: true } },
+        delivery: { select: { awbCode: true, trackingUrl: true } },
+        user: { select: { name: true, email: true } },
+        store: { select: { name: true } },
+      },
+    });
+    if (!order || !order.user.email) return;
+
+    const siteConfig = await this.settings.getSiteConfig(order.storeId);
+    const storeName = siteConfig['brandName'] ?? order.store.name;
+    const storeUrl  = siteConfig['heroCta1Link'] ?? undefined;
+
+    const ctx: OrderEmailContext = {
+      storeId:         order.storeId,
+      orderId:         order.id,
+      orderNumber:     order.orderNumber,
+      customerName:    order.user.name,
+      customerEmail:   order.user.email,
+      storeName,
+      storeUrl,
+      items: order.items.map((i) => ({
+        name:     i.name,
+        quantity: i.quantity,
+        price:    Number(i.price),
+        image:    i.image ?? undefined,
+      })),
+      subtotal:        Number(order.subtotal),
+      shipping:        Number(order.shippingCharge),
+      discount:        Number(order.discountAmount),
+      total:           Number(order.total),
+      paymentMethod:   order.payment?.method ?? 'COD',
+      deliveryAddress: order.address
+        ? `${order.address.name}, ${order.address.line1}, ${order.address.city}, ${order.address.state} - ${order.address.pincode}`
+        : '',
+    };
+
+    switch (type) {
+      case 'confirmation':        await this.email.sendOrderConfirmation(ctx); break;
+      case 'payment_confirmation':await this.email.sendPaymentConfirmation(ctx); break;
+      case 'shipped':             await this.email.sendOrderShipped({ ...ctx, awbCode: order.delivery?.awbCode ?? undefined, trackingUrl: order.delivery?.trackingUrl ?? undefined }); break;
+      case 'delivered':           await this.email.sendOrderDelivered(ctx); break;
+      case 'cancelled':           await this.email.sendOrderCancelled({ ...ctx, reason }); break;
+    }
   }
 
   // ─── WebSocket event emission ─────────────────────────────────────────────

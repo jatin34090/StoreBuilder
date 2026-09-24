@@ -2,7 +2,7 @@
 
 import Image from 'next/image';
 import Link from 'next/link';
-import { useRouter } from 'next/navigation';
+import { useRouter, usePathname } from 'next/navigation';
 import { ShoppingBag, Heart, Search, Menu, User, LogOut, Package, Sun, Moon } from 'lucide-react';
 import { NotificationBell } from '@/components/layout/NotificationBell';
 import { useState, useEffect } from 'react';
@@ -57,7 +57,9 @@ function useUserDarkMode() {
 
 export function Header({ brand }: HeaderProps) {
   const router = useRouter();
+  const pathname = usePathname();
   const { isAuthenticated, clearUser } = useAuthStore();
+  const loginHref = `/auth/login?redirect=${encodeURIComponent(pathname)}`;
   const totalItems = useCartStore((s) => s.totalItems());
   const [mobileOpen, setMobileOpen] = useState(false);
   const { isDark, toggle: toggleDark } = useUserDarkMode();
@@ -81,7 +83,8 @@ export function Header({ brand }: HeaderProps) {
   const handleLogout = async () => {
     try { await authApi.logout(); } finally {
       clearUser();
-      router.push('/');
+      // Stay on the current store page as a guest — never redirect to StoreBuilder home.
+      router.refresh();
       toast.success('Logged out successfully');
     }
   };
@@ -210,7 +213,7 @@ export function Header({ brand }: HeaderProps) {
               </div>
             ) : (
               <Button size="sm" className="hidden lg:inline-flex ml-1 tracking-wide" asChild style={{ fontSize: '0.75rem', letterSpacing: '0.06em' }}>
-                <Link href="/auth/login">Sign In</Link>
+                <Link href={loginHref}>Sign In</Link>
               </Button>
             )}
 
@@ -256,7 +259,7 @@ export function Header({ brand }: HeaderProps) {
                       </button>
                     </>
                   ) : (
-                    <Link href="/auth/login" onClick={() => setMobileOpen(false)} className="flex items-center gap-2 px-3 py-2.5 rounded text-sm font-medium bg-primary text-primary-foreground hover:bg-primary/90">
+                    <Link href={loginHref} onClick={() => setMobileOpen(false)} className="flex items-center gap-2 px-3 py-2.5 rounded text-sm font-medium bg-primary text-primary-foreground hover:bg-primary/90">
                       <User className="h-4 w-4" /> Sign In
                     </Link>
                   )}

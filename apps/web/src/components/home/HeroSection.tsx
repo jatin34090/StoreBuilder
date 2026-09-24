@@ -1,13 +1,16 @@
 import Link from 'next/link';
 import { Button } from '@/components/ui/button';
 import { ArrowRight } from 'lucide-react';
+import { headers } from 'next/headers';
 import { cn } from '@/lib/utils';
 import { fetchSiteConfig, DEFAULT_SITE_CONFIG, DEFAULT_STATS } from '@/lib/site-config';
 
 export async function HeroSection() {
+  const headersList = await headers();
+  const storeId = headersList.get('x-store-id') ?? undefined;
   let config = DEFAULT_SITE_CONFIG;
   try {
-    const fetched = await fetchSiteConfig();
+    const fetched = await fetchSiteConfig(storeId);
     if (fetched && typeof fetched === 'object') config = fetched;
   } catch {
     // fall through to defaults

@@ -56,7 +56,17 @@ export class ShiprocketService {
 
   constructor(private readonly config: ConfigService) {
     this.isMock = this.config.get<string>('SHIPROCKET_MOCK') === 'true';
-    if (this.isMock) this.logger.warn('Shiprocket running in MOCK mode — no real API calls will be made');
+    if (this.isMock) {
+      const isProd = this.config.get<string>('NODE_ENV') === 'production';
+      if (isProd) {
+        this.logger.error(
+          'SHIPROCKET_MOCK=true in production! Shipment creation will be blocked. ' +
+          'Set SHIPROCKET_MOCK=false and configure credentials to enable real shipments.',
+        );
+      } else {
+        this.logger.warn('Shiprocket running in MOCK mode — no real API calls will be made');
+      }
+    }
   }
 
   // ─── Auth ─────────────────────────────────────────────────────────────────
@@ -108,6 +118,13 @@ export class ShiprocketService {
 
   async createShipment(input: CreateShipmentInput): Promise<ShipmentResult> {
     if (this.isMock) {
+      // Block mock mode in production to prevent fake shipments on real orders
+      if (this.config.get<string>('NODE_ENV') === 'production') {
+        throw new BadRequestException(
+          'Shiprocket is in MOCK mode but NODE_ENV=production. ' +
+          'Set SHIPROCKET_MOCK=false and configure SHIPROCKET_EMAIL / SHIPROCKET_PASSWORD.',
+        );
+      }
       const awbCode = `MOCK${Date.now()}`;
       this.logger.log(`[MOCK] Shiprocket shipment for order ${input.orderNumber}: AWB=${awbCode}`);
       return {

@@ -95,7 +95,7 @@ export default function StoreDetailPage({ params }: { params: Promise<{ id: stri
         </Button>
         <div className="flex-1">
           <h2 className="text-xl font-bold text-slate-800">{store.name}</h2>
-          <p className="text-sm text-muted-foreground">{store.slug}.yourdomain.in</p>
+          <p className="text-sm text-muted-foreground">{store.slug}.{process.env['NEXT_PUBLIC_ROOT_DOMAIN'] ?? 'yourdomain.in'}</p>
         </div>
         <div className="flex items-center gap-2">
           <Badge variant="secondary" className={PLAN_COLORS[store.plan] ?? ''}>{store.plan}</Badge>
@@ -128,7 +128,8 @@ export default function StoreDetailPage({ params }: { params: Promise<{ id: stri
               <SelectContent>
                 <SelectItem value="FREE">Free</SelectItem>
                 <SelectItem value="STARTER">Starter</SelectItem>
-                <SelectItem value="PROFESSIONAL">Professional</SelectItem>
+                <SelectItem value="GROWTH">Growth</SelectItem>
+                <SelectItem value="BUSINESS">Business</SelectItem>
                 <SelectItem value="ENTERPRISE">Enterprise</SelectItem>
               </SelectContent>
             </Select>

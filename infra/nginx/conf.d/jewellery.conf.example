@@ -1,0 +1,149 @@
+# jewellery.conf.example
+# ─────────────────────────────────────────────────────────────────────────────
+# Production Nginx server block for the Jewellery SaaS platform.
+# Copy to /etc/nginx/conf.d/jewellery.conf and edit the domain/cert paths.
+#
+# Certificate management: Let's Encrypt via Certbot
+#   certbot --nginx -d yourdomain.in -d www.yourdomain.in -d api.yourdomain.in
+#
+# TLS private keys are NEVER committed to source control.
+# ─────────────────────────────────────────────────────────────────────────────
+
+# ─── HTTP → HTTPS redirect ───────────────────────────────────────────────────
+server {
+    listen 80;
+    listen [::]:80;
+    server_name yourdomain.in www.yourdomain.in api.yourdomain.in;
+
+    # Allow Let's Encrypt ACME challenge (Certbot uses this during cert renewal)
+    location /.well-known/acme-challenge/ {
+        root /var/www/certbot;
+    }
+
+    # Redirect all other HTTP traffic to HTTPS
+    location / {
+        return 301 https://$host$request_uri;
+    }
+}
+
+# ─── API — api.yourdomain.in ─────────────────────────────────────────────────
+server {
+    listen 443 ssl;
+    listen [::]:443 ssl;
+    http2 on;
+    server_name api.yourdomain.in;
+
+    # TLS certificates (managed by Certbot/Let's Encrypt — never commit key files)
+    ssl_certificate     /etc/letsencrypt/live/api.yourdomain.in/fullchain.pem;
+    ssl_certificate_key /etc/letsencrypt/live/api.yourdomain.in/privkey.pem;
+    ssl_trusted_certificate /etc/letsencrypt/live/api.yourdomain.in/chain.pem;
+
+    # Modern TLS config (Mozilla "Intermediate" profile)
+    ssl_protocols TLSv1.2 TLSv1.3;
+    ssl_ciphers ECDHE-ECDSA-AES128-GCM-SHA256:ECDHE-RSA-AES128-GCM-SHA256:ECDHE-ECDSA-AES256-GCM-SHA384:ECDHE-RSA-AES256-GCM-SHA384:ECDHE-ECDSA-CHACHA20-POLY1305:ECDHE-RSA-CHACHA20-POLY1305:DHE-RSA-AES128-GCM-SHA256;
+    ssl_prefer_server_ciphers off;
+    ssl_session_cache   shared:MozSSL:10m;
+    ssl_session_timeout 1d;
+    ssl_stapling on;
+    ssl_stapling_verify on;
+
+    # HSTS — 1 year, include subdomains, preload
+    add_header Strict-Transport-Security "max-age=63072000; includeSubDomains; preload" always;
+    add_header X-Content-Type-Options "nosniff" always;
+    add_header X-Frame-Options "SAMEORIGIN" always;
+    add_header Referrer-Policy "strict-origin-when-cross-origin" always;
+
+    # Rate limiting (defined in nginx.conf)
+    limit_req zone=api burst=40 nodelay;
+    limit_conn conn 20;
+
+    # Body size — covers image uploads (Cloudinary re-upload at most ~10MB)
+    client_max_body_size 12m;
+
+    # ── API proxy ─────────────────────────────────────────────────────────────
+    location / {
+        proxy_pass         http://jewellery_api;
+        proxy_http_version 1.1;
+        proxy_set_header   Connection "";
+
+        # Forward real client IP (required for rate limiting and logging)
+        proxy_set_header   X-Real-IP        $remote_addr;
+        proxy_set_header   X-Forwarded-For  $proxy_add_x_forwarded_for;
+        proxy_set_header   X-Forwarded-Proto https;
+        proxy_set_header   Host             $host;
+
+        # Preserve original URI for API routing
+        proxy_set_header   X-Original-URI   $request_uri;
+
+        # Timeouts — keep low for API; heavy jobs use async queues
+        proxy_connect_timeout 5s;
+        proxy_send_timeout    30s;
+        proxy_read_timeout    30s;
+
+        # IMPORTANT: do NOT set proxy_request_buffering off globally —
+        # the Razorpay webhook endpoint needs rawBody intact (handled by NestJS
+        # with rawBody:true). Nginx buffers requests to upstream by default,
+        # which is correct — rawBody is read from the buffered stream, not the
+        # network socket. Do NOT add proxy_pass_request_body off here.
+    }
+
+    # ── Auth endpoints — tighter rate limit ───────────────────────────────────
+    location ~ ^/api/v1/auth/(login|register|forgot-password|reset-password) {
+        limit_req zone=auth burst=10 nodelay;
+        proxy_pass         http://jewellery_api;
+        proxy_http_version 1.1;
+        proxy_set_header   Connection "";
+        proxy_set_header   X-Real-IP        $remote_addr;
+        proxy_set_header   X-Forwarded-For  $proxy_add_x_forwarded_for;
+        proxy_set_header   X-Forwarded-Proto https;
+        proxy_set_header   Host             $host;
+    }
+}
+
+# ─── Frontend — yourdomain.in ─────────────────────────────────────────────────
+server {
+    listen 443 ssl;
+    listen [::]:443 ssl;
+    http2 on;
+    server_name yourdomain.in www.yourdomain.in;
+
+    ssl_certificate     /etc/letsencrypt/live/yourdomain.in/fullchain.pem;
+    ssl_certificate_key /etc/letsencrypt/live/yourdomain.in/privkey.pem;
+    ssl_trusted_certificate /etc/letsencrypt/live/yourdomain.in/chain.pem;
+
+    ssl_protocols TLSv1.2 TLSv1.3;
+    ssl_ciphers ECDHE-ECDSA-AES128-GCM-SHA256:ECDHE-RSA-AES128-GCM-SHA256:ECDHE-ECDSA-AES256-GCM-SHA384:ECDHE-RSA-AES256-GCM-SHA384:ECDHE-ECDSA-CHACHA20-POLY1305:ECDHE-RSA-CHACHA20-POLY1305:DHE-RSA-AES128-GCM-SHA256;
+    ssl_prefer_server_ciphers off;
+    ssl_session_cache   shared:MozSSL:10m;
+    ssl_session_timeout 1d;
+    ssl_stapling on;
+    ssl_stapling_verify on;
+
+    add_header Strict-Transport-Security "max-age=63072000; includeSubDomains; preload" always;
+    add_header X-Content-Type-Options "nosniff" always;
+    add_header Referrer-Policy "strict-origin-when-cross-origin" always;
+
+    client_max_body_size 2m;
+
+    # ── Next.js proxy ─────────────────────────────────────────────────────────
+    location / {
+        proxy_pass         http://jewellery_web;
+        proxy_http_version 1.1;
+        proxy_set_header   Connection        "";
+        proxy_set_header   X-Real-IP         $remote_addr;
+        proxy_set_header   X-Forwarded-For   $proxy_add_x_forwarded_for;
+        proxy_set_header   X-Forwarded-Proto https;
+        proxy_set_header   Host              $host;
+        proxy_connect_timeout 5s;
+        proxy_send_timeout    30s;
+        proxy_read_timeout    30s;
+    }
+
+    # ── Next.js static assets — aggressive caching ────────────────────────────
+    location /_next/static/ {
+        proxy_pass         http://jewellery_web;
+        proxy_http_version 1.1;
+        proxy_set_header   Connection "";
+        add_header Cache-Control "public, max-age=31536000, immutable";
+    }
+}

@@ -14,9 +14,11 @@ const REVENUE_STATUSES: OrderStatus[] = [
 // Approximate monthly pricing per plan (for MRR estimation) — mirror Razorpay plan amounts
 const PLAN_MONTHLY_PRICE: Record<Plan, number> = {
   [Plan.FREE]:         0,
-  [Plan.STARTER]:      999,
-  [Plan.PROFESSIONAL]: 2999,
-  [Plan.ENTERPRISE]:   9999,
+  [Plan.STARTER]:      499,
+  [Plan.PROFESSIONAL]: 1499, // legacy — same price as GROWTH
+  [Plan.GROWTH]:       1499,
+  [Plan.BUSINESS]:     3999,
+  [Plan.ENTERPRISE]:   0,    // custom pricing
 };
 
 interface DateRange { from: Date; to: Date }

@@ -69,10 +69,6 @@ export const configValidationSchema = Joi.object({
   // Sentry — optional
   SENTRY_DSN: Joi.string().allow('').optional().default(''),
 
-  // Admin seed credentials
-  ADMIN_EMAIL: Joi.string().allow('').optional().default('admin@jewellery.dev'),
-  ADMIN_PASSWORD: Joi.string().allow('').optional().default('Admin@Dev1234567!'),
-
   // Supabase Storage — optional in dev
   SUPABASE_URL: Joi.string().allow('').optional().default(''),
   SUPABASE_SERVICE_ROLE_KEY: Joi.string().allow('').optional().default(''),

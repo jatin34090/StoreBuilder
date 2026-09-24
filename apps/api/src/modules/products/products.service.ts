@@ -165,6 +165,7 @@ export class ProductsService {
   // ─── Admin CRUD ───────────────────────────────────────────────────────────
 
   async adminFindAll(dto: QueryProductsDto, storeId = DEFAULT_STORE_ID) {
+    if (!storeId || storeId === DEFAULT_STORE_ID) throw new BadRequestException('Store context required for admin operations');
     const page = dto.page ?? 1;
     const limit = Math.min(dto.limit ?? 20, 100);
     const skip = (page - 1) * limit;
@@ -188,6 +189,7 @@ export class ProductsService {
   }
 
   async adminFindOne(id: string, storeId = DEFAULT_STORE_ID) {
+    if (!storeId || storeId === DEFAULT_STORE_ID) throw new BadRequestException('Store context required for admin operations');
     const product = await this.prisma.product.findFirst({
       where: { id, storeId },
       include: {
@@ -202,6 +204,7 @@ export class ProductsService {
   }
 
   async create(dto: CreateProductDto, storeId = DEFAULT_STORE_ID) {
+    if (!storeId || storeId === DEFAULT_STORE_ID) throw new BadRequestException('Store context required for admin operations');
     await this.tenant?.checkProductQuota(storeId);
 
     const slug = await this.generateUniqueSlug(dto.name, storeId);
@@ -260,6 +263,7 @@ export class ProductsService {
   }
 
   async update(id: string, dto: UpdateProductDto, storeId = DEFAULT_STORE_ID) {
+    if (!storeId || storeId === DEFAULT_STORE_ID) throw new BadRequestException('Store context required for admin operations');
     const product = await this.findProductOrThrow(id, storeId);
 
     let slug = product.slug;
@@ -479,76 +483,6 @@ export class ProductsService {
   }
 
   // ─── Cart operations ──────────────────────────────────────────────────────
-
-  async getCart(userId: string) {
-    return this.prisma.cartItem.findMany({
-      where: { userId },
-      include: {
-        variant: {
-          include: {
-            product: {
-              select: {
-                id: true,
-                name: true,
-                slug: true,
-                isActive: true,
-                images: {
-                  where: { isPrimary: true },
-                  select: { url: true },
-                  take: 1,
-                },
-              },
-            },
-          },
-        },
-      },
-    });
-  }
-
-  async addToCart(userId: string, variantId: string, quantity: number) {
-    const variant = await this.prisma.productVariant.findFirst({
-      where: { id: variantId, product: { isActive: true } },
-      select: { id: true, stock: true, price: true },
-    });
-    if (!variant) throw new NotFoundException('Product variant not found or inactive');
-    if (variant.stock < 1) throw new BadRequestException('This item is out of stock');
-
-    const existing = await this.prisma.cartItem.findUnique({
-      where: { storeId_userId_variantId: { storeId: DEFAULT_STORE_ID, userId, variantId } },
-    });
-
-    const newQty = Math.min((existing?.quantity ?? 0) + quantity, variant.stock);
-
-    return this.prisma.cartItem.upsert({
-      where: { storeId_userId_variantId: { storeId: DEFAULT_STORE_ID, userId, variantId } },
-      create: { storeId: DEFAULT_STORE_ID, userId, variantId, quantity: newQty },
-      update: { quantity: newQty },
-    });
-  }
-
-  async updateCartItem(userId: string, variantId: string, quantity: number) {
-    if (quantity <= 0) {
-      await this.prisma.cartItem.deleteMany({ where: { userId, variantId } });
-      return null;
-    }
-
-    const variant = await this.prisma.productVariant.findUnique({
-      where: { id: variantId },
-      select: { stock: true },
-    });
-    if (!variant) throw new NotFoundException('Variant not found');
-
-    const safeQty = Math.min(quantity, variant.stock);
-
-    return this.prisma.cartItem.update({
-      where: { storeId_userId_variantId: { storeId: DEFAULT_STORE_ID, userId, variantId } },
-      data: { quantity: safeQty },
-    });
-  }
-
-  async removeCartItem(userId: string, variantId: string): Promise<void> {
-    await this.prisma.cartItem.deleteMany({ where: { userId, variantId } });
-  }
 
   // ─── Helpers ──────────────────────────────────────────────────────────────
 

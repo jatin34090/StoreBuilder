@@ -24,9 +24,15 @@ export function parseHostname(hostname: string): { slug: string | null; isCustom
     return { slug: null, isCustomDomain: false };
   }
 
-  if (host.endsWith(`.${rootDomain}`)) {
+  if (rootDomain && host.endsWith(`.${rootDomain}`)) {
     const slug = host.slice(0, host.length - rootDomain.length - 1);
     return { slug, isCustomDomain: false };
+  }
+
+  // Local dev: treat <slug>.localhost as a platform subdomain when no root domain is set
+  if (!rootDomain && host.endsWith('.localhost')) {
+    const slug = host.slice(0, host.length - '.localhost'.length);
+    if (slug && slug !== 'www') return { slug, isCustomDomain: false };
   }
 
   // Anything else is a custom domain

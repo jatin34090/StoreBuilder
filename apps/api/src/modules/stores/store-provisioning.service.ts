@@ -4,12 +4,13 @@ import {
   BadRequestException,
   Logger,
 } from '@nestjs/common';
-import { Plan, StoreRole, StoreStatus } from '@prisma/client';
+import { Plan, StoreRole, StoreStatus, DomainType, DomainStatus } from '@prisma/client';
 import { PrismaService } from '../../prisma/prisma.service';
 import { TenantService } from '../tenant/tenant.service';
 import { BillingService } from '../billing/billing.service';
 import { getTemplate } from './industry-templates';
 import { DEFAULT_PLAN_LIMITS, DEFAULT_PLAN_DISPLAY } from '../../common/constants/plan-config';
+import { RESERVED_SUBDOMAINS } from '../../common/constants/domains';
 
 export interface ProvisionStoreInput {
   name: string;
@@ -56,6 +57,11 @@ export class StoreProvisioningService {
       this.prisma.user.findUnique({ where: { id: input.ownerUserId }, select: { id: true } }),
     ]);
 
+    if (RESERVED_SUBDOMAINS.has(slug)) {
+      throw new BadRequestException(
+        `'${slug}' is a reserved platform name and cannot be used as a store URL.`,
+      );
+    }
     if (slugTaken) {
       throw new ConflictException(
         `Store URL '${slug}' is already taken. Try '${slug}-store' or '${slug}-shop'.`,
@@ -173,6 +179,25 @@ export class StoreProvisioningService {
     // 10. Industry categories (outside transaction — non-critical)
     if (template.categories.length > 0) {
       await this.seedCategories(store.id, template.categories);
+    }
+
+    // 11. Create platform subdomain record (Phase 12)
+    const platformDomain = process.env['PLATFORM_DOMAIN'] ?? '';
+    if (platformDomain) {
+      const subdomain = `${slug}.${platformDomain}`;
+      await this.prisma.storeDomain.upsert({
+        where:  { normalizedDomain: subdomain },
+        update: {},
+        create: {
+          storeId:          store.id,
+          domain:           subdomain,
+          normalizedDomain: subdomain,
+          type:             DomainType.PLATFORM_SUBDOMAIN,
+          status:           DomainStatus.ACTIVE,
+          isPrimary:        true,
+          verifiedAt:       new Date(),
+        },
+      });
     }
 
     this.tenant.invalidateStoreCache(store.id, store.slug);

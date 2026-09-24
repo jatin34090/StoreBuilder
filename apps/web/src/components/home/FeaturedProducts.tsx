@@ -1,21 +1,31 @@
 import Link from 'next/link';
 import { ArrowRight } from 'lucide-react';
 import { Button } from '@/components/ui/button';
+import { headers } from 'next/headers';
 import { FeaturedScroller } from './FeaturedScroller';
-import { productsApi } from '@/lib/api';
 import type { ProductCardProduct } from '@/components/product/ProductCard';
 
-async function getFeaturedProducts(): Promise<ProductCardProduct[]> {
+const API_URL = process.env['NEXT_PUBLIC_API_URL'] ?? 'http://localhost:3001/api/v1';
+
+async function getFeaturedProducts(storeId?: string): Promise<ProductCardProduct[]> {
   try {
-    const res = await productsApi.featured();
-    return res.data.data?.products ?? [];
+    const res = await fetch(`${API_URL}/products?featured=true&limit=12`, {
+      cache: 'no-store',
+      headers: storeId ? { 'x-store-id': storeId } : {},
+    });
+    if (!res.ok) return [];
+    const json = (await res.json()) as Record<string, unknown>;
+    const data = (json['data'] ?? json) as Record<string, unknown>;
+    return (Array.isArray(data) ? data : (data['products'] as ProductCardProduct[])) ?? [];
   } catch {
     return [];
   }
 }
 
 export async function FeaturedProducts() {
-  const products = await getFeaturedProducts();
+  const headersList = await headers();
+  const storeId = headersList.get('x-store-id') ?? undefined;
+  const products = await getFeaturedProducts(storeId);
 
   if (products.length === 0) return null;
 

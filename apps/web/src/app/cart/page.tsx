@@ -9,14 +9,24 @@ import { MainLayout } from '@/components/layout/MainLayout';
 import { useCartStore } from '@/store/cartStore';
 import { useAuthStore } from '@/store/authStore';
 import { formatPrice } from '@/lib/utils';
+import { useQuery } from '@tanstack/react-query';
+import { settingsApi } from '@/lib/api';
 
 export default function CartPage() {
   const { items, updateQuantity, removeItem, subtotal, totalItems } = useCartStore();
   const { isAuthenticated } = useAuthStore();
 
-  const sub            = subtotal();
-  const shippingCharge = sub >= 999 ? 0 : 49;
-  const total          = sub + shippingCharge;
+  const sub = subtotal();
+  const { data: shippingData } = useQuery({
+    queryKey: ['settings', 'shipping'],
+    queryFn: () => settingsApi.shipping(),
+  });
+  const shippingCfg = (shippingData?.data as { data?: { enabled?: boolean; flatRate?: number; freeThreshold?: number } } | undefined)?.data;
+  const shippingEnabled = shippingCfg?.enabled !== false;
+  const flatRate = shippingCfg?.flatRate ?? 49;
+  const freeThreshold = shippingCfg?.freeThreshold ?? 999;
+  const shippingCharge = !shippingEnabled ? 0 : (freeThreshold > 0 && sub >= freeThreshold ? 0 : flatRate);
+  const total = sub + shippingCharge;
 
   if (items.length === 0) {
     return (
@@ -111,7 +121,7 @@ export default function CartPage() {
                 </div>
                 {shippingCharge > 0 && (
                   <p className="text-xs text-muted-foreground">
-                    Add {formatPrice(999 - sub)} more for free shipping
+                    Add {formatPrice(freeThreshold - sub)} more for free shipping
                   </p>
                 )}
               </div>

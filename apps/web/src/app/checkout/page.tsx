@@ -17,7 +17,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from 
 import { MainLayout } from '@/components/layout/MainLayout';
 import { useCartStore } from '@/store/cartStore';
 import { useAuthGuard } from '@/hooks/useAuthGuard';
-import { usersApi, ordersApi, couponsApi } from '@/lib/api';
+import { usersApi, ordersApi, couponsApi, settingsApi } from '@/lib/api';
 import { formatPrice } from '@/lib/utils';
 import { cn } from '@/lib/utils';
 
@@ -60,7 +60,15 @@ export default function CheckoutPage() {
   const [addAddressOpen, setAddAddressOpen] = useState(false);
 
   const sub = subtotal();
-  const shippingCharge = sub >= 999 ? 0 : 49;
+  const { data: shippingData } = useQuery({
+    queryKey: ['settings', 'shipping'],
+    queryFn: () => settingsApi.shipping(),
+  });
+  const shippingCfg = (shippingData?.data as { data?: { enabled?: boolean; flatRate?: number; freeThreshold?: number } } | undefined)?.data;
+  const shippingEnabled = shippingCfg?.enabled !== false;
+  const flatRate = shippingCfg?.flatRate ?? 49;
+  const freeThreshold = shippingCfg?.freeThreshold ?? 999;
+  const shippingCharge = !shippingEnabled ? 0 : (freeThreshold > 0 && sub >= freeThreshold ? 0 : flatRate);
   const discountAmount = couponData?.discountAmount ?? 0;
   const total = Math.max(0, sub + shippingCharge - discountAmount);
 
@@ -73,6 +81,13 @@ export default function CheckoutPage() {
     queryKey: ['addresses'],
     queryFn: () => usersApi.addresses(),
     enabled: isAuthenticated,
+  });
+
+  // Load store branding for Razorpay popup — must not use client-supplied values
+  const { data: siteConfigData } = useQuery({
+    queryKey: ['settings', 'site'],
+    queryFn: () => settingsApi.site(),
+    staleTime: 5 * 60 * 1000,
   });
   const addresses: Array<{ id: string; name: string; line1: string; line2?: string; city: string; state: string; pincode: string; phone: string; isDefault: boolean }> = addressesData?.data?.data ?? [];
 
@@ -148,7 +163,7 @@ export default function CheckoutPage() {
           order_id: payment.razorpayOrderId,
           amount: total * 100,
           currency: 'INR',
-          name: 'YourBrand Jewellery',
+          name: (siteConfigData?.data as { data?: { brandName?: string } } | undefined)?.data?.brandName ?? 'Jewellery Store',
           description: `Order ${order.orderNumber}`,
           handler: async (response: { razorpay_payment_id: string; razorpay_order_id: string; razorpay_signature: string }) => {
             try {

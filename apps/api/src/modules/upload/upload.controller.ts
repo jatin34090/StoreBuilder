@@ -12,6 +12,7 @@ import {
   DefaultValuePipe,
 } from '@nestjs/common';
 import { FileInterceptor } from '@nestjs/platform-express';
+import { memoryStorage } from 'multer';
 import {
   ApiTags,
   ApiOperation,
@@ -34,7 +35,7 @@ import { RateCategory } from '../../common/decorators/rate-category.decorator';
 import { Role } from '@jewellery/types';
 
 const multerOptions = {
-  storage: undefined,
+  storage: memoryStorage(),
   limits: { fileSize: 5 * 1024 * 1024 },
 };
 
@@ -98,11 +99,10 @@ export class UploadController {
     @Param('imageId') imageId: string,
     @CurrentStoreId() storeId: string,
   ) {
+    // Verify ownership before touching Cloudinary (removeImage checks storeId)
     const image = await this.products.getImageOrThrow(productId, imageId);
-    await Promise.all([
-      this.cloudinary.deleteImage(image.publicId),
-      this.products.removeImage(productId, imageId, storeId),
-    ]);
+    await this.products.removeImage(productId, imageId, storeId);
+    await this.cloudinary.deleteImage(image.publicId);
     return { message: 'Image deleted' };
   }
 
@@ -128,6 +128,31 @@ export class UploadController {
     return { avatarUrl: result.secureUrl };
   }
 
+  // ─── Banner Image ─────────────────────────────────────────────────────────
+
+  @Post('admin/banners/upload')
+  @Roles(Role.ADMIN)
+  @RateCategory('file_upload')
+  @UseInterceptors(FileInterceptor('file', multerOptions))
+  @ApiOperation({ summary: 'Upload a banner image (admin only)' })
+  @ApiConsumes('multipart/form-data')
+  @ApiBody({
+    schema: { type: 'object', required: ['file'], properties: { file: { type: 'string', format: 'binary' } } },
+  })
+  async uploadBannerImage(
+    @UploadedFile() file: Express.Multer.File,
+    @CurrentStoreId() storeId: string,
+  ) {
+    const store = storeId ? await this.tenant.resolveById(storeId) : null;
+    const storeSlug = store?.slug ?? 'shared';
+
+    if (storeId) await this.tenant.checkStorageQuota(storeId, file.size);
+    const result = await this.cloudinary.uploadBannerImage(file, storeSlug);
+    if (storeId) await this.tenant.incrementStorageBytes(storeId, result.bytes);
+
+    return { imageUrl: result.secureUrl };
+  }
+
   // ─── Category Image ───────────────────────────────────────────────────────
 
   @Post('admin/categories/:categoryId/image')
@@ -151,7 +176,7 @@ export class UploadController {
     // Enforce storage quota before uploading
     if (storeId) await this.tenant.checkStorageQuota(storeId, file.size);
 
-    const category = await this.categories.findById(categoryId);
+    const category = await this.categories.findById(categoryId, storeId || undefined);
     const result = await this.cloudinary.uploadCategoryImage(file, category.slug, storeSlug);
 
     if (storeId) await this.tenant.incrementStorageBytes(storeId, result.bytes);

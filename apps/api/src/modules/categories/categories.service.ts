@@ -10,7 +10,6 @@ import { slugify } from '@jewellery/utils';
 import type { CreateCategoryDto } from './dto/create-category.dto';
 import type { UpdateCategoryDto } from './dto/update-category.dto';
 
-const DEFAULT_STORE_ID = '00000000-0000-0000-0000-000000000001';
 
 @Injectable()
 export class CategoriesService {
@@ -20,7 +19,7 @@ export class CategoriesService {
 
   // ─── Public (storefront) — always scoped to a specific store ──────────────
 
-  async getTree(storeId = DEFAULT_STORE_ID) {
+  async getTree(storeId: string) {
     const categories = await this.prisma.category.findMany({
       where: { storeId, isActive: true },
       orderBy: [{ sortOrder: 'asc' }, { name: 'asc' }],
@@ -38,7 +37,7 @@ export class CategoriesService {
     return this.buildTree(categories);
   }
 
-  async getCategoryBySlug(slug: string, storeId = DEFAULT_STORE_ID) {
+  async getCategoryBySlug(slug: string, storeId: string) {
     const category = await this.prisma.category.findFirst({
       where: { storeId, slug, isActive: true },
       select: {
@@ -61,7 +60,7 @@ export class CategoriesService {
 
   // ─── Admin — always scoped to the caller's store ──────────────────────────
 
-  async adminListAll(storeId = DEFAULT_STORE_ID) {
+  async adminListAll(storeId: string) {
     return this.prisma.category.findMany({
       where: { storeId },
       orderBy: [{ sortOrder: 'asc' }, { name: 'asc' }],
@@ -72,7 +71,7 @@ export class CategoriesService {
     });
   }
 
-  async create(dto: CreateCategoryDto, storeId = DEFAULT_STORE_ID) {
+  async create(dto: CreateCategoryDto, storeId: string) {
     const slug = await this.generateUniqueSlug(dto.name, storeId);
 
     if (dto.parentId) {
@@ -95,7 +94,7 @@ export class CategoriesService {
     });
   }
 
-  async update(id: string, dto: UpdateCategoryDto, storeId = DEFAULT_STORE_ID) {
+  async update(id: string, dto: UpdateCategoryDto, storeId: string) {
     const category = await this.findOrThrow(id, storeId);
 
     let slug = category.slug;
@@ -131,7 +130,7 @@ export class CategoriesService {
     });
   }
 
-  async delete(id: string, storeId = DEFAULT_STORE_ID) {
+  async delete(id: string, storeId: string) {
     await this.findOrThrow(id, storeId);
 
     const descendantIds = await this.getAllDescendantIds(id, storeId);

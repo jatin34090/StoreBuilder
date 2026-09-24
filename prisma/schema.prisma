@@ -17,7 +17,9 @@ datasource db {
 enum Plan {
   FREE
   STARTER
-  PROFESSIONAL
+  PROFESSIONAL  // Legacy — kept for enum integrity; existing stores migrated to GROWTH
+  GROWTH
+  BUSINESS
   ENTERPRISE
 }
 
@@ -132,6 +134,19 @@ enum StoreStatus {
   CLOSED
 }
 
+enum DomainType {
+  PLATFORM_SUBDOMAIN
+  CUSTOM_DOMAIN
+}
+
+enum DomainStatus {
+  PENDING
+  VERIFIED
+  ACTIVE
+  FAILED
+  DISABLED
+}
+
 // ─── 1. Stores (Tenants) ─────────────────────────────────────────────────────
 
 model Store {
@@ -157,22 +172,25 @@ model Store {
   createdAt    DateTime    @default(now())
   updatedAt    DateTime    @updatedAt
 
-  users          StoreUser[]
-  categories     Category[]
-  products       Product[]
-  orders         Order[]
-  coupons        Coupon[]
-  notifications  Notification[]
-  cartItems      CartItem[]
-  wishlistItems  WishlistItem[]
-  deliveryAgents DeliveryAgent[]
-  settings       StoreSetting[]
-  quota          StoreQuotaUsage?
-  apiLogs        TenantApiLog[]
-  subscription   StoreSubscription?
-  invoices       Invoice[]
-  onboarding     OnboardingState?
-  auditLogs      StoreAuditLog[]
+  users            StoreUser[]
+  categories       Category[]
+  products         Product[]
+  orders           Order[]
+  coupons          Coupon[]
+  notifications    Notification[]
+  cartItems        CartItem[]
+  wishlistItems    WishlistItem[]
+  deliveryAgents   DeliveryAgent[]
+  settings         StoreSetting[]
+  quota            StoreQuotaUsage?
+  apiLogs          TenantApiLog[]
+  subscription     StoreSubscription?
+  invoices         Invoice[]
+  onboarding       OnboardingState?
+  auditLogs        StoreAuditLog[]
+  banners          Banner[]
+  homepageSections HomepageSection[]
+  domains          StoreDomain[]
 
   @@index([slug])
   @@index([customDomain])
@@ -241,9 +259,10 @@ model StoreSetting {
 
 model PlanLimit {
   plan           Plan    @id
-  maxProducts    Int     @default(100)
-  maxStaff       Int     @default(3)
+  maxProducts    Int?    // null = unlimited (standardized from -1 sentinel in Phase 17)
+  maxStaff       Int?    // null = unlimited (standardized from -1 sentinel in Phase 17)
   maxStorageGB   Int     @default(5)
+  maxDomains     Int?    // null = unlimited; Phase 17
   maxApiPerDay   Int     @default(10000)
   maxApiPerMonth Int     @default(200000)
   maxOrders      Int?    // null = unlimited
@@ -293,16 +312,17 @@ model StoreSubscription {
 // ─── 4. Per-Tenant Quota Usage (counters updated in real-time) ───────────────
 
 model StoreQuotaUsage {
-  storeId        String   @id
-  productCount   Int      @default(0)
-  orderCount     Int      @default(0)
-  customerCount  Int      @default(0)
-  storageBytes   BigInt   @default(0)
-  apiCallsToday  Int      @default(0)
-  apiCallsMonth  Int      @default(0)
-  lastDayReset   DateTime?
-  lastMonthReset DateTime?
-  updatedAt      DateTime @updatedAt
+  storeId             String    @id
+  productCount        Int       @default(0)
+  orderCount          Int       @default(0)  // lifetime total
+  orderCountThisMonth Int       @default(0)  // calendar-month counter; reset by cron
+  customerCount       Int       @default(0)
+  storageBytes        BigInt    @default(0)
+  apiCallsToday       Int       @default(0)
+  apiCallsMonth       Int       @default(0)
+  lastDayReset        DateTime?
+  lastMonthReset      DateTime? // tracks when orderCountThisMonth was last zeroed
+  updatedAt           DateTime  @updatedAt
 
   store Store @relation(fields: [storeId], references: [id], onDelete: Cascade)
 }
@@ -399,6 +419,71 @@ model SiteSetting {
   key       String   @id
   value     String
   updatedAt DateTime @updatedAt
+}
+
+// ─── Storefront Builder ──────────────────────────────────────────────────────
+
+enum HomepageSectionType {
+  HERO
+  BANNERS
+  CATEGORIES
+  FEATURED_PRODUCTS
+  WHY_CHOOSE_US
+}
+
+model Banner {
+  id           String   @id @default(uuid())
+  storeId      String
+  title        String?
+  subtitle     String?
+  ctaText      String?
+  ctaUrl       String?
+  desktopImage String
+  mobileImage  String?
+  sortOrder    Int      @default(0)
+  isActive     Boolean  @default(true)
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  store Store @relation(fields: [storeId], references: [id], onDelete: Cascade)
+
+  @@index([storeId, isActive, sortOrder])
+}
+
+model HomepageSection {
+  id        String              @id @default(uuid())
+  storeId   String
+  type      HomepageSectionType
+  enabled   Boolean             @default(true)
+  sortOrder Int                 @default(0)
+  config    Json                @default("{}")
+  updatedAt DateTime            @updatedAt
+
+  store Store @relation(fields: [storeId], references: [id], onDelete: Cascade)
+
+  @@unique([storeId, type])
+  @@index([storeId, sortOrder])
+}
+
+// ─── Store Domains ───────────────────────────────────────────────────────────
+
+model StoreDomain {
+  id                String       @id @default(uuid())
+  storeId           String
+  domain            String       @unique
+  normalizedDomain  String       @unique
+  type              DomainType
+  status            DomainStatus @default(PENDING)
+  isPrimary         Boolean      @default(false)
+  verificationToken String?      @unique
+  verifiedAt        DateTime?
+  createdAt         DateTime     @default(now())
+  updatedAt         DateTime     @updatedAt
+
+  store Store @relation(fields: [storeId], references: [id], onDelete: Cascade)
+
+  @@index([storeId])
+  @@index([normalizedDomain, status])
 }
 
 // ─── 4. Users & Auth (platform-level) ────────────────────────────────────────

@@ -55,24 +55,24 @@ export const DEFAULT_STATS: StatItem[] = [
 ];
 
 export const DEFAULT_FEATURES: FeatureItem[] = [
-  { icon: 'Shield',     title: 'Hypoallergenic',    desc: 'Nickel-free, skin-safe materials for sensitive skin' },
+  { icon: 'Shield',     title: 'Quality Assured',   desc: 'Every product tested and verified before it reaches you' },
   { icon: 'Truck',      title: 'Free Shipping',      desc: 'Free delivery on orders above ₹999 anywhere in India' },
   { icon: 'RefreshCw',  title: '7-Day Returns',      desc: 'Easy returns within 7 days of delivery, no questions asked' },
-  { icon: 'Star',       title: 'Premium Quality',    desc: 'Anti-tarnish coating ensures jewellery stays beautiful' },
+  { icon: 'Star',       title: 'Premium Quality',    desc: 'Quality materials and finishes that stand the test of time' },
   { icon: 'Headphones', title: '24/7 Support',       desc: 'Real human support via WhatsApp, email or phone' },
   { icon: 'Award',      title: 'Certified Products', desc: 'All products tested for quality and safety standards' },
 ];
 
 export const DEFAULT_SITE_CONFIG: SiteConfig = {
-  brandName:        'YourBrand',
+  brandName:        'My Store',
   logoUrl:          '',
-  tagline:          'Curated artificial jewellery crafted for every occasion. Hypoallergenic, affordable, and beautiful.',
+  tagline:          'Welcome to our online store.',
   announcementText: 'Free shipping on orders above ₹999',
-  announcementCode: 'WELCOME10',
+  announcementCode: '',
   footerNote:       'Made with care in India',
-  heroEyebrow:      'Festive Collection · 2026',
-  heroHeadline:     'Jewellery that tells your story',
-  heroSubheadline:  'Handpicked artificial jewellery for every occasion. Hypoallergenic, affordable, and crafted to last.',
+  heroEyebrow:      'New Arrivals',
+  heroHeadline:     'Shop our collection',
+  heroSubheadline:  'Quality products delivered fast.',
   heroCta1Text:     'Shop Collection',
   heroCta1Link:     '/products',
   heroCta2Text:     'View Featured',
@@ -119,10 +119,15 @@ function rawToSiteConfig(raw: Record<string, string>): SiteConfig {
 
 const API_URL = process.env['NEXT_PUBLIC_API_URL'] ?? 'http://localhost:3001/api/v1';
 
-export async function fetchSiteConfig(): Promise<SiteConfig> {
+function storeHeaders(storeId?: string): HeadersInit {
+  return storeId ? { 'x-store-id': storeId } : {};
+}
+
+export async function fetchSiteConfig(storeId?: string): Promise<SiteConfig> {
   try {
     const res = await fetch(`${API_URL}/settings/site`, {
-      next: { revalidate: 60 },   // cache for 60 s — changes rarely
+      next: { revalidate: 60 },
+      headers: storeHeaders(storeId),
     });
     if (!res.ok) return DEFAULT_SITE_CONFIG;
     const json = (await res.json()) as Record<string, unknown>;
@@ -133,10 +138,11 @@ export async function fetchSiteConfig(): Promise<SiteConfig> {
   }
 }
 
-export async function fetchLayoutConfig(): Promise<LayoutConfig> {
+export async function fetchLayoutConfig(storeId?: string): Promise<LayoutConfig> {
   try {
     const res = await fetch(`${API_URL}/settings/layout`, {
-      cache: 'no-store',
+      next: { revalidate: 60 },
+      headers: storeHeaders(storeId),
     });
     if (!res.ok) return DEFAULT_LAYOUT_CONFIG;
     const json = (await res.json()) as Record<string, unknown>;

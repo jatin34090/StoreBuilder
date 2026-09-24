@@ -59,8 +59,8 @@ export class OrdersController {
   @Roles(Role.CUSTOMER)
   @ApiOperation({ summary: 'List authenticated customer orders with pagination' })
   @ApiOkResponse({ description: 'Paginated order list' })
-  findMyOrders(@CurrentUser() user: AuthUser, @Query() query: QueryOrdersDto) {
-    return this.ordersService.findMyOrders(user.id, query);
+  findMyOrders(@CurrentUser() user: AuthUser, @Query() query: QueryOrdersDto, @CurrentStoreId() storeId: string) {
+    return this.ordersService.findMyOrders(user.id, query, storeId);
   }
 
   @Get('orders/:id')

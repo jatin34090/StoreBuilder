@@ -9,6 +9,7 @@ import {
   Query,
   HttpCode,
   HttpStatus,
+  ForbiddenException,
 } from '@nestjs/common';
 import { Public } from '../../common/decorators/public.decorator';
 import { ApiTags, ApiBearerAuth, ApiOperation, ApiParam } from '@nestjs/swagger';
@@ -126,11 +127,17 @@ export class SuperAdminStoresController {
 export class AdminStoreController {
   constructor(private readonly storesService: StoresService) {}
 
+  /** Throw 403 when the authenticated user has no store context in their JWT. */
+  private sid(user: AuthUser): string {
+    if (!user.storeId) throw new ForbiddenException('No store context in session');
+    return user.storeId;
+  }
+
   @Get()
   @Roles(Role.ADMIN)
   @ApiOperation({ summary: 'Get own store details (resolved from JWT storeId)' })
   getMyStore(@CurrentUser() user: AuthUser) {
-    return this.storesService.findOne(user.storeId!);
+    return this.storesService.findOne(this.sid(user));
   }
 
   @Patch()
@@ -139,7 +146,7 @@ export class AdminStoreController {
   updateMyStore(@CurrentUser() user: AuthUser, @Body() dto: UpdateStoreDto) {
     // Strip plan/isActive/status — only super admin can change those
     const { plan: _p, isActive: _a, ...safeDto } = dto;
-    return this.storesService.update(user.storeId!, safeDto);
+    return this.storesService.update(this.sid(user), safeDto);
   }
 
   @Patch('launch')
@@ -147,7 +154,7 @@ export class AdminStoreController {
   @HttpCode(HttpStatus.OK)
   @ApiOperation({ summary: 'Launch store (SETUP/DRAFT → ACTIVE)' })
   launchStore(@CurrentUser() user: AuthUser) {
-    return this.storesService.launch(user.storeId!);
+    return this.storesService.launch(this.sid(user));
   }
 
   @Patch('publish')
@@ -155,7 +162,7 @@ export class AdminStoreController {
   @HttpCode(HttpStatus.OK)
   @ApiOperation({ summary: 'Publish store — make it publicly accessible' })
   publishStore(@CurrentUser() user: AuthUser) {
-    return this.storesService.publish(user.storeId!);
+    return this.storesService.publish(this.sid(user));
   }
 
   @Patch('unpublish')
@@ -163,14 +170,14 @@ export class AdminStoreController {
   @HttpCode(HttpStatus.OK)
   @ApiOperation({ summary: 'Unpublish store — take it offline temporarily without suspending' })
   unpublishStore(@CurrentUser() user: AuthUser) {
-    return this.storesService.unpublish(user.storeId!);
+    return this.storesService.unpublish(this.sid(user));
   }
 
   @Get('usage')
   @Roles(Role.ADMIN)
   @ApiOperation({ summary: 'View your plan usage vs limits' })
   getUsage(@CurrentUser() user: AuthUser) {
-    return this.storesService.getUsage(user.storeId!);
+    return this.storesService.getUsage(this.sid(user));
   }
 
   // ─── Settings ───────────────────────────────────────────────────────────
@@ -179,14 +186,14 @@ export class AdminStoreController {
   @Roles(Role.ADMIN)
   @ApiOperation({ summary: 'Get all store settings as a key-value map' })
   getSettings(@CurrentUser() user: AuthUser) {
-    return this.storesService.getSettings(user.storeId!);
+    return this.storesService.getSettings(this.sid(user));
   }
 
   @Post('settings')
   @Roles(Role.ADMIN)
   @ApiOperation({ summary: 'Create or update a store setting' })
   upsertSetting(@CurrentUser() user: AuthUser, @Body() dto: UpsertSettingDto) {
-    return this.storesService.upsertSetting(user.storeId!, dto);
+    return this.storesService.upsertSetting(this.sid(user), dto);
   }
 
   @Delete('settings/:key')
@@ -195,7 +202,7 @@ export class AdminStoreController {
   @ApiOperation({ summary: 'Delete a store setting by key' })
   @ApiParam({ name: 'key', description: 'Setting key' })
   deleteSetting(@CurrentUser() user: AuthUser, @Param('key') key: string) {
-    return this.storesService.deleteSetting(user.storeId!, key);
+    return this.storesService.deleteSetting(this.sid(user), key);
   }
 
   // ─── Admin Me ─────────────────────────────────────────────────────────────
@@ -204,7 +211,7 @@ export class AdminStoreController {
   @Roles(Role.ADMIN)
   @ApiOperation({ summary: 'Get authenticated admin user, store, role, and permissions' })
   getAdminMe(@CurrentUser() user: AuthUser) {
-    return this.storesService.getAdminMe(user.id, user.storeId!);
+    return this.storesService.getAdminMe(user.id, this.sid(user));
   }
 
   // ─── Staff Management ─────────────────────────────────────────────────────
@@ -214,7 +221,7 @@ export class AdminStoreController {
   @RequirePermission('staff.read')
   @ApiOperation({ summary: 'List all staff members of this store' })
   listMembers(@CurrentUser() user: AuthUser) {
-    return this.storesService.listMembers(user.storeId!);
+    return this.storesService.listMembers(this.sid(user));
   }
 
   @Post('staff/invite')
@@ -222,7 +229,7 @@ export class AdminStoreController {
   @RequirePermission('staff.invite')
   @ApiOperation({ summary: 'Invite a new staff member by email' })
   inviteStaff(@CurrentUser() user: AuthUser, @Body() dto: InviteStaffDto) {
-    return this.storesService.inviteStaff(user.storeId!, user.id, dto.email, dto.role, dto.name);
+    return this.storesService.inviteStaff(this.sid(user), user.id, dto.email, dto.role, dto.name);
   }
 
   @Post('staff/:userId/resend-invite')
@@ -232,7 +239,7 @@ export class AdminStoreController {
   @ApiOperation({ summary: 'Resend invitation to a pending staff member' })
   @ApiParam({ name: 'userId', description: 'User UUID' })
   resendInvite(@CurrentUser() user: AuthUser, @Param('userId') userId: string) {
-    return this.storesService.resendInvitation(user.storeId!, userId, user.id);
+    return this.storesService.resendInvitation(this.sid(user), userId, user.id);
   }
 
   @Patch('staff/:userId/role')
@@ -245,7 +252,7 @@ export class AdminStoreController {
     @Param('userId') userId: string,
     @Body('role') role: StoreRole,
   ) {
-    return this.storesService.updateMemberRoleWithAudit(user.storeId!, userId, role, user.id);
+    return this.storesService.updateMemberRoleWithAudit(this.sid(user), userId, role, user.id);
   }
 
   @Delete('staff/:userId')
@@ -255,7 +262,7 @@ export class AdminStoreController {
   @ApiOperation({ summary: 'Deactivate a staff member from this store' })
   @ApiParam({ name: 'userId', description: 'User UUID' })
   removeMember(@CurrentUser() user: AuthUser, @Param('userId') userId: string) {
-    return this.storesService.removeMember(user.storeId!, userId, user.id);
+    return this.storesService.removeMember(this.sid(user), userId, user.id);
   }
 
   @Get('audit-log')
@@ -263,7 +270,7 @@ export class AdminStoreController {
   @RequirePermission('staff.read')
   @ApiOperation({ summary: 'Get store audit log' })
   getAuditLog(@CurrentUser() user: AuthUser) {
-    return this.storesService.getAuditLog(user.storeId!);
+    return this.storesService.getAuditLog(this.sid(user));
   }
 }
 

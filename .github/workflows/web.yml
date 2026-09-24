@@ -38,7 +38,16 @@ jobs:
       - name: Build
         run: pnpm --filter @jewellery/web build
         env:
-          NEXT_PUBLIC_API_URL: https://api.yourdomain.in/api/v1
-          NEXT_PUBLIC_WEB_URL: https://yourdomain.in
+          # Set NEXT_PUBLIC_API_URL in GitHub → Settings → Variables (not Secrets)
+          # because NEXT_PUBLIC_* values are baked into the JS bundle at build time
+          # and are not secret. Example value: https://api.yourdomain.in/api/v1
+          NEXT_PUBLIC_API_URL: ${{ vars.NEXT_PUBLIC_API_URL }}
+          NEXT_PUBLIC_WEB_URL: ${{ vars.NEXT_PUBLIC_WEB_URL }}
+          NEXT_PUBLIC_ROOT_DOMAIN: ${{ vars.NEXT_PUBLIC_ROOT_DOMAIN }}
           NEXT_PUBLIC_RAZORPAY_KEY_ID: ${{ secrets.RAZORPAY_KEY_ID_STAGING }}
           NEXT_PUBLIC_CLOUDINARY_CLOUD_NAME: ${{ secrets.CLOUDINARY_CLOUD_NAME }}
+          # NEXT_PUBLIC_SENTRY_DSN is optional — set in GitHub Variables if using Sentry
+          NEXT_PUBLIC_SENTRY_DSN: ${{ vars.NEXT_PUBLIC_SENTRY_DSN }}
+          SENTRY_ORG: ${{ vars.SENTRY_ORG }}
+          SENTRY_PROJECT: ${{ vars.SENTRY_PROJECT }}
+          SENTRY_AUTH_TOKEN: ${{ secrets.SENTRY_AUTH_TOKEN }}

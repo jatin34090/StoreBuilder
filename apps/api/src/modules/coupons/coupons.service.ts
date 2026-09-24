@@ -73,9 +73,9 @@ export class CouponsService {
   }
 
   // Called by OrderService when order is placed — increments usedCount atomically
-  async consume(couponId: string): Promise<void> {
-    await this.prisma.coupon.update({
-      where: { id: couponId },
+  async consume(couponId: string, storeId: string): Promise<void> {
+    await this.prisma.coupon.updateMany({
+      where: { id: couponId, storeId },
       data: { usedCount: { increment: 1 } },
     });
   }
@@ -83,6 +83,7 @@ export class CouponsService {
   // ─── Admin ────────────────────────────────────────────────────────────────
 
   async adminFindAll(storeId = DEFAULT_STORE_ID, limit = 200) {
+    if (!storeId || storeId === DEFAULT_STORE_ID) throw new BadRequestException('Store context required for admin operations');
     return this.prisma.coupon.findMany({
       where: { storeId },
       orderBy: { isActive: 'desc' },
@@ -92,6 +93,7 @@ export class CouponsService {
   }
 
   async create(dto: CreateCouponDto, storeId = DEFAULT_STORE_ID) {
+    if (!storeId || storeId === DEFAULT_STORE_ID) throw new BadRequestException('Store context required for admin operations');
     const code = dto.code.toUpperCase().trim();
 
     const existing = await this.prisma.coupon.findFirst({ where: { storeId, code } });
@@ -118,6 +120,7 @@ export class CouponsService {
   }
 
   async update(id: string, dto: Partial<CreateCouponDto>, storeId = DEFAULT_STORE_ID) {
+    if (!storeId || storeId === DEFAULT_STORE_ID) throw new BadRequestException('Store context required for admin operations');
     const coupon = await this.prisma.coupon.findFirst({ where: { id, storeId } });
     if (!coupon) throw new NotFoundException('Coupon not found');
 

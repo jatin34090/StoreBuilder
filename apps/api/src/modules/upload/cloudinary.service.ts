@@ -161,6 +161,35 @@ export class CloudinaryService {
     });
   }
 
+  async uploadBannerImage(
+    file: Express.Multer.File,
+    storeSlug = 'shared',
+  ): Promise<CloudinaryUploadResult> {
+    this.validateFile(file);
+
+    return new Promise((resolve, reject) => {
+      const stream = cloudinary.uploader.upload_stream(
+        {
+          folder: `stores/${storeSlug}/banners`,
+          transformation: [
+            { width: 1920, height: 640, crop: 'limit' },
+            { quality: 'auto:good', fetch_format: 'auto' },
+          ],
+          resource_type: 'image',
+        },
+        (error, result) => {
+          if (error || !result) {
+            this.logger.error('Banner image upload failed', error);
+            reject(new BadRequestException('Banner image upload failed. Please try again.'));
+            return;
+          }
+          resolve(this.mapResult(result));
+        },
+      );
+      stream.end(file.buffer);
+    });
+  }
+
   async deleteImage(publicId: string): Promise<void> {
     try {
       await cloudinary.uploader.destroy(publicId);

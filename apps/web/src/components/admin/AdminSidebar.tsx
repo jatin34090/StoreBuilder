@@ -7,7 +7,7 @@ import {
   Ticket, Bell, Truck, Star, Gem, ChevronLeft, ChevronRight,
   BarChart2, Settings, Palette, Globe, CreditCard,
   ExternalLink, ChevronDown, ChevronRight as ChevronRightSmall,
-  UserCheck,
+  UserCheck, Image as ImageIcon, LayoutTemplate,
 } from 'lucide-react';
 import { useState } from 'react';
 import { useAdminAuthStore, type Permission } from '../../store/adminAuthStore';
@@ -51,8 +51,10 @@ const NAV_GROUPS: NavGroup[] = [
   {
     label: 'Website',
     items: [
-      { href: '/admin/customize', label: 'Theme', icon: Palette, permission: 'theme.read' },
-      { href: '/admin/pages',     label: 'Pages', icon: Globe,   permission: 'website.read' },
+      { href: '/admin/storefront',        label: 'Storefront',  icon: LayoutTemplate, permission: 'website.read' },
+      { href: '/admin/banners',           label: 'Banners',     icon: ImageIcon,      permission: 'website.read' },
+      { href: '/admin/customize',         label: 'Theme',       icon: Palette,        permission: 'theme.read' },
+      { href: '/admin/settings/domains',  label: 'Domains',     icon: Globe },
     ],
   },
   {

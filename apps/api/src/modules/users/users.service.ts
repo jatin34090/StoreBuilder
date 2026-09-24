@@ -9,7 +9,6 @@ import {
 import * as bcrypt from 'bcrypt';
 import { PrismaService } from '../../prisma/prisma.service';
 
-const DEFAULT_STORE_ID = '00000000-0000-0000-0000-000000000001';
 import type { UpdateProfileDto } from './dto/update-profile.dto';
 import type { CreateAddressDto } from './dto/create-address.dto';
 import type { UpdateAddressDto } from './dto/update-address.dto';
@@ -27,6 +26,12 @@ const USER_SAFE_SELECT = {
   dob: true,
   createdAt: true,
   updatedAt: true,
+  // storeId lives on StoreUser, not User — joined below
+  storeUsers: {
+    where: { status: 'ACTIVE' as const },
+    select: { storeId: true },
+    take: 1,
+  },
 } as const;
 
 @Injectable()
@@ -44,7 +49,8 @@ export class UsersService {
     });
 
     if (!user) throw new NotFoundException('User not found');
-    return user;
+    const { storeUsers, ...rest } = user;
+    return { ...rest, storeId: storeUsers[0]?.storeId ?? null };
   }
 
   async updateProfile(userId: string, dto: UpdateProfileDto) {
@@ -60,7 +66,8 @@ export class UsersService {
       select: USER_SAFE_SELECT,
     });
 
-    return user;
+    const { storeUsers, ...rest } = user;
+    return { ...rest, storeId: storeUsers[0]?.storeId ?? null };
   }
 
   async changePassword(userId: string, currentPassword: string, newPassword: string): Promise<void> {
@@ -216,7 +223,7 @@ export class UsersService {
     if (dto.role) where['role'] = dto.role;
     if (dto.isBlocked !== undefined) where['isBlocked'] = dto.isBlocked;
 
-    const [users, total] = await this.prisma.$transaction([
+    const [rawUsers, total] = await this.prisma.$transaction([
       this.prisma.user.findMany({
         where,
         select: {
@@ -230,6 +237,7 @@ export class UsersService {
       this.prisma.user.count({ where }),
     ]);
 
+    const users = rawUsers.map(({ storeUsers, ...u }) => ({ ...u, storeId: storeUsers[0]?.storeId ?? null }));
     return { users, pagination: { page, limit, total } };
   }
 
@@ -246,60 +254,14 @@ export class UsersService {
     if (!user) throw new NotFoundException('User not found');
     if (user.role === 'ADMIN') throw new ForbiddenException('Cannot block another admin');
 
-    const updated = await this.prisma.user.update({
+    const { storeUsers, ...updated } = await this.prisma.user.update({
       where: { id: targetUserId },
       data: { isBlocked: block },
       select: USER_SAFE_SELECT,
     });
 
     this.logger.log(`Admin ${adminId} ${block ? 'blocked' : 'unblocked'} user ${targetUserId}`);
-    return updated;
-  }
-
-  // ─── Wishlist ─────────────────────────────────────────────────────────────
-
-  async getWishlist(userId: string) {
-    const items = await this.prisma.wishlistItem.findMany({
-      where: { userId },
-      include: {
-        product: {
-          select: {
-            id: true,
-            name: true,
-            slug: true,
-            basePrice: true,
-            discountPct: true,
-            isActive: true,
-            images: {
-              where: { isPrimary: true },
-              select: { url: true, publicId: true },
-              take: 1,
-            },
-          },
-        },
-      },
-      orderBy: { createdAt: 'desc' },
-    });
-
-    return items.filter((i) => i.product.isActive);
-  }
-
-  async addToWishlist(userId: string, productId: string) {
-    const product = await this.prisma.product.findUnique({
-      where: { id: productId, isActive: true },
-      select: { id: true },
-    });
-    if (!product) throw new NotFoundException('Product not found');
-
-    return this.prisma.wishlistItem.upsert({
-      where: { storeId_userId_productId: { storeId: DEFAULT_STORE_ID, userId, productId } },
-      create: { storeId: DEFAULT_STORE_ID, userId, productId },
-      update: {},
-    });
-  }
-
-  async removeFromWishlist(userId: string, productId: string): Promise<void> {
-    await this.prisma.wishlistItem.deleteMany({ where: { userId, productId } });
+    return { ...updated, storeId: storeUsers[0]?.storeId ?? null };
   }
 
   async updateAvatar(userId: string, avatarUrl: string): Promise<void> {

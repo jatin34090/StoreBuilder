@@ -7,11 +7,13 @@ import { zodResolver } from '@hookform/resolvers/zod';
 import { z } from 'zod';
 import { toast } from 'sonner';
 import { Eye, EyeOff, Gem, Lock, Mail } from 'lucide-react';
+import Link from 'next/link';
 import { Button } from '../../../../components/ui/button';
 import { Input } from '../../../../components/ui/input';
 import { Label } from '../../../../components/ui/label';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '../../../../components/ui/card';
 import { useAdminAuthStore } from '../../../../store/adminAuthStore';
+import { useAuthStore } from '../../../../store/authStore';
 import { authApi } from '../../../../lib/api';
 
 const loginSchema = z.object({
@@ -24,6 +26,7 @@ type LoginFormData = z.infer<typeof loginSchema>;
 export default function AdminLoginPage() {
   const router = useRouter();
   const { setAdminAuth, isAdminAuthenticated } = useAdminAuthStore();
+  const { setUser } = useAuthStore();
   const [showPassword, setShowPassword] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
   const [brandName, setBrandName] = useState('YourBrand');
@@ -69,6 +72,8 @@ export default function AdminLoginPage() {
       }
 
       setAdminAuth({ id: user.id, name: user.name, email: user.email, role: 'ADMIN', avatar: user.avatar });
+      // Keep useAuthStore in sync so the landing navbar and other pages see the user too
+      setUser({ id: user.id, name: user.name, email: user.email, role: 'ADMIN' });
 
       toast.success(`Welcome back, ${user.name}!`);
       router.push('/admin');
@@ -192,7 +197,14 @@ export default function AdminLoginPage() {
           </CardContent>
         </Card>
 
-        <p className="text-center text-slate-600 text-xs mt-6">
+        <p className="text-center text-slate-400 text-sm mt-5">
+          Don&apos;t have an account?{' '}
+          <Link href="/register" className="text-yellow-400 hover:text-yellow-300 font-medium underline underline-offset-2">
+            Create your store
+          </Link>
+        </p>
+
+        <p className="text-center text-slate-600 text-xs mt-3">
           © {new Date().getFullYear()} {brandName} Jewellery. Admin Portal.
         </p>
       </div>

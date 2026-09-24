@@ -69,7 +69,7 @@ function MeterBar({ used, max, label, unit = '' }: {
   );
 }
 
-const PLAN_ORDER = ['FREE', 'STARTER', 'PROFESSIONAL', 'ENTERPRISE'];
+const PLAN_ORDER = ['FREE', 'STARTER', 'GROWTH', 'BUSINESS', 'ENTERPRISE'];
 
 const FEATURE_LABELS: Record<string, string> = {
   analytics:             'Analytics',
@@ -343,8 +343,8 @@ function PlanComparison({ plans, currentPlan }: { plans: PlanOption[]; currentPl
 
               {/* Limits */}
               <ul className="text-xs text-slate-600 space-y-1 mb-5 flex-1">
-                <li>📦 {plan.limits.maxProducts < 0 ? 'Unlimited' : plan.limits.maxProducts} products</li>
-                <li>👥 {plan.limits.maxStaff < 0 ? 'Unlimited' : plan.limits.maxStaff} staff members</li>
+                <li>📦 {plan.limits.maxProducts == null ? 'Unlimited' : plan.limits.maxProducts} products</li>
+                <li>👥 {plan.limits.maxStaff == null ? 'Unlimited' : plan.limits.maxStaff} staff members</li>
                 <li>💾 {plan.limits.maxStorageGB} GB storage</li>
                 <li>🛒 {plan.limits.maxOrders == null ? 'Unlimited' : plan.limits.maxOrders} orders/month</li>
               </ul>

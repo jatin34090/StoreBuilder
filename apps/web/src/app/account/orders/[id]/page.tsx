@@ -7,7 +7,6 @@ import Link from 'next/link';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { CheckCircle, Package, Truck, MapPin, ArrowLeft, Loader2, XCircle, KeyRound } from 'lucide-react';
 import { toast } from 'sonner';
-import { MainLayout } from '@/components/layout/MainLayout';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Separator } from '@/components/ui/separator';
@@ -18,6 +17,12 @@ import { formatPrice, formatDate, cn } from '@/lib/utils';
 
 const STATUS_STEPS = ['CONFIRMED', 'PROCESSING', 'SHIPPED', 'OUT_FOR_DELIVERY', 'DELIVERED'];
 
+function getStoreIdCookie(): string | undefined {
+  if (typeof document === 'undefined') return undefined;
+  const match = document.cookie.match(/(?:^|;\s*)store-id=([^;]+)/);
+  return match?.[1];
+}
+
 function OrderDetailPageContent() {
   const router = useRouter();
   const searchParams = useSearchParams();
@@ -25,24 +30,31 @@ function OrderDetailPageContent() {
   const isSuccess = searchParams.get('success') === 'true';
   const { isAuthenticated, hydrated } = useAuthGuard('/auth/login');
   const queryClient = useQueryClient();
+  const storeId = hydrated ? getStoreIdCookie() : undefined;
 
   useEffect(() => {
     if (isSuccess) toast.success('🎉 Order placed successfully!');
   }, [isSuccess]);
 
   const { data, isLoading } = useQuery({
-    queryKey: ['order', params.id],
+    queryKey: ['order', params.id, storeId],
     queryFn: () => ordersApi.get(params.id),
-    enabled: isAuthenticated,
+    enabled: isAuthenticated && !!storeId,
+    staleTime: 30_000,
+    retry: false,
   });
+
+  if (!hydrated || !isAuthenticated) return null;
 
   const order = data?.data?.data;
 
   // Fetch delivery OTP notification when order is out for delivery
   const { data: notifData } = useQuery({
-    queryKey: ['notifications', 'delivery-otp', params.id],
+    queryKey: ['notifications', 'delivery-otp', params.id, storeId],
     queryFn: () => notificationsApi.list({ limit: 50 }),
-    enabled: isAuthenticated && order?.status === 'OUT_FOR_DELIVERY',
+    enabled: isAuthenticated && !!storeId && order?.status === 'OUT_FOR_DELIVERY',
+    staleTime: 10_000,
+    retry: false,
     refetchInterval: 15_000,
   });
 
@@ -66,24 +78,20 @@ function OrderDetailPageContent() {
 
   if (isLoading) {
     return (
-      <MainLayout>
-        <div className="container py-8 max-w-2xl space-y-4">
-          <Skeleton className="h-8 w-48" />
-          <Skeleton className="h-32 w-full" />
-          <Skeleton className="h-48 w-full" />
-        </div>
-      </MainLayout>
+      <div className="container py-8 max-w-2xl space-y-4">
+        <Skeleton className="h-8 w-48" />
+        <Skeleton className="h-32 w-full" />
+        <Skeleton className="h-48 w-full" />
+      </div>
     );
   }
 
   if (!order) {
     return (
-      <MainLayout>
-        <div className="container py-16 text-center">
-          <p className="text-muted-foreground">Order not found.</p>
-          <Button asChild className="mt-4"><Link href="/account/orders">View Orders</Link></Button>
-        </div>
-      </MainLayout>
+      <div className="container py-16 text-center">
+        <p className="text-muted-foreground">Order not found.</p>
+        <Button asChild className="mt-4"><Link href="/account/orders">View Orders</Link></Button>
+      </div>
     );
   }
 
@@ -91,11 +99,8 @@ function OrderDetailPageContent() {
   const isCancellable  = ['PENDING', 'CONFIRMED'].includes(order.status);
   const isDelivered    = order.status === 'DELIVERED';
 
-  if (!hydrated || !isAuthenticated) return null;
-
   return (
-    <MainLayout>
-      <div className="container py-8 max-w-2xl">
+    <div className="container py-8 max-w-2xl">
         <Link href="/account/orders" className="inline-flex items-center gap-1.5 text-sm text-muted-foreground hover:text-primary mb-4">
           <ArrowLeft className="h-4 w-4" /> Back to orders
         </Link>
@@ -308,13 +313,12 @@ function OrderDetailPageContent() {
           )}
         </div>
       </div>
-    </MainLayout>
   );
 }
 
 export default function OrderDetailPage() {
   return (
-    <Suspense fallback={<MainLayout><div className="container py-8 max-w-2xl space-y-4"><div className="h-8 w-48 bg-muted animate-pulse rounded" /><div className="h-32 w-full bg-muted animate-pulse rounded" /></div></MainLayout>}>
+    <Suspense fallback={<div className="container py-8 max-w-2xl space-y-4"><div className="h-8 w-48 bg-muted animate-pulse rounded" /><div className="h-32 w-full bg-muted animate-pulse rounded" /></div>}>
       <OrderDetailPageContent />
     </Suspense>
   );

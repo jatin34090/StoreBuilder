@@ -13,15 +13,19 @@ import {
 
 const PLAN_PRIORITY: Record<Plan, number> = {
   [Plan.ENTERPRISE]:   1,
-  [Plan.PROFESSIONAL]: 2,
-  [Plan.STARTER]:      3,
-  [Plan.FREE]:         4,
+  [Plan.BUSINESS]:     2,
+  [Plan.GROWTH]:       3,
+  [Plan.PROFESSIONAL]: 3, // legacy — same as GROWTH
+  [Plan.STARTER]:      4,
+  [Plan.FREE]:         5,
 };
 
 // Max jobs a store can enqueue per 60 s window. -1 = unlimited.
 const PLAN_RATE_LIMIT: Record<Plan, number> = {
   [Plan.ENTERPRISE]:   -1,
-  [Plan.PROFESSIONAL]: 500,
+  [Plan.BUSINESS]:     1000,
+  [Plan.GROWTH]:       500,
+  [Plan.PROFESSIONAL]: 500, // legacy
   [Plan.STARTER]:      100,
   [Plan.FREE]:         20,
 };

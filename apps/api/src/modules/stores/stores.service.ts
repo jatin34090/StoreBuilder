@@ -140,6 +140,7 @@ export class StoresService {
   }
 
   async findOne(id: string) {
+    if (!id) throw new BadRequestException('Store ID is required');
     const store = await this.prisma.store.findUnique({
       where: { id },
       include: {
@@ -263,7 +264,7 @@ export class StoresService {
   async suspend(id: string) {
     const store = await this.prisma.store.findUnique({ where: { id } });
     if (!store) throw new NotFoundException('Store not found');
-    if (!store.isActive) throw new BadRequestException('Store is already suspended');
+    if (store.status === StoreStatus.SUSPENDED) throw new BadRequestException('Store is already suspended');
 
     await this.prisma.store.update({ where: { id }, data: { isActive: false, status: StoreStatus.SUSPENDED } });
     this.tenant.invalidateStoreCache(id, store.slug);

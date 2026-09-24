@@ -6,6 +6,7 @@ import { useState } from 'react';
 import { toast } from 'sonner';
 import { Button } from '../ui/button';
 import { useAdminAuthStore } from '../../store/adminAuthStore';
+import { useAuthStore } from '../../store/authStore';
 import { api, setAdminStoreSlug } from '../../lib/api';
 
 interface AdminTopbarProps {
@@ -42,20 +43,23 @@ export function AdminTopbar({ onMobileMenuToggle }: AdminTopbarProps) {
   const router = useRouter();
   const pathname = usePathname();
   const { adminUser, adminStore, clearAdminAuth } = useAdminAuthStore();
+  const { clearUser } = useAuthStore();
   const [dropdownOpen, setDropdownOpen] = useState(false);
 
   const handleLogout = async () => {
     try { await api.post('/auth/logout'); } catch { /* ignore */ }
     setAdminStoreSlug(undefined);
     clearAdminAuth();
+    clearUser(); // clear the shared identity store so the landing navbar becomes guest
     toast.success('Logged out successfully');
     router.push('/admin/login');
   };
 
+  const rootDomain = process.env['NEXT_PUBLIC_ROOT_DOMAIN'];
   const storeUrl = adminStore?.slug
-    ? (process.env['NEXT_PUBLIC_ROOT_DOMAIN']
-        ? `https://${adminStore.slug}.${process.env['NEXT_PUBLIC_ROOT_DOMAIN']}`
-        : `http://${adminStore.slug}.localhost:3000`)
+    ? (rootDomain
+        ? `https://${adminStore.slug}.${rootDomain}`
+        : `http://localhost:3000/store/${adminStore.slug}`)
     : null;
 
   const title = getPageTitle(pathname);
@@ -86,16 +90,20 @@ export function AdminTopbar({ onMobileMenuToggle }: AdminTopbarProps) {
 
       {/* Right side */}
       <div className="flex items-center gap-2">
-        {/* View Store button */}
+        {/* View Store / Preview button */}
         {storeUrl && (
           <a
             href={storeUrl}
             target="_blank"
             rel="noopener noreferrer"
-            className="hidden sm:flex items-center gap-1.5 px-3 py-1.5 text-sm font-medium text-emerald-700 bg-emerald-50 hover:bg-emerald-100 border border-emerald-200 rounded-lg transition-colors"
+            className={`hidden sm:flex items-center gap-1.5 px-3 py-1.5 text-sm font-medium rounded-lg transition-colors border ${
+              adminStore?.status === 'ACTIVE'
+                ? 'text-emerald-700 bg-emerald-50 hover:bg-emerald-100 border-emerald-200'
+                : 'text-amber-700 bg-amber-50 hover:bg-amber-100 border-amber-200'
+            }`}
           >
             <ExternalLink className="w-3.5 h-3.5" />
-            View Store
+            {adminStore?.status === 'ACTIVE' ? 'View Store' : 'Preview'}
           </a>
         )}
 

@@ -13,10 +13,22 @@ export async function middleware(req: NextRequest) {
   }
 
   const hostname = req.headers.get('host') ?? '';
-  const { slug, isCustomDomain } = parseHostname(hostname);
+  const host = hostname.split(':')[0];
+
+  // localhost and 127.0.0.1 are always treated as the platform root for path routing purposes.
+  // parseHostname would classify them as custom domains (they're neither the root domain
+  // nor a subdomain of it), which would block path-based /store/:slug routing in dev.
+  const isLocalhost = host === 'localhost' || host === '127.0.0.1';
+  const { slug: hostnameSlug, isCustomDomain: _isCustomDomain } = parseHostname(hostname);
+  const isCustomDomain = isLocalhost ? false : _isCustomDomain;
+
+  // Path-based dev store routing: /store/:slug → inject store context
+  // This lets developers access storefront without subdomains on localhost.
+  const pathSlugMatch = !hostnameSlug && !isCustomDomain && pathname.match(/^\/store\/([a-z0-9-]+)(\/.*)?$/);
+  const slug = hostnameSlug ?? (pathSlugMatch ? pathSlugMatch[1] : null);
 
   if (!slug && !isCustomDomain) {
-    // Root domain — platform routes, no store context
+    // Root domain / localhost — platform routes (landing, pricing, login, register, onboarding, admin, super-admin)
     return NextResponse.next();
   }
 
@@ -30,7 +42,8 @@ export async function middleware(req: NextRequest) {
       next: { revalidate: 60 },
     });
     if (res.ok) {
-      store = await res.json();
+      const json = await res.json() as { data?: typeof store };
+      store = json.data ?? null;
     }
   } catch {
     // Network error — let request through, server components will handle gracefully
@@ -41,11 +54,18 @@ export async function middleware(req: NextRequest) {
     return NextResponse.next();
   }
 
+  // Check if the store is suspended (hard block) or just in SETUP (allow preview for owner)
   if (!store.isActive) {
-    return new NextResponse(
-      JSON.stringify({ statusCode: 503, message: 'This store is currently suspended' }),
-      { status: 503, headers: { 'Content-Type': 'application/json' } },
-    );
+    // Allow owner preview: if the request carries the admin access_token cookie,
+    // let them through with a preview header so the storefront can show a "Preview" banner.
+    const hasAdminCookie = !!req.cookies.get('access_token');
+    if (!hasAdminCookie) {
+      return new NextResponse(
+        JSON.stringify({ statusCode: 503, message: 'This store is not yet published' }),
+        { status: 503, headers: { 'Content-Type': 'application/json' } },
+      );
+    }
+    // Owner preview — fall through with x-store-preview header set
   }
 
   // Propagate store context to server components via headers
@@ -54,6 +74,7 @@ export async function middleware(req: NextRequest) {
   requestHeaders.set('x-store-slug', store.slug);
   requestHeaders.set('x-store-name', store.name);
   requestHeaders.set('x-store-plan', store.plan);
+  if (!store.isActive) requestHeaders.set('x-store-preview', '1');
   if (store.logoUrl) requestHeaders.set('x-store-logo', store.logoUrl);
 
   const response = NextResponse.next({ request: { headers: requestHeaders } });
@@ -62,8 +83,9 @@ export async function middleware(req: NextRequest) {
   response.cookies.set('store-id', store.id, {
     path: '/',
     sameSite: 'lax',
-    httpOnly: false, // must be readable by JS
-    maxAge: 60,
+    httpOnly: false, // must be readable by JS for axios interceptor
+    secure: process.env.NODE_ENV === 'production',
+    maxAge: 3600,
   });
 
   return response;

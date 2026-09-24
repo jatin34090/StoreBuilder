@@ -1,0 +1,48 @@
+services:
+  # ─── API ──────────────────────────────────────────────────────────────────
+  - type: web
+    name: jewellery-api
+    runtime: node
+    region: singapore
+    plan: starter
+    buildCommand: >-
+      pnpm install --frozen-lockfile &&
+      pnpm --filter @jewellery/api exec prisma generate --schema=../../prisma/schema.prisma &&
+      pnpm --filter @jewellery/api build
+    # preDeployCommand runs after build, BEFORE the new instance handles traffic.
+    # Migration failure aborts the deployment — the old version keeps serving.
+    preDeployCommand: >-
+      pnpm --filter @jewellery/api exec prisma migrate deploy --schema=../../prisma/schema.prisma
+    startCommand: node apps/api/dist/main
+    healthCheckPath: /api/v1/health/ready
+    envVars:
+      - key: NODE_ENV
+        value: production
+      - key: PORT
+        value: "3001"
+      # The rest of the required env vars must be set in the Render dashboard.
+      # Do NOT commit production secrets to this file.
+      # Required: DATABASE_URL, DIRECT_URL, JWT_PRIVATE_KEY, JWT_PUBLIC_KEY,
+      #           API_URL, WEB_URL, CORS_ORIGINS, REDIS_URL, RAZORPAY_*, CLOUDINARY_*,
+      #           PLATFORM_DOMAIN (e.g. yourdomain.in — enables subdomain tenant routing),
+      #           SENTRY_DSN (optional)
+
+  # ─── Web (Next.js) ────────────────────────────────────────────────────────
+  - type: web
+    name: jewellery-web
+    runtime: node
+    region: singapore
+    plan: starter
+    buildCommand: >-
+      pnpm install --frozen-lockfile &&
+      pnpm --filter @jewellery/web build
+    startCommand: node apps/web/.next/standalone/apps/web/server.js
+    healthCheckPath: /
+    envVars:
+      - key: NODE_ENV
+        value: production
+      - key: PORT
+        value: "3000"
+      # NEXT_PUBLIC_* vars must be set at build time in the Render dashboard.
+      # Required: NEXT_PUBLIC_API_URL, NEXT_PUBLIC_WEB_URL, NEXT_PUBLIC_ROOT_DOMAIN,
+      #           NEXT_PUBLIC_RAZORPAY_KEY_ID, NEXT_PUBLIC_CLOUDINARY_CLOUD_NAME

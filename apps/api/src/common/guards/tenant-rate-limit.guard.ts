@@ -13,7 +13,9 @@ export const SKIP_TENANT_RATE_LIMIT = 'skipTenantRateLimit';
 export const PLAN_API_LIMITS: Record<Plan, number> = {
   [Plan.FREE]:         100,
   [Plan.STARTER]:      500,
-  [Plan.PROFESSIONAL]: 2000,
+  [Plan.PROFESSIONAL]: 2000, // legacy — same as GROWTH
+  [Plan.GROWTH]:       2000,
+  [Plan.BUSINESS]:     5000,
   [Plan.ENTERPRISE]:   10000,
 };
 

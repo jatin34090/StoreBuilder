@@ -414,7 +414,6 @@ export const adminProductsApi = {
     api.post(
       `/admin/products/${productId}/images${variantId ? `?variantId=${variantId}` : ''}`,
       formData,
-      { headers: { 'Content-Type': 'multipart/form-data' } },
     ),
   deleteImage: (productId: string, imageId: string) =>
     api.delete(`/admin/products/${productId}/images/${imageId}`),
@@ -434,9 +433,7 @@ export const adminCategoriesApi = {
     unwrap<AdminCategory>(api.patch(`/admin/categories/${id}`, data)),
   delete: (id: string) => api.delete(`/admin/categories/${id}`),
   uploadImage: (categoryId: string, formData: FormData) =>
-    api.post(`/admin/categories/${categoryId}/image`, formData, {
-      headers: { 'Content-Type': 'multipart/form-data' },
-    }),
+    api.post(`/admin/categories/${categoryId}/image`, formData),
 };
 
 // ─── Orders ───────────────────────────────────────────────────────────────────

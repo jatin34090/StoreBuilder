@@ -24,6 +24,7 @@ import { MergeCartDto } from './dto/merge-cart.dto';
 import { Roles } from '../../common/decorators/roles.decorator';
 import { CurrentUser } from '../../common/decorators/current-user.decorator';
 import { type AuthUser } from '../../common/decorators/current-user.decorator';
+import { CurrentStoreId } from '../../common/decorators/current-store.decorator';
 
 @ApiTags('Cart')
 @ApiBearerAuth()
@@ -42,8 +43,8 @@ export class CartController {
       'plus a computed summary (subtotal, shipping charge, total).',
   })
   @ApiOkResponse({ description: 'Cart with items and summary' })
-  getCart(@CurrentUser() user: AuthUser) {
-    return this.cartService.getCart(user.id);
+  getCart(@CurrentUser() user: AuthUser, @CurrentStoreId() storeId: string) {
+    return this.cartService.getCart(user.id, storeId);
   }
 
   // ─── Add / Update Item ─────────────────────────────────────────────────────
@@ -57,8 +58,8 @@ export class CartController {
       'Validates stock availability before inserting. Max quantity: 99.',
   })
   @ApiOkResponse({ description: 'Updated cart item' })
-  upsertItem(@CurrentUser() user: AuthUser, @Body() dto: UpsertCartItemDto) {
-    return this.cartService.upsertItem(user.id, dto);
+  upsertItem(@CurrentUser() user: AuthUser, @Body() dto: UpsertCartItemDto, @CurrentStoreId() storeId: string) {
+    return this.cartService.upsertItem(user.id, dto, storeId);
   }
 
   // ─── Remove Item ───────────────────────────────────────────────────────────
@@ -71,8 +72,9 @@ export class CartController {
   removeItem(
     @CurrentUser() user: AuthUser,
     @Param('variantId') variantId: string,
+    @CurrentStoreId() storeId: string,
   ) {
-    return this.cartService.removeItem(user.id, variantId);
+    return this.cartService.removeItem(user.id, variantId, storeId);
   }
 
   // ─── Clear Cart ────────────────────────────────────────────────────────────
@@ -81,8 +83,8 @@ export class CartController {
   @HttpCode(HttpStatus.OK)
   @ApiOperation({ summary: 'Clear entire cart' })
   @ApiOkResponse({ description: 'Cart cleared' })
-  clearCart(@CurrentUser() user: AuthUser) {
-    return this.cartService.clearCart(user.id);
+  clearCart(@CurrentUser() user: AuthUser, @CurrentStoreId() storeId: string) {
+    return this.cartService.clearCart(user.id, storeId);
   }
 
   // ─── Merge Guest Cart ──────────────────────────────────────────────────────
@@ -98,7 +100,7 @@ export class CartController {
       'Returns merged cart with summary.',
   })
   @ApiCreatedResponse({ description: 'Merged cart with summary' })
-  mergeGuestCart(@CurrentUser() user: AuthUser, @Body() dto: MergeCartDto) {
-    return this.cartService.mergeGuestCart(user.id, dto);
+  mergeGuestCart(@CurrentUser() user: AuthUser, @Body() dto: MergeCartDto, @CurrentStoreId() storeId: string) {
+    return this.cartService.mergeGuestCart(user.id, dto, storeId);
   }
 }

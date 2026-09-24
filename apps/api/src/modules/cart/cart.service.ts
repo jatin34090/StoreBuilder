@@ -5,10 +5,9 @@ import {
   Logger,
 } from '@nestjs/common';
 import { PrismaService } from '../../prisma/prisma.service';
+import { SettingsService } from '../settings/settings.service';
 import type { UpsertCartItemDto } from './dto/upsert-cart-item.dto';
 import type { MergeCartDto } from './dto/merge-cart.dto';
-
-const DEFAULT_STORE_ID = '00000000-0000-0000-0000-000000000001';
 
 // ─── Select shape ─────────────────────────────────────────────────────────────
 
@@ -46,36 +45,46 @@ const CART_ITEM_SELECT = {
 export class CartService {
   private readonly logger = new Logger(CartService.name);
 
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly settings: SettingsService,
+  ) {}
 
   // ─── Get cart ─────────────────────────────────────────────────────────────
 
-  async getCart(userId: string) {
-    const items = await this.prisma.cartItem.findMany({
-      where: { userId },
-      select: CART_ITEM_SELECT,
-      orderBy: { updatedAt: 'desc' },
-    });
+  async getCart(userId: string, storeId: string) {
+    const [items, shippingCfg] = await Promise.all([
+      this.prisma.cartItem.findMany({
+        where: { userId, storeId },
+        select: CART_ITEM_SELECT,
+        orderBy: { updatedAt: 'desc' },
+      }),
+      this.settings.getShippingConfig(storeId),
+    ]);
 
     return {
       items,
-      summary: this.computeSummary(items),
+      summary: this.computeSummary(items, shippingCfg),
     };
   }
 
   // ─── Upsert single item ───────────────────────────────────────────────────
 
-  async upsertItem(userId: string, dto: UpsertCartItemDto) {
+  async upsertItem(userId: string, dto: UpsertCartItemDto, storeId: string) {
+    // Verify the variant belongs to the current store (prevents cross-store cart poisoning)
     const variant = await this.prisma.productVariant.findUnique({
       where: { id: dto.variantId },
       select: {
         id: true,
         stock: true,
-        product: { select: { isActive: true, name: true } },
+        product: { select: { isActive: true, name: true, storeId: true } },
       },
     });
 
     if (!variant) throw new NotFoundException('Product variant not found');
+    if (variant.product.storeId !== storeId) {
+      throw new NotFoundException('Product variant not found');
+    }
     if (!variant.product.isActive) {
       throw new BadRequestException(`"${variant.product.name}" is no longer available`);
     }
@@ -86,9 +95,9 @@ export class CartService {
     }
 
     const item = await this.prisma.cartItem.upsert({
-      where: { storeId_userId_variantId: { storeId: DEFAULT_STORE_ID, userId, variantId: dto.variantId } },
+      where: { storeId_userId_variantId: { storeId, userId, variantId: dto.variantId } },
       update: { quantity: dto.quantity },
-      create: { storeId: DEFAULT_STORE_ID, userId, variantId: dto.variantId, quantity: dto.quantity },
+      create: { storeId, userId, variantId: dto.variantId, quantity: dto.quantity },
       select: CART_ITEM_SELECT,
     });
 
@@ -97,14 +106,14 @@ export class CartService {
 
   // ─── Remove single item ───────────────────────────────────────────────────
 
-  async removeItem(userId: string, variantId: string) {
+  async removeItem(userId: string, variantId: string, storeId: string) {
     const existing = await this.prisma.cartItem.findUnique({
-      where: { storeId_userId_variantId: { storeId: DEFAULT_STORE_ID, userId, variantId } },
+      where: { storeId_userId_variantId: { storeId, userId, variantId } },
     });
     if (!existing) throw new NotFoundException('Cart item not found');
 
     await this.prisma.cartItem.delete({
-      where: { storeId_userId_variantId: { storeId: DEFAULT_STORE_ID, userId, variantId } },
+      where: { storeId_userId_variantId: { storeId, userId, variantId } },
     });
 
     return { message: 'Item removed from cart' };
@@ -112,8 +121,8 @@ export class CartService {
 
   // ─── Clear entire cart ────────────────────────────────────────────────────
 
-  async clearCart(userId: string) {
-    await this.prisma.cartItem.deleteMany({ where: { userId } });
+  async clearCart(userId: string, storeId: string) {
+    await this.prisma.cartItem.deleteMany({ where: { userId, storeId } });
     return { message: 'Cart cleared' };
   }
 
@@ -123,7 +132,7 @@ export class CartService {
    * Strategy: server quantity wins if item already exists, otherwise item is added.
    * Invalid / out-of-stock items are silently skipped.
    */
-  async mergeGuestCart(userId: string, dto: MergeCartDto) {
+  async mergeGuestCart(userId: string, dto: MergeCartDto, storeId: string) {
     const results = { added: 0, skipped: 0, errors: [] as string[] };
 
     for (const guestItem of dto.items) {
@@ -133,11 +142,12 @@ export class CartService {
           select: {
             id: true,
             stock: true,
-            product: { select: { isActive: true, name: true } },
+            product: { select: { isActive: true, name: true, storeId: true } },
           },
         });
 
-        if (!variant || !variant.product.isActive || variant.stock === 0) {
+        // Skip items that don't belong to this store
+        if (!variant || variant.product.storeId !== storeId || !variant.product.isActive || variant.stock === 0) {
           results.skipped++;
           continue;
         }
@@ -146,9 +156,9 @@ export class CartService {
 
         // Only insert if not already in cart — server cart takes priority
         await this.prisma.cartItem.upsert({
-          where: { storeId_userId_variantId: { storeId: DEFAULT_STORE_ID, userId, variantId: guestItem.variantId } },
+          where: { storeId_userId_variantId: { storeId, userId, variantId: guestItem.variantId } },
           update: {}, // keep server quantity if exists
-          create: { storeId: DEFAULT_STORE_ID, userId, variantId: guestItem.variantId, quantity: safeQty },
+          create: { storeId, userId, variantId: guestItem.variantId, quantity: safeQty },
         });
 
         results.added++;
@@ -158,13 +168,16 @@ export class CartService {
       }
     }
 
-    const cart = await this.getCart(userId);
+    const cart = await this.getCart(userId, storeId);
     return { ...results, cart };
   }
 
   // ─── Helpers ──────────────────────────────────────────────────────────────
 
-  private computeSummary(items: Array<{ quantity: number; variant: { price: unknown; product: { discountPct: number } } }>) {
+  private computeSummary(
+    items: Array<{ quantity: number; variant: { price: unknown; product: { discountPct: number } } }>,
+    shippingCfg: { enabled: boolean; flatRate: number; freeThreshold: number },
+  ) {
     let subtotal = 0;
     let totalItems = 0;
 
@@ -174,11 +187,17 @@ export class CartService {
       totalItems += item.quantity;
     }
 
+    const shippingCharge = !shippingCfg.enabled
+      ? 0
+      : shippingCfg.freeThreshold > 0 && subtotal >= shippingCfg.freeThreshold
+        ? 0
+        : shippingCfg.flatRate;
+
     return {
       totalItems,
-      subtotal: Math.round(subtotal * 100) / 100,
-      shippingCharge: subtotal >= 999 ? 0 : 49,
-      total: Math.round((subtotal + (subtotal >= 999 ? 0 : 49)) * 100) / 100,
+      subtotal:      Math.round(subtotal * 100) / 100,
+      shippingCharge,
+      total:         Math.round((subtotal + shippingCharge) * 100) / 100,
     };
   }
 }

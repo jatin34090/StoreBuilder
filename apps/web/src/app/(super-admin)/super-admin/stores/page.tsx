@@ -77,7 +77,8 @@ export default function SuperAdminStoresPage() {
             <SelectItem value="ALL">All plans</SelectItem>
             <SelectItem value="FREE">Free</SelectItem>
             <SelectItem value="STARTER">Starter</SelectItem>
-            <SelectItem value="PROFESSIONAL">Professional</SelectItem>
+            <SelectItem value="GROWTH">Growth</SelectItem>
+            <SelectItem value="BUSINESS">Business</SelectItem>
             <SelectItem value="ENTERPRISE">Enterprise</SelectItem>
           </SelectContent>
         </Select>
@@ -130,7 +131,7 @@ export default function SuperAdminStoresPage() {
                     <td className="px-4 py-3">
                       <div>
                         <p className="font-medium text-slate-800">{store.name}</p>
-                        <p className="text-xs text-muted-foreground">{store.slug}.yourdomain.in</p>
+                        <p className="text-xs text-muted-foreground">{store.slug}.{process.env['NEXT_PUBLIC_ROOT_DOMAIN'] ?? 'yourdomain.in'}</p>
                       </div>
                     </td>
                     <td className="px-4 py-3 hidden md:table-cell">

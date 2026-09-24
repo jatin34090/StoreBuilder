@@ -41,7 +41,7 @@ function SearchPageContent() {
             autoFocus
             value={input}
             onChange={(e) => setInput(e.target.value)}
-            placeholder="Search for rings, necklaces, earrings…"
+            placeholder="Search for products…"
             className="pl-10 pr-10 h-12 text-base"
           />
           {input && (
@@ -58,7 +58,7 @@ function SearchPageContent() {
           <div>
             <p className="text-sm font-medium mb-3 text-muted-foreground">Popular searches</p>
             <div className="flex flex-wrap gap-2">
-              {['Gold rings', 'Pearl necklace', 'Diamond earrings', 'Silver bangles', 'Kundan', 'Wedding jewellery'].map((s) => (
+              {['New arrivals', 'Best sellers', 'Sale', 'Featured'].map((s) => (
                 <button
                   key={s}
                   onClick={() => setInput(s)}

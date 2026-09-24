@@ -3,7 +3,6 @@
 import Link from 'next/link';
 import { useQuery } from '@tanstack/react-query';
 import { Package, ChevronRight, Loader2 } from 'lucide-react';
-import { MainLayout } from '@/components/layout/MainLayout';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Skeleton } from '@/components/ui/skeleton';
@@ -24,13 +23,22 @@ const STATUS_COLORS: Record<string, 'default' | 'secondary' | 'success' | 'warni
   REFUNDED:         'secondary',
 };
 
+function getStoreIdCookie(): string | undefined {
+  if (typeof document === 'undefined') return undefined;
+  const match = document.cookie.match(/(?:^|;\s*)store-id=([^;]+)/);
+  return match?.[1];
+}
+
 export default function OrdersPage() {
   const { isAuthenticated, hydrated } = useAuthGuard('/auth/login?redirect=/account/orders');
+  const storeId = hydrated ? getStoreIdCookie() : undefined;
 
   const { data, isLoading } = useQuery({
-    queryKey: ['orders'],
+    queryKey: ['orders', storeId],
     queryFn: () => ordersApi.list({ limit: 20 }),
-    enabled: isAuthenticated,
+    enabled: isAuthenticated && !!storeId,
+    staleTime: 30_000,
+    retry: false,
   });
 
   const orders: Array<{
@@ -45,8 +53,7 @@ export default function OrdersPage() {
   if (!hydrated || !isAuthenticated) return null;
 
   return (
-    <MainLayout>
-      <div className="container py-8 max-w-2xl">
+    <div className="container py-8 max-w-2xl">
         <h1 className="text-2xl font-bold mb-6 flex items-center gap-2">
           <Package className="h-6 w-6 text-primary" /> My Orders
         </h1>
@@ -99,6 +106,5 @@ export default function OrdersPage() {
           </div>
         )}
       </div>
-    </MainLayout>
   );
 }

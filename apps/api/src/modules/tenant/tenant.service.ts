@@ -16,35 +16,56 @@ export class TenantService {
 
   // ─── Store resolution ─────────────────────────────────────────────────────
 
+  private async redisSafeGet(key: string): Promise<string | null> {
+    try { return await this.redis.get(key); } catch { return null; }
+  }
+
+  private async redisSafeSet(key: string, ttl: number, value: string): Promise<void> {
+    try { await this.redis.setEx(key, ttl, value); } catch { /* non-fatal */ }
+  }
+
   async resolveBySlug(slug: string): Promise<Store | null> {
     const cacheKey = `store:slug:${slug}`;
-    const cached = await this.redis.get(cacheKey);
+    const cached = await this.redisSafeGet(cacheKey);
     if (cached) return JSON.parse(cached) as Store;
 
     const store = await this.prisma.store.findUnique({ where: { slug } });
-    if (store) await this.redis.setEx(cacheKey, STORE_CACHE_TTL, JSON.stringify(store));
+    if (store) await this.redisSafeSet(cacheKey, STORE_CACHE_TTL, JSON.stringify(store));
     return store;
   }
 
   async resolveByDomain(domain: string): Promise<Store | null> {
-    const cacheKey = `store:domain:${domain}`;
-    const cached = await this.redis.get(cacheKey);
+    const normalized = domain.toLowerCase().replace(/\.$/, '');
+    const cacheKey = `store:domain:${normalized}`;
+    const cached = await this.redisSafeGet(cacheKey);
     if (cached) return JSON.parse(cached) as Store;
 
-    const store = await this.prisma.store.findFirst({
-      where: { OR: [{ customDomain: domain }, { slug: domain.split('.')[0] }] },
+    // Look up via StoreDomain table (ACTIVE records only) — Phase 12 path
+    const storeDomain = await this.prisma.storeDomain.findFirst({
+      where: { normalizedDomain: normalized, status: 'ACTIVE' },
+      select: { storeId: true },
     });
-    if (store) await this.redis.setEx(cacheKey, STORE_CACHE_TTL, JSON.stringify(store));
+    if (storeDomain) {
+      const store = await this.resolveById(storeDomain.storeId);
+      if (store) await this.redisSafeSet(cacheKey, STORE_CACHE_TTL, JSON.stringify(store));
+      return store;
+    }
+
+    // Fallback: legacy Store.customDomain field (backward compat for existing records)
+    const store = await this.prisma.store.findFirst({
+      where: { customDomain: normalized },
+    });
+    if (store) await this.redisSafeSet(cacheKey, STORE_CACHE_TTL, JSON.stringify(store));
     return store;
   }
 
   async resolveById(id: string): Promise<Store | null> {
     const cacheKey = `store:id:${id}`;
-    const cached = await this.redis.get(cacheKey);
+    const cached = await this.redisSafeGet(cacheKey);
     if (cached) return JSON.parse(cached) as Store;
 
     const store = await this.prisma.store.findUnique({ where: { id } });
-    if (store) await this.redis.setEx(cacheKey, STORE_CACHE_TTL, JSON.stringify(store));
+    if (store) await this.redisSafeSet(cacheKey, STORE_CACHE_TTL, JSON.stringify(store));
     return store;
   }
 
@@ -59,7 +80,7 @@ export class TenantService {
 
   async getUserStoreRole(userId: string, storeId: string): Promise<StoreRole | null> {
     const cacheKey = `store:${storeId}:user:${userId}:role`;
-    const cached = await this.redis.get(cacheKey);
+    const cached = await this.redisSafeGet(cacheKey);
     if (cached) return cached as StoreRole;
 
     const membership = await this.prisma.storeUser.findUnique({
@@ -67,11 +88,8 @@ export class TenantService {
       select: { role: true },
     });
 
-    if (membership) {
-      await this.redis.setEx(cacheKey, STORE_CACHE_TTL, membership.role);
-      return membership.role;
-    }
-    return null;
+    if (membership) await this.redisSafeSet(cacheKey, STORE_CACHE_TTL, membership.role);
+    return membership?.role ?? null;
   }
 
   async assertUserBelongsToStore(userId: string, storeId: string): Promise<StoreRole> {
@@ -101,18 +119,22 @@ export class TenantService {
       this.prisma.storeQuotaUsage.findUnique({ where: { storeId } }),
       this.getStorePlanLimit(storeId),
     ]);
-    if (quota && limit && limit.maxProducts >= 0 && quota.productCount >= limit.maxProducts) {
+    // null = unlimited; skip check only when limit is null
+    if (quota && limit && limit.maxProducts !== null && quota.productCount >= limit.maxProducts) {
       this.quotaExceeded('products', quota.productCount, limit.maxProducts);
     }
   }
 
+  // Orders are tracked with a monthly counter (orderCountThisMonth).
+  // The lifetime total (orderCount) accumulates indefinitely and is only for analytics.
+  // Soft limit policy: existing orders are never cancelled; only new order creation is blocked.
   async checkOrderQuota(storeId: string): Promise<void> {
     const limit = await this.getStorePlanLimit(storeId);
     if (!limit || limit.maxOrders === null) return; // null = unlimited
 
     const quota = await this.prisma.storeQuotaUsage.findUnique({ where: { storeId } });
-    if (quota && quota.orderCount >= limit.maxOrders) {
-      this.quotaExceeded('orders', quota.orderCount, limit.maxOrders);
+    if (quota && quota.orderCountThisMonth >= limit.maxOrders) {
+      this.quotaExceeded('orders (this month)', quota.orderCountThisMonth, limit.maxOrders);
     }
   }
 
@@ -127,13 +149,29 @@ export class TenantService {
     }
   }
 
+  // Staff quota counts only ACTIVE members — PENDING invitations and INACTIVE
+  // accounts do not consume a staff slot.
   async checkStaffQuota(storeId: string): Promise<void> {
     const limit = await this.getStorePlanLimit(storeId);
-    if (!limit || limit.maxStaff < 0) return; // -1 = unlimited
+    if (!limit || limit.maxStaff === null) return; // null = unlimited
 
-    const current = await this.prisma.storeUser.count({ where: { storeId } });
+    const current = await this.prisma.storeUser.count({
+      where: { storeId, status: 'ACTIVE' },
+    });
     if (current >= limit.maxStaff) {
       this.quotaExceeded('staff', current, limit.maxStaff);
+    }
+  }
+
+  async checkDomainQuota(storeId: string): Promise<void> {
+    const limit = await this.getStorePlanLimit(storeId);
+    if (!limit || limit.maxDomains === null) return; // null = unlimited
+
+    const current = await this.prisma.storeDomain.count({
+      where: { storeId, status: { not: 'DISABLED' } },
+    });
+    if (current >= limit.maxDomains) {
+      this.quotaExceeded('custom domains', current, limit.maxDomains);
     }
   }
 
@@ -148,8 +186,12 @@ export class TenantService {
   async incrementOrderCount(storeId: string): Promise<void> {
     await this.prisma.storeQuotaUsage.upsert({
       where: { storeId },
-      create: { storeId, orderCount: 1, updatedAt: new Date() },
-      update: { orderCount: { increment: 1 }, updatedAt: new Date() },
+      create: { storeId, orderCount: 1, orderCountThisMonth: 1, updatedAt: new Date() },
+      update: {
+        orderCount:          { increment: 1 },
+        orderCountThisMonth: { increment: 1 },
+        updatedAt:           new Date(),
+      },
     });
   }
 
@@ -159,6 +201,21 @@ export class TenantService {
       create: { storeId, storageBytes: bytes, updatedAt: new Date() },
       update: { storageBytes: { increment: bytes }, updatedAt: new Date() },
     });
+  }
+
+  // Resets the monthly order counter for all stores at the start of a new calendar month.
+  // Called by BillingCronService on the 1st of each month.
+  async resetMonthlyOrderCounts(): Promise<number> {
+    const now = new Date();
+    const result = await this.prisma.storeQuotaUsage.updateMany({
+      data: {
+        orderCountThisMonth: 0,
+        lastMonthReset: now,
+        updatedAt: now,
+      },
+    });
+    this.logger.log(`Monthly order counters reset for ${result.count} stores`);
+    return result.count;
   }
 
   // ─── Per-tenant rate limiting ─────────────────────────────────────────────
@@ -172,9 +229,15 @@ export class TenantService {
     // Per-category key: exhausting one category doesn't block another
     const bucket = Math.floor(Date.now() / (windowSec * 1000));
     const key = `ratelimit:store:${storeId}:${category}:${bucket}`;
-    const count = await this.redis.incr(key);
-    if (count === 1) await this.redis.expire(key, windowSec);
-    return count <= limit;
+    try {
+      const count = await this.redis.incr(key);
+      if (count === 1) await this.redis.expire(key, windowSec);
+      return count <= limit;
+    } catch {
+      // Redis unavailable — fail open so API stays functional
+      this.logger.warn(`Redis unavailable for rate-limit check (store=${storeId}), failing open`);
+      return true;
+    }
   }
 
   // ─── Helpers ──────────────────────────────────────────────────────────────

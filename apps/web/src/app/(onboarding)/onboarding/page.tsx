@@ -14,7 +14,7 @@ import {
 import { Button } from '../../../components/ui/button';
 import { Input } from '../../../components/ui/input';
 import { Label } from '../../../components/ui/label';
-import { api } from '../../../lib/api';
+import { api, authApi } from '../../../lib/api';
 import { cn } from '../../../lib/utils';
 
 // ─── Step definitions ─────────────────────────────────────────────────────────
@@ -278,7 +278,7 @@ function StoreUrlStep({
           <p className="text-xs text-slate-400">
             Your store will be at{' '}
             <span className="font-mono font-medium text-slate-700 dark:text-slate-300">
-              {slug}.yourdomain.in
+              {slug}.{process.env['NEXT_PUBLIC_ROOT_DOMAIN'] ?? 'yourdomain.in'}
             </span>
           </p>
         )}
@@ -311,9 +311,11 @@ function SuccessStep({ storeName, slug }: { storeName: string; slug: string }) {
           {storeName} is ready!
         </h2>
         <p className="mt-1 text-sm text-slate-500 dark:text-slate-400">
-          Your store is live at{' '}
+          Your store URL:{' '}
           <span className="font-mono font-medium text-violet-600 dark:text-violet-400">
-            {slug}.yourdomain.in
+            {typeof window !== 'undefined' && window.location.hostname === 'localhost'
+              ? `localhost:3000/store/${slug}`
+              : `${slug}.${process.env['NEXT_PUBLIC_ROOT_DOMAIN'] ?? 'yourdomain.in'}`}
           </span>
         </p>
       </div>
@@ -372,6 +374,10 @@ export default function OnboardingPage() {
       const created = res.data?.data ?? res.data;
       setFinalSlug(created?.slug ?? data.slug);
       setFinalName(created?.name ?? step1Data.name);
+      // Refresh the JWT so it now includes the newly-created storeId.
+      // Without this the admin dashboard has no store context and all
+      // admin API calls fail (storeId is not in the token yet).
+      await authApi.refresh().catch(() => {});
       setStep(4);
     } catch (err: unknown) {
       const msg = (err as { response?: { data?: { message?: string } } })

@@ -89,7 +89,9 @@ export class BillingService {
     this.planIds = {
       [Plan.FREE]:         undefined,
       [Plan.STARTER]:      this.config.get('RAZORPAY_PLAN_ID_STARTER'),
-      [Plan.PROFESSIONAL]: this.config.get('RAZORPAY_PLAN_ID_PROFESSIONAL'),
+      [Plan.PROFESSIONAL]: this.config.get('RAZORPAY_PLAN_ID_PROFESSIONAL'), // legacy
+      [Plan.GROWTH]:       this.config.get('RAZORPAY_PLAN_ID_GROWTH'),
+      [Plan.BUSINESS]:     this.config.get('RAZORPAY_PLAN_ID_BUSINESS'),
       [Plan.ENTERPRISE]:   this.config.get('RAZORPAY_PLAN_ID_ENTERPRISE'),
     };
   }
@@ -114,6 +116,7 @@ export class BillingService {
         maxProducts:    p.maxProducts,
         maxStaff:       p.maxStaff,
         maxStorageGB:   p.maxStorageGB,
+        maxDomains:     p.maxDomains,
         maxOrders:      p.maxOrders,
         maxApiPerDay:   p.maxApiPerDay,
         maxApiPerMonth: p.maxApiPerMonth,
@@ -342,6 +345,12 @@ export class BillingService {
         plan, trialDays, trialEnd,
       });
     }
+  }
+
+  // ─── Cron: reset monthly order counters ──────────────────────────────────
+
+  async resetMonthlyOrderCounters(): Promise<void> {
+    await this.tenant.resetMonthlyOrderCounts();
   }
 
   // ─── Cron: expire trials ──────────────────────────────────────────────────

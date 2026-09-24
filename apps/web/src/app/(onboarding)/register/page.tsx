@@ -1,6 +1,6 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
@@ -11,6 +11,8 @@ import { Button } from '../../../components/ui/button';
 import { Input } from '../../../components/ui/input';
 import { Label } from '../../../components/ui/label';
 import { api } from '../../../lib/api';
+import { useAuthStore } from '../../../store/authStore';
+import { useAdminAuthStore } from '../../../store/adminAuthStore';
 import Link from 'next/link';
 
 const schema = z.object({
@@ -23,8 +25,22 @@ type FormData = z.infer<typeof schema>;
 
 export default function RegisterPage() {
   const router = useRouter();
+  const { isAuthenticated, user, hydrated } = useAuthStore();
+  const { setAdminAuth } = useAdminAuthStore();
   const [showPassword, setShowPassword] = useState(false);
   const [loading, setLoading] = useState(false);
+
+  // Redirect already-authenticated users away from the registration page
+  useEffect(() => {
+    if (!hydrated) return;
+    if (isAuthenticated && user) {
+      if (user.role === 'ADMIN') { router.replace(user.storeId ? '/admin' : '/onboarding'); return; }
+      if (user.role === 'SUPER_ADMIN') { router.replace('/super-admin'); return; }
+      if (user.role === 'DELIVERY_AGENT') { router.replace('/agent'); return; }
+      // CUSTOMER (storefront shopper) — no store dashboard; send to account/home
+      router.replace('/');
+    }
+  }, [hydrated, isAuthenticated, user, router]);
 
   const { register, handleSubmit, formState: { errors } } = useForm<FormData>({
     resolver: zodResolver(schema),
@@ -33,7 +49,12 @@ export default function RegisterPage() {
   const onSubmit = async (data: FormData) => {
     setLoading(true);
     try {
-      await api.post('/auth/register', data);
+      const res = await api.post('/auth/register', data);
+      const payload = res.data?.data ?? res.data;
+      const registeredUser = payload?.user;
+      if (registeredUser) {
+        setAdminAuth({ id: registeredUser.id, name: registeredUser.name, email: registeredUser.email, role: 'ADMIN', avatar: registeredUser.avatar ?? undefined });
+      }
       toast.success('Account created! Set up your store.');
       router.push('/onboarding');
     } catch (err: unknown) {
@@ -58,10 +79,10 @@ export default function RegisterPage() {
       <div className="w-full max-w-md">
         <div className="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm dark:border-slate-800 dark:bg-slate-950 sm:p-8">
           <h1 className="mb-1 text-2xl font-bold tracking-tight text-slate-900 dark:text-slate-100">
-            Create your account
+            Create your store account
           </h1>
           <p className="mb-6 text-sm text-slate-500 dark:text-slate-400">
-            Start building your online store today.
+            For store owners only. Start building your online store today.
           </p>
 
           <form onSubmit={handleSubmit(onSubmit)} className="space-y-4">
@@ -131,7 +152,7 @@ export default function RegisterPage() {
           <p className="mt-4 text-center text-sm text-slate-500 dark:text-slate-400">
             Already have an account?{' '}
             <Link
-              href="/auth/login"
+              href="/admin/login"
               className="font-medium text-violet-600 hover:underline dark:text-violet-400"
             >
               Sign in

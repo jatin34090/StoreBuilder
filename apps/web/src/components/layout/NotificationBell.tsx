@@ -50,7 +50,9 @@ export function NotificationBell() {
   const { data } = useQuery({
     queryKey: ['notifications'],
     queryFn: () => notificationsApi.list({ limit: 15 }),
-    refetchInterval: 30_000, // poll every 30s
+    staleTime: 30_000,
+    retry: false,
+    refetchInterval: 30_000,
   });
 
   const notifications: Notification[] = data?.data?.data?.notifications ?? [];

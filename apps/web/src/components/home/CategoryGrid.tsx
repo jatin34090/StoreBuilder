@@ -1,3 +1,4 @@
+import { headers } from 'next/headers';
 import { CategoryScroller } from './CategoryScroller';
 
 interface CategoryNode {
@@ -11,10 +12,11 @@ interface CategoryNode {
 
 const API_URL = process.env['NEXT_PUBLIC_API_URL'] ?? 'http://localhost:3001/api/v1';
 
-async function fetchTopLevelCategories(): Promise<CategoryNode[]> {
+async function fetchTopLevelCategories(storeId?: string): Promise<CategoryNode[]> {
   try {
     const res = await fetch(`${API_URL}/categories`, {
-      cache: 'no-store', // always fetch fresh — reflects admin changes immediately
+      cache: 'no-store',
+      headers: storeId ? { 'x-store-id': storeId } : {},
     });
     if (!res.ok) return [];
     const json = (await res.json()) as Record<string, unknown>;
@@ -26,7 +28,9 @@ async function fetchTopLevelCategories(): Promise<CategoryNode[]> {
 }
 
 export async function CategoryGrid() {
-  const categories = await fetchTopLevelCategories();
+  const headersList = await headers();
+  const storeId = headersList.get('x-store-id') ?? undefined;
+  const categories = await fetchTopLevelCategories(storeId);
 
   if (categories.length === 0) return null;
 

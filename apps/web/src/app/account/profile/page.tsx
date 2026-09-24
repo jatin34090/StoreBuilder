@@ -7,7 +7,6 @@ import { zodResolver } from '@hookform/resolvers/zod';
 import { z } from 'zod';
 import { toast } from 'sonner';
 import { User, Loader2, MapPin, Plus, Trash2 } from 'lucide-react';
-import { MainLayout } from '@/components/layout/MainLayout';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
@@ -34,22 +33,33 @@ const addressSchema = z.object({
 type ProfileForm  = z.infer<typeof profileSchema>;
 type AddressForm  = z.infer<typeof addressSchema>;
 
+function getStoreIdCookie(): string | undefined {
+  if (typeof document === 'undefined') return undefined;
+  const match = document.cookie.match(/(?:^|;\s*)store-id=([^;]+)/);
+  return match?.[1];
+}
+
 export default function ProfilePage() {
   const { isAuthenticated, hydrated } = useAuthGuard('/auth/login?redirect=/account/profile');
   const { setUser } = useAuthStore();
   const queryClient = useQueryClient();
+  const storeId = hydrated ? getStoreIdCookie() : undefined;
 
   const { data: profileData } = useQuery({
     queryKey: ['profile'],
     queryFn: () => usersApi.profile(),
     enabled: isAuthenticated,
+    staleTime: 30_000,
+    retry: false,
   });
   const profile = profileData?.data?.data;
 
   const { data: addressesData } = useQuery({
-    queryKey: ['addresses'],
+    queryKey: ['addresses', storeId],
     queryFn: () => usersApi.addresses(),
-    enabled: isAuthenticated,
+    enabled: isAuthenticated && !!storeId,
+    staleTime: 30_000,
+    retry: false,
   });
   const addresses: Array<{ id: string; name: string; phone: string; line1: string; line2?: string; city: string; state: string; pincode: string; isDefault: boolean }> = addressesData?.data?.data ?? [];
 
@@ -97,8 +107,7 @@ export default function ProfilePage() {
   if (!hydrated || !isAuthenticated) return null;
 
   return (
-    <MainLayout>
-      <div className="container py-8 max-w-xl">
+    <div className="container py-8 max-w-xl">
         {/* Profile */}
         <div className="flex items-center gap-3 mb-6">
           <div className="w-12 h-12 rounded-full bg-primary/10 flex items-center justify-center">
@@ -182,7 +191,6 @@ export default function ProfilePage() {
           )}
         </div>
       </div>
-    </MainLayout>
   );
 }
 

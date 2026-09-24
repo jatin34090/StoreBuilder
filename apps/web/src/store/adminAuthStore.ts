@@ -39,7 +39,8 @@ export type Permission =
   | 'shipping.read'    | 'shipping.update'
   | 'staff.read'       | 'staff.invite'       | 'staff.update'       | 'staff.remove'
   | 'store.read'       | 'store.update'       | 'store.launch'
-  | 'subscription.read'| 'subscription.update';
+  | 'subscription.read'| 'subscription.update'
+  | 'settings.read'    | 'settings.update';
 
 interface AdminAuthState {
   adminUser: AdminUser | null;

@@ -21,6 +21,7 @@ import { WishlistService } from './wishlist.service';
 import { ToggleWishlistDto } from './dto/toggle-wishlist.dto';
 import { Roles } from '../../common/decorators/roles.decorator';
 import { CurrentUser, type AuthUser } from '../../common/decorators/current-user.decorator';
+import { CurrentStoreId } from '../../common/decorators/current-store.decorator';
 
 @ApiTags('Wishlist')
 @ApiBearerAuth()
@@ -37,8 +38,8 @@ export class WishlistController {
     description: 'Returns all wishlisted products with variant pricing and primary image.',
   })
   @ApiOkResponse({ description: 'Wishlist items with total count' })
-  getWishlist(@CurrentUser() user: AuthUser) {
-    return this.wishlistService.getWishlist(user.id);
+  getWishlist(@CurrentUser() user: AuthUser, @CurrentStoreId() storeId: string) {
+    return this.wishlistService.getWishlist(user.id, storeId);
   }
 
   // ─── Get Wishlist Product IDs ──────────────────────────────────────────────
@@ -51,8 +52,8 @@ export class WishlistController {
       'Useful for frontend to mark product cards as wishlisted without fetching full details.',
   })
   @ApiOkResponse({ description: 'Array of product UUIDs' })
-  getWishlistIds(@CurrentUser() user: AuthUser) {
-    return this.wishlistService.getWishlistIds(user.id);
+  getWishlistIds(@CurrentUser() user: AuthUser, @CurrentStoreId() storeId: string) {
+    return this.wishlistService.getWishlistIds(user.id, storeId);
   }
 
   // ─── Toggle (Add / Remove) ─────────────────────────────────────────────────
@@ -65,8 +66,8 @@ export class WishlistController {
       'Idempotent toggle. Returns { action: "added" | "removed", wishlisted: boolean }.',
   })
   @ApiOkResponse({ description: 'Toggle result with action and new state' })
-  toggle(@CurrentUser() user: AuthUser, @Body() dto: ToggleWishlistDto) {
-    return this.wishlistService.toggle(user.id, dto);
+  toggle(@CurrentUser() user: AuthUser, @Body() dto: ToggleWishlistDto, @CurrentStoreId() storeId: string) {
+    return this.wishlistService.toggle(user.id, dto, storeId);
   }
 
   // ─── Check Single Product ──────────────────────────────────────────────────
@@ -81,8 +82,9 @@ export class WishlistController {
   check(
     @CurrentUser() user: AuthUser,
     @Param('productId') productId: string,
+    @CurrentStoreId() storeId: string,
   ) {
-    return this.wishlistService.check(user.id, productId);
+    return this.wishlistService.check(user.id, productId, storeId);
   }
 
   // ─── Remove Specific Item ──────────────────────────────────────────────────
@@ -95,7 +97,8 @@ export class WishlistController {
   remove(
     @CurrentUser() user: AuthUser,
     @Param('productId') productId: string,
+    @CurrentStoreId() storeId: string,
   ) {
-    return this.wishlistService.remove(user.id, productId);
+    return this.wishlistService.remove(user.id, productId, storeId);
   }
 }

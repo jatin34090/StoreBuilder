@@ -6,6 +6,7 @@ import { ThemeProvider as NextThemesProvider } from 'next-themes';
 import { Toaster } from 'sonner';
 import { useState } from 'react';
 import { ThemeProvider } from '@/components/ThemeProvider';
+import { AuthBootstrap } from '@/components/AuthBootstrap';
 
 // Dev-only — excluded from production bundle entirely
 const ReactQueryDevtools =
@@ -29,6 +30,7 @@ export function Providers({ children }: { children: React.ReactNode }) {
     <NextThemesProvider attribute="class" defaultTheme="light" enableSystem={false}>
       <ThemeProvider>
         <QueryClientProvider client={queryClient}>
+          <AuthBootstrap />
           {children}
           <Toaster position="top-right" richColors closeButton toastOptions={{ duration: 4000 }} />
           <ReactQueryDevtools initialIsOpen={false} />

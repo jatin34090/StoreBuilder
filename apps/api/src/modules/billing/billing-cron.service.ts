@@ -29,4 +29,15 @@ export class BillingCronService {
       this.logger.error('Cron subscription health failed', err);
     }
   }
+
+  // Run at 00:01 on the 1st of each month — reset monthly order counters
+  @Cron('1 0 1 * *', { name: 'reset-monthly-orders' })
+  async handleMonthlyOrderReset(): Promise<void> {
+    this.logger.log('Cron: resetting monthly order counters');
+    try {
+      await this.billing.resetMonthlyOrderCounters();
+    } catch (err) {
+      this.logger.error('Cron monthly order reset failed', err);
+    }
+  }
 }

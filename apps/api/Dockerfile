@@ -27,6 +27,7 @@ COPY tsconfig.base.json turbo.json ./
 COPY packages packages
 COPY apps/api apps/api
 COPY prisma prisma
+RUN pnpm --filter @jewellery/types --filter @jewellery/utils build
 RUN pnpm --filter @jewellery/api prisma:generate
 RUN pnpm --filter @jewellery/api build
 # Produce a self-contained production deployment (flat node_modules).

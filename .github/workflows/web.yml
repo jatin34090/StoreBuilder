@@ -6,8 +6,10 @@ on:
     paths:
       - 'apps/web/**'
       - 'packages/**'
+      - '.github/workflows/web.yml'
   pull_request:
     branches: [main]
+  workflow_dispatch:
 
 env:
   REGISTRY: ghcr.io

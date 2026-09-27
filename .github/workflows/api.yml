@@ -103,6 +103,9 @@ jobs:
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
 
+      - name: Build shared packages
+        run: pnpm --filter @jewellery/types --filter @jewellery/utils build
+
       - name: Generate Prisma client
         run: pnpm --filter @jewellery/api prisma:generate
 

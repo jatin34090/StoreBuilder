@@ -2,8 +2,13 @@
 -- Safe migration: adds new plans, migrates PROFESSIONAL→GROWTH, fixes unlimited sentinels
 
 -- 1. Add new Plan enum values (PostgreSQL only allows ADD, not DROP/RENAME)
+--    Must be committed before new values can be used in DML statements.
 ALTER TYPE "Plan" ADD VALUE IF NOT EXISTS 'GROWTH';
 ALTER TYPE "Plan" ADD VALUE IF NOT EXISTS 'BUSINESS';
+
+-- Commit enum additions so PostgreSQL allows using them below.
+COMMIT;
+BEGIN;
 
 -- 2. Migrate PROFESSIONAL subscribers to GROWTH (preserve all data)
 UPDATE "Store"             SET "plan" = 'GROWTH' WHERE "plan" = 'PROFESSIONAL';

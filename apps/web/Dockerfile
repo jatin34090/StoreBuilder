@@ -37,6 +37,7 @@ ENV NEXT_PUBLIC_API_URL=$NEXT_PUBLIC_API_URL \
 COPY tsconfig.base.json turbo.json ./
 COPY packages packages
 COPY apps/web apps/web
+RUN pnpm --filter @jewellery/types --filter @jewellery/utils build
 RUN pnpm --filter @jewellery/web build
 
 # ─── Runtime ──────────────────────────────────────────────────────────────────

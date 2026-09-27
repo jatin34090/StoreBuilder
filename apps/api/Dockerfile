@@ -7,7 +7,7 @@
 FROM node:20-alpine AS base
 RUN corepack enable && corepack prepare pnpm@10.0.0 --activate
 # openssl is required by Prisma's query engine on Alpine.
-RUN apk add --no-cache openssl
+RUN apk add --no-cache openssl python3 make g++
 WORKDIR /app
 ENV PNPM_HOME=/pnpm CI=true
 
@@ -32,6 +32,7 @@ RUN pnpm --filter @jewellery/api prisma:generate
 RUN pnpm --filter @jewellery/api build
 # Produce a self-contained production deployment (flat node_modules).
 RUN pnpm --filter @jewellery/api --prod deploy /prod/api
+RUN cd /prod/api && npm rebuild bcrypt --build-from-source
 
 # ─── Runtime ──────────────────────────────────────────────────────────────────
 FROM base AS runtime

@@ -55,17 +55,10 @@ import { TenantApiLogInterceptor } from './common/interceptors/tenant-api-log.in
       inject: [ConfigService],
       useFactory: (config: ConfigService) => {
         const redisUrl = config.get<string>('REDIS_URL', '');
-        const redisOpts = {
-          // Don't block app startup if Redis is unreachable in dev
-          enableOfflineQueue: false,
-          connectTimeout: 2000,
-          maxRetriesPerRequest: 0,
-          lazyConnect: true,
-        };
         if (!redisUrl || redisUrl.includes('[password]') || redisUrl === 'memory') {
-          return { redis: { host: 'localhost', port: 6379, ...redisOpts } };
+          return { redis: { host: 'localhost', port: 6379, enableOfflineQueue: false, connectTimeout: 2000, maxRetriesPerRequest: 0, lazyConnect: true } };
         }
-        return { url: redisUrl, redis: redisOpts };
+        return { url: redisUrl };
       },
     }),
 

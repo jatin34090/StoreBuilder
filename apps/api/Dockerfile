@@ -39,7 +39,7 @@ ENV NODE_ENV=production PORT=3001
 # Run as an unprivileged user.
 RUN addgroup -S nodejs && adduser -S nodejs -G nodejs
 COPY --from=build --chown=nodejs:nodejs /prod/api/node_modules ./node_modules
-COPY --from=build --chown=nodejs:nodejs /app/node_modules/.prisma ./node_modules/.prisma
+COPY --from=build --chown=nodejs:nodejs /app/node_modules/.pnpm/@prisma+client@5.22.0_prisma@5.22.0/node_modules/.prisma ./node_modules/.pnpm/@prisma+client@5.22.0_prisma@5.22.0/node_modules/.prisma
 COPY --from=build --chown=nodejs:nodejs /app/apps/api/dist ./dist
 COPY --from=build --chown=nodejs:nodejs /app/prisma ./prisma
 COPY --from=build --chown=nodejs:nodejs /app/apps/api/package.json ./package.json

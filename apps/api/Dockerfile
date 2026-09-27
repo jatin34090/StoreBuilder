@@ -10,7 +10,7 @@ RUN apk add --no-cache openssl python3 make g++
 WORKDIR /app
 ENV PNPM_HOME=/pnpm CI=true
 
-# ─── Dependencies (cached on lockfile + manifests) ────────────────────────────
+# ─── Dependencies ─────────────────────────────────────────────────────────────
 FROM base AS deps
 COPY package.json pnpm-lock.yaml pnpm-workspace.yaml .npmrc ./
 COPY apps/api/package.json apps/api/
@@ -33,17 +33,31 @@ RUN pnpm --filter @jewellery/api build
 # ─── Runtime ──────────────────────────────────────────────────────────────────
 FROM base AS runtime
 ENV NODE_ENV=production PORT=3001
+
 RUN addgroup -S nodejs && adduser -S nodejs -G nodejs
 
-# Copy everything needed from the build stage
-COPY --from=build --chown=nodejs:nodejs /app/node_modules ./node_modules
-COPY --from=build --chown=nodejs:nodejs /app/apps/api/dist ./dist
+# Copy workspace manifests and lockfile so pnpm can install prod deps
+COPY --chown=nodejs:nodejs package.json pnpm-lock.yaml pnpm-workspace.yaml .npmrc ./
+COPY --chown=nodejs:nodejs apps/api/package.json apps/api/
+COPY --chown=nodejs:nodejs packages/types/package.json packages/types/
+COPY --chown=nodejs:nodejs packages/utils/package.json packages/utils/
+
+# Install only production dependencies
+RUN --mount=type=cache,id=pnpm,target=/pnpm/store \
+    pnpm install --frozen-lockfile --prod
+
+# Copy built artifacts
+COPY --from=build --chown=nodejs:nodejs /app/apps/api/dist ./apps/api/dist
 COPY --from=build --chown=nodejs:nodejs /app/prisma ./prisma
-COPY --from=build --chown=nodejs:nodejs /app/apps/api/package.json ./package.json
 COPY --from=build --chown=nodejs:nodejs /app/packages/types/dist ./packages/types/dist
 COPY --from=build --chown=nodejs:nodejs /app/packages/utils/dist ./packages/utils/dist
 
+# Copy generated Prisma client
+COPY --from=build --chown=nodejs:nodejs /app/node_modules/.pnpm/@prisma+client@5.22.0_prisma@5.22.0/node_modules/.prisma \
+    ./node_modules/.pnpm/@prisma+client@5.22.0_prisma@5.22.0/node_modules/.prisma
+
 USER nodejs
+WORKDIR /app/apps/api
 EXPOSE 3001
 HEALTHCHECK --interval=30s --timeout=5s --start-period=40s --retries=3 \
   CMD node -e "fetch('http://127.0.0.1:'+(process.env.PORT||3001)+'/api/v1/health/live').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))"

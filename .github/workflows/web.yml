@@ -90,6 +90,7 @@ jobs:
           script: |
             echo ${{ secrets.GITHUB_TOKEN }} | docker login ghcr.io -u jatin34090 --password-stdin
             cd ~/jewellery
+            git pull origin main
             docker compose -f docker-compose.prod.yml pull web
             docker compose -f docker-compose.prod.yml up -d --no-deps web
             docker image prune -f

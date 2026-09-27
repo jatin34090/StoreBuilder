@@ -9,6 +9,7 @@ services:
 
   api:
     image: ghcr.io/jatin34090/storebuilder-api:latest
+
     restart: always
     env_file: .env.production
     environment:

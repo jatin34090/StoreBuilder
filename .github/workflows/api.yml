@@ -116,7 +116,7 @@ jobs:
         run: pnpm --filter @jewellery/api typecheck
 
       - name: Run unit tests
-        run: pnpm --filter @jewellery/api test -- --passWithNoTests
+        run: pnpm --filter @jewellery/api exec jest --passWithNoTests
 
   build-and-push:
     name: Build & Push Docker Image

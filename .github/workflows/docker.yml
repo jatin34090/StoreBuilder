@@ -48,8 +48,8 @@ jobs:
           file: apps/api/Dockerfile
           push: ${{ github.event_name != 'pull_request' }}
           tags: |
-            ${{ env.REGISTRY }}/${{ github.repository }}-api:latest
-            ${{ env.REGISTRY }}/${{ github.repository }}-api:${{ github.sha }}
+            ghcr.io/jatin34090/storebuilder-api:latest
+            ghcr.io/jatin34090/storebuilder-api:${{ github.sha }}
           cache-from: type=gha
           cache-to: type=gha,mode=max
 
@@ -78,7 +78,7 @@ jobs:
             NEXT_PUBLIC_RAZORPAY_KEY_ID=${{ secrets.RAZORPAY_KEY_ID_STAGING }}
             NEXT_PUBLIC_CLOUDINARY_CLOUD_NAME=${{ secrets.CLOUDINARY_CLOUD_NAME }}
           tags: |
-            ${{ env.REGISTRY }}/${{ github.repository }}-web:latest
-            ${{ env.REGISTRY }}/${{ github.repository }}-web:${{ github.sha }}
+            ghcr.io/jatin34090/storebuilder-web:latest
+            ghcr.io/jatin34090/storebuilder-web:${{ github.sha }}
           cache-from: type=gha
           cache-to: type=gha,mode=max

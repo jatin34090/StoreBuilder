@@ -1,6 +1,6 @@
 'use client';
 
-import { use } from 'react';
+import { useParams } from 'next/navigation';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { ArrowLeft, ShieldOff, ShieldCheck } from 'lucide-react';
 import Link from 'next/link';
@@ -37,8 +37,8 @@ function UsageBar({ label, current, max, unit = '' }: { label: string; current: 
   );
 }
 
-export default function StoreDetailPage({ params }: { params: Promise<{ id: string }> }) {
-  const { id } = use(params);
+export default function StoreDetailPage() {
+  const { id } = useParams<{ id: string }>();
   const qc     = useQueryClient();
 
   const { data: store, isLoading: loadingStore } = useQuery({

@@ -6,7 +6,6 @@
 # ─── Base ─────────────────────────────────────────────────────────────────────
 FROM node:20-alpine AS base
 RUN corepack enable && corepack prepare pnpm@10.0.0 --activate
-# openssl is required by Prisma's query engine on Alpine.
 RUN apk add --no-cache openssl python3 make g++
 WORKDIR /app
 ENV PNPM_HOME=/pnpm CI=true
@@ -30,22 +29,20 @@ COPY prisma prisma
 RUN pnpm --filter @jewellery/types --filter @jewellery/utils build
 RUN pnpm --filter @jewellery/api prisma:generate
 RUN pnpm --filter @jewellery/api build
-# Produce a self-contained production deployment (flat node_modules).
-RUN pnpm --filter @jewellery/api --prod deploy /prod/api
-RUN cd /prod/api && npm rebuild bcrypt --build-from-source
 
 # ─── Runtime ──────────────────────────────────────────────────────────────────
 FROM base AS runtime
 ENV NODE_ENV=production PORT=3001
-# Run as an unprivileged user.
 RUN addgroup -S nodejs && adduser -S nodejs -G nodejs
-COPY --from=build --chown=nodejs:nodejs /prod/api/node_modules ./node_modules
-COPY --from=build --chown=nodejs:nodejs /app/node_modules/.pnpm/@prisma+client@5.22.0_prisma@5.22.0/node_modules/.prisma ./node_modules/.pnpm/@prisma+client@5.22.0_prisma@5.22.0/node_modules/.prisma
+
+# Copy everything needed from the build stage
+COPY --from=build --chown=nodejs:nodejs /app/node_modules ./node_modules
 COPY --from=build --chown=nodejs:nodejs /app/apps/api/dist ./dist
 COPY --from=build --chown=nodejs:nodejs /app/prisma ./prisma
 COPY --from=build --chown=nodejs:nodejs /app/apps/api/package.json ./package.json
-COPY --from=build --chown=nodejs:nodejs /app/packages/types/dist /app/packages/types/dist
-COPY --from=build --chown=nodejs:nodejs /app/packages/utils/dist /app/packages/utils/dist
+COPY --from=build --chown=nodejs:nodejs /app/packages/types/dist ./packages/types/dist
+COPY --from=build --chown=nodejs:nodejs /app/packages/utils/dist ./packages/utils/dist
+
 USER nodejs
 EXPOSE 3001
 HEALTHCHECK --interval=30s --timeout=5s --start-period=40s --retries=3 \

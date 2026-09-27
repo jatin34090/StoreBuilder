@@ -35,14 +35,15 @@ export async function middleware(req: NextRequest) {
   const apiUrl = process.env['NEXT_PUBLIC_API_URL'] ?? 'http://localhost:3001/api/v1';
   const qs = slug ? `slug=${slug}` : `domain=${encodeURIComponent(hostname.split(':')[0])}`;
 
-  let store: { id: string; name: string; slug: string; plan: string; logoUrl: string | null; isActive: boolean } | null = null;
+  interface StoreResolved { id: string; name: string; slug: string; plan: string; logoUrl: string | null; isActive: boolean }
+  let store: StoreResolved | null = null;
 
   try {
     const res = await fetch(`${apiUrl}/stores/public/resolve?${qs}`, {
       next: { revalidate: 60 },
     });
     if (res.ok) {
-      const json = await res.json() as { data?: typeof store };
+      const json = await res.json() as { data?: StoreResolved };
       store = json.data ?? null;
     }
   } catch {

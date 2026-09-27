@@ -31,21 +31,24 @@ async function bootstrap() {
   const port = configService.get<number>('PORT', 3001);
   const corsOrigins = configService.get<string>('CORS_ORIGINS', 'http://localhost:3000');
 
-  // Build the CORS origin list: exact strings from env + subdomain regex for localhost in dev
+  // Build the CORS origin list: exact strings from env + subdomain patterns
   const exactOrigins = corsOrigins.split(',').map((o) => o.trim()).filter(Boolean);
-  // In development, also allow any *.localhost:<port> subdomain (store subdomains in local dev)
+  // Allow *.localhost:* subdomains in dev
   const localhostSubdomainPattern = nodeEnv !== 'production'
     ? /^https?:\/\/[a-z0-9-]+\.localhost(:\d+)?$/
+    : null;
+  // Allow *.storebuilder.jatsolutions.in in production (tenant subdomains)
+  const tenantSubdomainPattern = nodeEnv === 'production'
+    ? /^https:\/\/[a-z0-9-]+\.storebuilder\.jatsolutions\.in$/
     : null;
 
   const originFn = (
     origin: string | undefined,
     callback: (err: Error | null, allow?: boolean) => void,
   ) => {
-    // Allow server-to-server (no Origin header) and exact matches
     if (!origin || exactOrigins.includes(origin)) return callback(null, true);
-    // Dev: allow *.localhost:* subdomains
     if (localhostSubdomainPattern && localhostSubdomainPattern.test(origin)) return callback(null, true);
+    if (tenantSubdomainPattern && tenantSubdomainPattern.test(origin)) return callback(null, true);
     callback(new Error(`CORS: origin '${origin}' not allowed`));
   };
 

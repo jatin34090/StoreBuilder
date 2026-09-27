@@ -42,14 +42,13 @@ COPY --chown=nodejs:nodejs apps/api/package.json apps/api/
 COPY --chown=nodejs:nodejs packages/types/package.json packages/types/
 COPY --chown=nodejs:nodejs packages/utils/package.json packages/utils/
 
-# Install only production dependencies (skip prepare/husky which needs git)
+# Install only production dependencies (HUSKY=0 disables husky without breaking bin symlinks)
 RUN --mount=type=cache,id=pnpm,target=/pnpm/store \
-    pnpm install --frozen-lockfile --prod --ignore-scripts && \
+    HUSKY=0 pnpm install --frozen-lockfile --prod && \
     pnpm rebuild bcrypt msgpackr-extract
 
-# Generate Prisma client for the runtime environment
-COPY --chown=nodejs:nodejs prisma ./prisma
-RUN ./node_modules/.bin/prisma generate --schema=./prisma/schema.prisma
+# Copy pre-generated Prisma client from build stage (avoids re-running generate)
+COPY --from=build --chown=nodejs:nodejs /app/node_modules/.prisma ./node_modules/.prisma
 
 # Copy built artifacts
 COPY --from=build --chown=nodejs:nodejs /app/apps/api/dist ./apps/api/dist

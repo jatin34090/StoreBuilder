@@ -42,19 +42,20 @@ COPY --chown=nodejs:nodejs apps/api/package.json apps/api/
 COPY --chown=nodejs:nodejs packages/types/package.json packages/types/
 COPY --chown=nodejs:nodejs packages/utils/package.json packages/utils/
 
-# Install only production dependencies
+# Install only production dependencies (skip prepare/husky which needs git)
 RUN --mount=type=cache,id=pnpm,target=/pnpm/store \
-    pnpm install --frozen-lockfile --prod
+    pnpm install --frozen-lockfile --prod --ignore-scripts && \
+    pnpm rebuild bcrypt msgpackr-extract
+
+# Generate Prisma client for the runtime environment
+COPY --chown=nodejs:nodejs prisma ./prisma
+RUN ./node_modules/.bin/prisma generate --schema=./prisma/schema.prisma
 
 # Copy built artifacts
 COPY --from=build --chown=nodejs:nodejs /app/apps/api/dist ./apps/api/dist
 COPY --from=build --chown=nodejs:nodejs /app/prisma ./prisma
 COPY --from=build --chown=nodejs:nodejs /app/packages/types/dist ./packages/types/dist
 COPY --from=build --chown=nodejs:nodejs /app/packages/utils/dist ./packages/utils/dist
-
-# Copy generated Prisma client
-COPY --from=build --chown=nodejs:nodejs /app/node_modules/.pnpm/@prisma+client@5.22.0_prisma@5.22.0/node_modules/.prisma \
-    ./node_modules/.pnpm/@prisma+client@5.22.0_prisma@5.22.0/node_modules/.prisma
 
 USER nodejs
 WORKDIR /app/apps/api

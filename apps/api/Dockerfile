@@ -44,8 +44,12 @@ COPY --chown=nodejs:nodejs packages/utils/package.json packages/utils/
 
 # Install only production dependencies (--ignore-scripts skips prepare/husky which needs git)
 RUN --mount=type=cache,id=pnpm,target=/pnpm/store \
-    pnpm install --frozen-lockfile --prod --ignore-scripts && \
-    pnpm rebuild bcrypt msgpackr-extract
+    pnpm install --frozen-lockfile --prod --ignore-scripts
+
+# Copy native bindings compiled in build stage (pnpm rebuild unreliable after --ignore-scripts)
+COPY --from=build --chown=nodejs:nodejs \
+  /app/node_modules/.pnpm/bcrypt@5.1.1/node_modules/bcrypt/lib/binding \
+  ./node_modules/.pnpm/bcrypt@5.1.1/node_modules/bcrypt/lib/binding
 
 # Copy pre-generated Prisma client from build stage
 # @prisma/client package itself (contains generated types/js)

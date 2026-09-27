@@ -44,6 +44,8 @@ COPY --from=build --chown=nodejs:nodejs /app/node_modules/.pnpm/@prisma+client@5
 COPY --from=build --chown=nodejs:nodejs /app/apps/api/dist ./dist
 COPY --from=build --chown=nodejs:nodejs /app/prisma ./prisma
 COPY --from=build --chown=nodejs:nodejs /app/apps/api/package.json ./package.json
+COPY --from=build --chown=nodejs:nodejs /app/packages/types/dist /app/packages/types/dist
+COPY --from=build --chown=nodejs:nodejs /app/packages/utils/dist /app/packages/utils/dist
 USER nodejs
 EXPOSE 3001
 HEALTHCHECK --interval=30s --timeout=5s --start-period=40s --retries=3 \

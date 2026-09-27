@@ -47,10 +47,15 @@ RUN --mount=type=cache,id=pnpm,target=/pnpm/store \
     pnpm install --frozen-lockfile --prod --ignore-scripts && \
     pnpm rebuild bcrypt msgpackr-extract
 
-# Copy pre-generated Prisma client from build stage (avoids re-running generate)
+# Copy pre-generated Prisma client from build stage
+# @prisma/client package itself (contains generated types/js)
 COPY --from=build --chown=nodejs:nodejs \
   /app/node_modules/.pnpm/@prisma+client@5.22.0_prisma@5.22.0/node_modules/@prisma/client \
   ./node_modules/.pnpm/@prisma+client@5.22.0_prisma@5.22.0/node_modules/@prisma/client
+# .prisma/client sibling dir (generated default.js + query engine binary)
+COPY --from=build --chown=nodejs:nodejs \
+  /app/node_modules/.pnpm/@prisma+client@5.22.0_prisma@5.22.0/node_modules/.prisma \
+  ./node_modules/.pnpm/@prisma+client@5.22.0_prisma@5.22.0/node_modules/.prisma
 
 # Copy built artifacts
 COPY --from=build --chown=nodejs:nodejs /app/apps/api/dist ./apps/api/dist

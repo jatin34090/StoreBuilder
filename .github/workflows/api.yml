@@ -170,8 +170,9 @@ jobs:
               -e DATABASE_URL="${{ secrets.DATABASE_URL_PRODUCTION }}" \
               -e DIRECT_URL="${{ secrets.DIRECT_URL_PRODUCTION }}" \
               --workdir /app \
+              --entrypoint sh \
               ghcr.io/jatin34090/storebuilder-api:${{ github.sha }} \
-              node_modules/.bin/prisma migrate deploy --schema=prisma/schema.prisma
+              -c "node_modules/.bin/prisma migrate deploy --schema=prisma/schema.prisma"
 
       - name: Deploy API
         uses: appleboy/ssh-action@v1.0.3

@@ -167,6 +167,7 @@ jobs:
             echo ${{ secrets.GITHUB_TOKEN }} | docker login ghcr.io -u ${{ github.actor }} --password-stdin
             cd ~/jewellery
             docker run --rm \
+              --user root \
               -e DATABASE_URL="${{ secrets.DATABASE_URL_PRODUCTION }}" \
               -e DIRECT_URL="${{ secrets.DIRECT_URL_PRODUCTION }}" \
               --workdir /app \

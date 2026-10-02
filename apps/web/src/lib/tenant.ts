@@ -48,7 +48,7 @@ export async function fetchStoreByDomain(domain: string): Promise<StorePublicInf
 }
 
 async function resolveStore(params: { slug?: string; domain?: string }): Promise<StorePublicInfo | null> {
-  const apiUrl = process.env['NEXT_PUBLIC_API_URL'] ?? 'http://localhost:3001/api/v1';
+  const apiUrl = process.env['API_URL'] ?? process.env['NEXT_PUBLIC_API_URL'] ?? 'http://localhost:3001/api/v1';
   const qs = params.slug ? `slug=${params.slug}` : `domain=${params.domain}`;
   try {
     const res = await fetch(`${apiUrl}/stores/public/resolve?${qs}`, {

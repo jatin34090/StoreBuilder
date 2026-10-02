@@ -32,7 +32,9 @@ export async function middleware(req: NextRequest) {
     return NextResponse.next();
   }
 
-  const apiUrl = process.env['NEXT_PUBLIC_API_URL'] ?? 'http://localhost:3001/api/v1';
+  // API_URL is a runtime-only env var for server-side fetches (Docker internal network).
+  // Falls back to the build-time NEXT_PUBLIC_API_URL for local dev.
+  const apiUrl = process.env['API_URL'] ?? process.env['NEXT_PUBLIC_API_URL'] ?? 'http://localhost:3001/api/v1';
   const qs = slug ? `slug=${slug}` : `domain=${encodeURIComponent(hostname.split(':')[0])}`;
 
   interface StoreResolved { id: string; name: string; slug: string; plan: string; logoUrl: string | null; isActive: boolean }

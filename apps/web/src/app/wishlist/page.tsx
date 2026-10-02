@@ -5,7 +5,6 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { Heart, Trash2, Loader2 } from 'lucide-react';
 import { toast } from 'sonner';
 import Image from 'next/image';
-import { MainLayout } from '@/components/layout/MainLayout';
 import { Button } from '@/components/ui/button';
 import { Skeleton } from '@/components/ui/skeleton';
 import { useAuthGuard } from '@/hooks/useAuthGuard';
@@ -48,8 +47,7 @@ export default function WishlistPage() {
   if (!hydrated || !isAuthenticated) return null;
 
   return (
-    <MainLayout>
-      <div className="container py-8 max-w-4xl">
+    <div className="container py-8 max-w-4xl">
         <h1 className="text-2xl font-bold mb-6 flex items-center gap-2">
           <Heart className="h-6 w-6 text-primary" /> My Wishlist
           {items.length > 0 && <span className="text-muted-foreground font-normal text-base">({items.length} items)</span>}
@@ -125,7 +123,6 @@ export default function WishlistPage() {
             })}
           </div>
         )}
-      </div>
-    </MainLayout>
+    </div>
   );
 }

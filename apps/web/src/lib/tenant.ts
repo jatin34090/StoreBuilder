@@ -15,7 +15,7 @@ export interface StorePublicInfo {
  * Custom domain: anything that isn't the root domain or www.
  */
 export function parseHostname(hostname: string): { slug: string | null; isCustomDomain: boolean } {
-  const rootDomain = process.env['NEXT_PUBLIC_ROOT_DOMAIN'] ?? '';
+  const rootDomain = process.env['ROOT_DOMAIN'] ?? process.env['NEXT_PUBLIC_ROOT_DOMAIN'] ?? '';
 
   // Strip port for local dev
   const host = hostname.split(':')[0];

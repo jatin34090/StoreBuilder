@@ -30,6 +30,7 @@ services:
       PORT: 3000
       HOSTNAME: 0.0.0.0
       NEXT_PUBLIC_ROOT_DOMAIN: storebuilder.jatsolutions.in
+      API_URL: http://api:3001/api/v1
     ports:
       - "3000:3000"
     depends_on:

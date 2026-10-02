@@ -1,5 +1,7 @@
 import type { Metadata } from 'next';
 import Link from 'next/link';
+import { headers } from 'next/headers';
+import { Suspense } from 'react';
 import {
   Store, ShoppingBag, Globe, CreditCard, Truck, BarChart3,
   Check, Star, Zap, Shield, Headphones, Palette,
@@ -7,6 +9,13 @@ import {
 import { Button } from '@/components/ui/button';
 import { LandingNavAuth } from '@/components/landing/LandingNavAuth';
 import { LandingHeroCTA } from '@/components/landing/LandingHeroCTA';
+import { MainLayout } from '@/components/layout/MainLayout';
+import { HeroSection } from '@/components/home/HeroSection';
+import { CategoryGrid } from '@/components/home/CategoryGrid';
+import { FeaturedProducts } from '@/components/home/FeaturedProducts';
+import { WhyChooseUs } from '@/components/home/WhyChooseUs';
+import { ThemePreviewBridge } from '@/components/ThemePreviewBridge';
+import { ProductGridSkeleton } from '@/components/product/ProductCardSkeleton';
 
 export const metadata: Metadata = {
   title: 'StoreBuilder — Launch Your Online Store in Minutes',
@@ -67,6 +76,23 @@ function paise(p: number) {
 // ─── Page ─────────────────────────────────────────────────────────────────────
 
 export default async function LandingPage() {
+  // When middleware sets x-store-id, this request is for a tenant storefront
+  const headersList = await headers();
+  const storeId = headersList.get('x-store-id');
+  if (storeId) {
+    return (
+      <MainLayout>
+        <ThemePreviewBridge />
+        <HeroSection />
+        <CategoryGrid />
+        <Suspense fallback={<div className="container py-12"><ProductGridSkeleton count={8} /></div>}>
+          <FeaturedProducts />
+        </Suspense>
+        <WhyChooseUs />
+      </MainLayout>
+    );
+  }
+
   const apiPlans = await fetchPlans();
 
   const plans = apiPlans

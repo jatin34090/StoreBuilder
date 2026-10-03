@@ -80,6 +80,23 @@ export async function middleware(req: NextRequest) {
   if (!store.isActive) requestHeaders.set('x-store-preview', '1');
   if (store.logoUrl) requestHeaders.set('x-store-logo', store.logoUrl);
 
+  // Rewrite tenant root "/" to the storefront page (URL stays unchanged for the visitor).
+  // This avoids loading the platform landing page (page.tsx) on tenant subdomains.
+  const isRootPath = pathname === '/';
+  if (isRootPath) {
+    const rewriteUrl = req.nextUrl.clone();
+    rewriteUrl.pathname = '/storefront-preview';
+    const response = NextResponse.rewrite(rewriteUrl, { request: { headers: requestHeaders } });
+    response.cookies.set('store-id', store.id, {
+      path: '/',
+      sameSite: 'lax',
+      httpOnly: false,
+      secure: process.env.NODE_ENV === 'production',
+      maxAge: 3600,
+    });
+    return response;
+  }
+
   const response = NextResponse.next({ request: { headers: requestHeaders } });
 
   // Set a client-readable cookie so the axios interceptor can pick up the storeId

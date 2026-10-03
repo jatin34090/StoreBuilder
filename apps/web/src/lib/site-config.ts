@@ -1,4 +1,5 @@
 // Pure utility — no 'use client'. Safe to import from server components.
+import { cache } from 'react';
 
 export interface SocialLinks {
   instagram: string;
@@ -117,18 +118,18 @@ function rawToSiteConfig(raw: Record<string, string>): SiteConfig {
   };
 }
 
-const API_URL = process.env['NEXT_PUBLIC_API_URL'] ?? 'http://localhost:3001/api/v1';
-
-function storeHeaders(storeId?: string): HeadersInit {
-  return storeId ? { 'x-store-id': storeId } : {};
+// Prefer the internal Docker URL (API_URL) for server-side fetches; fall back to the
+// baked-in NEXT_PUBLIC_API_URL for local dev where API_URL is not set.
+function getApiUrl() {
+  return process.env['API_URL'] ?? process.env['NEXT_PUBLIC_API_URL'] ?? 'http://localhost:3001/api/v1';
 }
 
-export async function fetchSiteConfig(storeId?: string): Promise<SiteConfig> {
+export const fetchSiteConfig = cache(async (storeId?: string): Promise<SiteConfig> => {
+  const API_URL = getApiUrl();
   try {
-    const res = await fetch(`${API_URL}/settings/site`, {
-      next: { revalidate: 60 },
-      headers: storeHeaders(storeId),
-    });
+    const opts: RequestInit = { next: { revalidate: 60 } };
+    if (storeId) opts.headers = { 'x-store-id': storeId };
+    const res = await fetch(`${API_URL}/settings/site`, opts);
     if (!res.ok) return DEFAULT_SITE_CONFIG;
     const json = (await res.json()) as Record<string, unknown>;
     const raw  = (json['data'] ?? json) as Record<string, string>;
@@ -136,14 +137,14 @@ export async function fetchSiteConfig(storeId?: string): Promise<SiteConfig> {
   } catch {
     return DEFAULT_SITE_CONFIG;
   }
-}
+});
 
-export async function fetchLayoutConfig(storeId?: string): Promise<LayoutConfig> {
+export const fetchLayoutConfig = cache(async (storeId?: string): Promise<LayoutConfig> => {
+  const API_URL = getApiUrl();
   try {
-    const res = await fetch(`${API_URL}/settings/layout`, {
-      next: { revalidate: 60 },
-      headers: storeHeaders(storeId),
-    });
+    const opts: RequestInit = { next: { revalidate: 60 } };
+    if (storeId) opts.headers = { 'x-store-id': storeId };
+    const res = await fetch(`${API_URL}/settings/layout`, opts);
     if (!res.ok) return DEFAULT_LAYOUT_CONFIG;
     const json = (await res.json()) as Record<string, unknown>;
     const raw  = (json['data'] ?? json) as Record<string, string>;
@@ -157,4 +158,4 @@ export async function fetchLayoutConfig(storeId?: string): Promise<LayoutConfig>
   } catch {
     return DEFAULT_LAYOUT_CONFIG;
   }
-}
+});

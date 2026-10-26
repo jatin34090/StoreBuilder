@@ -2,8 +2,12 @@ import axios from 'axios';
 
 const API_URL = process.env['NEXT_PUBLIC_API_URL'] ?? 'http://localhost:3001/api/v1';
 
+// In the browser, use the web origin's /api/v1 (rewritten to the API by next.config.ts)
+// so auth cookies stay first-party on the store's host. Server code uses the absolute URL.
+export const API_BASE = typeof window !== 'undefined' ? '/api/v1' : API_URL;
+
 export const api = axios.create({
-  baseURL: API_URL,
+  baseURL: API_BASE,
   withCredentials: true,
   headers: { 'Content-Type': 'application/json' },
 });
@@ -75,7 +79,7 @@ api.interceptors.response.use(
       original._retry = true;
       isRefreshing = true;
       try {
-        await axios.post(`${API_URL}/auth/refresh`, {}, { withCredentials: true });
+        await axios.post(`${API_BASE}/auth/refresh`, {}, { withCredentials: true });
         processQueue(null);
         return api(original);
       } catch (refreshError) {
@@ -101,6 +105,8 @@ api.interceptors.response.use(
 export const authApi = {
   sendOtp: (phone: string) => api.post('/auth/send-otp', { phone }),
   verifyOtp: (phone: string, otp: string) => api.post('/auth/verify-otp', { phone, otp }),
+  register: (name: string, email: string, password: string) =>
+    api.post('/auth/customer/register', { name, email, password }),
   login: (identifier: string, password: string) => api.post('/auth/login', { identifier, password }),
   logout: () => api.post('/auth/logout'),
   refresh: () => api.post('/auth/refresh'),

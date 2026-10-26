@@ -71,6 +71,17 @@ export class AuthController {
   }
 
   @Public()
+  @Post('customer/register')
+  @RateCategory('auth')
+  @HttpCode(HttpStatus.CREATED)
+  @ApiOperation({ summary: 'Register a new customer account (email + password)' })
+  async registerCustomer(@Body() dto: RegisterDto, @Res({ passthrough: true }) res: Response) {
+    const result = await this.authService.registerCustomer(dto);
+    setAuthCookies(res, result.accessToken, result.refreshToken);
+    return { user: result.user };
+  }
+
+  @Public()
   @Post('send-otp')
   @RateCategory('auth')
   @HttpCode(HttpStatus.OK)

@@ -3,7 +3,7 @@
 import { useEffect, useState } from 'react';
 import { UserCheck, UserPlus, MoreVertical, RefreshCw, UserMinus, ChevronDown } from 'lucide-react';
 import { adminStoreApi, type StaffMember } from '../../../../../lib/admin-api';
-import { useAdminAuthStore } from '../../../../../store/adminAuthStore';
+import { useAdminAuthStore, type Permission } from '../../../../../store/adminAuthStore';
 
 const ROLE_LABELS: Record<string, string> = {
   OWNER: 'Owner',
@@ -22,8 +22,11 @@ const INVITABLE_ROLES = ['ADMIN', 'MANAGER', 'STAFF'] as const;
 type InvitableRole = typeof INVITABLE_ROLES[number];
 
 export default function StaffPage() {
-  const hasPermission = useAdminAuthStore((s) => s.hasPermission);
-  const adminRole     = useAdminAuthStore((s) => s.adminRole);
+  // Subscribe to the permission list itself: `hasPermission` is a stable function,
+  // so selecting it never re-renders this page when permissions load.
+  const adminPermissions = useAdminAuthStore((s) => s.adminPermissions);
+  const adminRole        = useAdminAuthStore((s) => s.adminRole);
+  const hasPermission    = (permission: Permission) => adminPermissions.includes(permission);
 
   const [members, setMembers]         = useState<StaffMember[]>([]);
   const [loading, setLoading]         = useState(true);

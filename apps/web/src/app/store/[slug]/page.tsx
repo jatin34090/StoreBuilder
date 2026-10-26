@@ -9,6 +9,7 @@ import { FeaturedProducts } from '@/components/home/FeaturedProducts';
 import { WhyChooseUs } from '@/components/home/WhyChooseUs';
 import { BannersSection } from '@/components/home/BannersSection';
 import { ProductGridSkeleton } from '@/components/product/ProductCardSkeleton';
+import { ThemePreviewBridge } from '@/components/ThemePreviewBridge';
 import { fetchSiteConfig } from '@/lib/site-config';
 
 // Dev storefront route: /store/:slug
@@ -61,6 +62,7 @@ async function resolveStore(slug: string) {
 
 interface Props {
   params: Promise<{ slug: string }>;
+  searchParams: Promise<Record<string, string | string[] | undefined>>;
 }
 
 export async function generateMetadata({ params }: Props): Promise<Metadata> {
@@ -74,8 +76,11 @@ export async function generateMetadata({ params }: Props): Promise<Metadata> {
   };
 }
 
-export default async function StoreStorefrontPage({ params }: Props) {
+export default async function StoreStorefrontPage({ params, searchParams }: Props) {
   const { slug } = await params;
+  // The admin theme editor loads this page in an iframe with ?preview=1 and
+  // drives it through postMessage; customers never get the bridge.
+  const { preview } = await searchParams;
 
   // Middleware injects x-store-id for /store/:slug via path-based routing.
   // If x-store-id is not present, resolve the store manually.
@@ -105,6 +110,7 @@ export default async function StoreStorefrontPage({ params }: Props) {
 
   return (
     <MainLayout>
+      {preview === '1' && <ThemePreviewBridge />}
       {enabled.map((section) => (
         <div key={section.type}>
           {SECTION_MAP[section.type] ?? null}

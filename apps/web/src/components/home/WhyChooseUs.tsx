@@ -3,6 +3,7 @@ import {
   Package, Heart, Zap, Globe, Clock, CheckCircle,
 } from 'lucide-react';
 import { fetchSiteConfig, DEFAULT_FEATURES } from '@/lib/site-config';
+import { getTenant } from '@/lib/get-tenant';
 import type { FeatureItem } from '@/lib/site-config';
 
 const ICON_MAP: Record<string, React.ComponentType<{ className?: string; style?: React.CSSProperties }>> = {
@@ -16,7 +17,8 @@ function FeatureIcon({ name, ...props }: { name: string } & React.SVGProps<SVGSV
 }
 
 export async function WhyChooseUs() {
-  const config = await fetchSiteConfig();
+  const tenant = await getTenant();
+  const config = await fetchSiteConfig(tenant?.id);
   const items: FeatureItem[] = (config.features?.length ?? 0) > 0 ? config.features : DEFAULT_FEATURES;
 
   return (

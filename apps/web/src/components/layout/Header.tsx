@@ -61,6 +61,10 @@ export function Header({ brand }: HeaderProps) {
   const { isAuthenticated, clearUser } = useAuthStore();
   const loginHref = `/auth/login?redirect=${encodeURIComponent(pathname)}`;
   const totalItems = useCartStore((s) => s.totalItems());
+  // The cart is persisted in localStorage, so it's empty on the server and filled in the
+  // browser. Show the badge only after mount so the first client render matches the server.
+  const [cartMounted, setCartMounted] = useState(false);
+  useEffect(() => setCartMounted(true), []);
   const [mobileOpen, setMobileOpen] = useState(false);
   const { isDark, toggle: toggleDark } = useUserDarkMode();
 
@@ -187,7 +191,7 @@ export function Header({ brand }: HeaderProps) {
             <Button variant="ghost" size="icon" className="relative" asChild>
               <Link href="/cart" aria-label="Cart">
                 <ShoppingBag className="h-[18px] w-[18px]" />
-                {totalItems > 0 && (
+                {cartMounted && totalItems > 0 && (
                   <span
                     data-tv="primary primary-foreground"
                     className="absolute -top-0.5 -right-0.5 h-4 w-4 rounded-full text-[10px] flex items-center justify-center font-semibold"

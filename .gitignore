@@ -41,9 +41,6 @@ coverage
 .nyc_output
 
 # Expo
-apps/mobile/.expo
-apps/mobile/ios
-apps/mobile/android
 
 # Misc
 *.tgz

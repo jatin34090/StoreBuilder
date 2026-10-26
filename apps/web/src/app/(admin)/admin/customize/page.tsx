@@ -14,6 +14,7 @@ import {
   type CustomColors, type CustomPreset,
 } from '@/store/themeStore';
 import { adminApi } from '@/lib/admin-api';
+import { useAdminAuthStore } from '@/store/adminAuthStore';
 import { api } from '@/lib/api';
 import { cn } from '@/lib/utils';
 import { buildCssVarObject } from '@/lib/theme';
@@ -109,6 +110,10 @@ function WebsitePreview({
   const [device, setDevice] = useState<DeviceId>('mobile');
   const [panelW, setPanelW] = useState(500);
   const [ready,  setReady]  = useState(false);
+  // Preview the store's own URL so the middleware sets x-store-id and the sections
+  // show this store's data. Falls back to the platform preview route until the slug loads.
+  const storeSlug = useAdminAuthStore((s) => s.adminStore?.slug);
+  const previewSrc = storeSlug ? `/store/${storeSlug}?preview=1` : '/storefront-preview';
 
   const dev    = DEVICES.find(d => d.id === device)!;
   const scale  = Math.min(1, (panelW - 2) / dev.width);
@@ -190,7 +195,7 @@ function WebsitePreview({
             <iframe
               key={`${device}-${previewVersion}`}
               ref={iframeRef}
-              src="/storefront-preview"
+              src={previewSrc}
               width={dev.width}
               height={wrapH}
               className="block border-none bg-white"

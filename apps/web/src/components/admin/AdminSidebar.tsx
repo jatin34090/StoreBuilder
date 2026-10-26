@@ -91,7 +91,10 @@ function StatusBadge({ status }: { status: string }) {
 export function AdminSidebar({ collapsed, onToggle }: AdminSidebarProps) {
   const pathname = usePathname();
   const adminStore = useAdminAuthStore((s) => s.adminStore);
-  const hasPermission = useAdminAuthStore((s) => s.hasPermission);
+  // Subscribe to the permission list itself: `hasPermission` is a stable function,
+  // so selecting it never re-renders this component when permissions load.
+  const adminPermissions = useAdminAuthStore((s) => s.adminPermissions);
+  const hasPermission = (permission: Permission) => adminPermissions.includes(permission);
   const [expandedGroups, setExpandedGroups] = useState<Record<string, boolean>>({
     Catalog: true, Sales: true, Website: true, Operations: false, Settings: false,
   });
@@ -202,7 +205,7 @@ export function AdminSidebar({ collapsed, onToggle }: AdminSidebarProps) {
         ))}
 
         {/* Analytics — permission gated */}
-        {hasPermission('analytics.read') && (
+        {adminPermissions.includes('analytics.read') && (
           <div className="mt-2">
             {!collapsed && (
               <div className="px-3 py-1 mb-0.5 text-xs font-semibold text-slate-500 uppercase tracking-wider">

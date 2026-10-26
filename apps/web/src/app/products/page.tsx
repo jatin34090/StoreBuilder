@@ -4,6 +4,7 @@ import { MainLayout } from '@/components/layout/MainLayout';
 import { ProductsClient } from './ProductsClient';
 import { ProductGridSkeleton } from '@/components/product/ProductCardSkeleton';
 import { fetchLayoutConfig } from '@/lib/site-config';
+import { getTenant } from '@/lib/get-tenant';
 
 export const metadata: Metadata = {
   title: 'Shop Jewellery',
@@ -15,7 +16,8 @@ export default async function ProductsPage({
 }: {
   searchParams: Promise<Record<string, string | string[] | undefined>>;
 }) {
-  const layout = await fetchLayoutConfig();
+  const tenant = await getTenant();
+  const layout = await fetchLayoutConfig(tenant?.id);
   const columns = (layout.productColumns ?? '4') as '2' | '3' | '4';
 
   return (

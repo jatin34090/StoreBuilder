@@ -258,14 +258,21 @@ function LoginPageContent() {
                 </Button>
                 <p className="text-center text-xs text-muted-foreground pt-1">
                   New customer?{' '}
+                  <Link
+                    href={redirectTo && redirectTo !== '/' ? `/auth/register?redirect=${encodeURIComponent(redirectTo)}` : '/auth/register'}
+                    className="text-primary font-medium hover:underline"
+                  >
+                    Create an account
+                  </Link>
+                  {' '}or{' '}
                   <button
                     type="button"
                     onClick={() => setActiveTab('otp')}
                     className="text-primary font-medium hover:underline"
                   >
-                    Sign up with OTP instead
+                    sign up with OTP
                   </button>
-                  {' '}— no password needed.
+                  .
                 </p>
               </form>
             </TabsContent>
@@ -289,7 +296,7 @@ function LoginPageContent() {
               // right store page even when no ?redirect= param was provided.
               const returnTo = (redirectTo && redirectTo !== '/') ? redirectTo : window.location.pathname;
               try { sessionStorage.setItem('oauth_return_to', returnTo); } catch { /* private mode */ }
-              window.location.href = `${process.env['NEXT_PUBLIC_API_URL'] ?? 'http://localhost:3001/api/v1'}/auth/google`;
+              window.location.href = '/api/v1/auth/google';
             }}
           >
             <svg className="h-4 w-4 mr-2" viewBox="0 0 24 24">
@@ -303,7 +310,14 @@ function LoginPageContent() {
         </div>
 
         <p className="text-center text-sm text-muted-foreground mt-6">
-          New here? Enter your phone number above — your account is created automatically on first login.
+          New here?{' '}
+          <Link
+            href={redirectTo && redirectTo !== '/' ? `/auth/register?redirect=${encodeURIComponent(redirectTo)}` : '/auth/register'}
+            className="text-primary font-medium hover:underline"
+          >
+            Create an account
+          </Link>
+          {' '}with email & password, or just enter your phone above to sign in with OTP.
         </p>
       </div>
     </div>

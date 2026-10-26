@@ -1,9 +1,11 @@
 import { Header } from '@/components/layout/Header';
 import { Footer } from '@/components/layout/Footer';
 import { fetchSiteConfig, fetchLayoutConfig } from '@/lib/site-config';
+import { getTenant } from '@/lib/get-tenant';
 
 export default async function WishlistLayout({ children }: { children: React.ReactNode }) {
-  const [config, layout] = await Promise.all([fetchSiteConfig(), fetchLayoutConfig()]);
+  const tenant = await getTenant();
+  const [config, layout] = await Promise.all([fetchSiteConfig(tenant?.id), fetchLayoutConfig(tenant?.id)]);
 
   const brand = {
     brandName:        config.brandName,

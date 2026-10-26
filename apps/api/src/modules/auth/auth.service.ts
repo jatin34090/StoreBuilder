@@ -65,6 +65,39 @@ export class AuthService {
     return { accessToken, refreshToken, user };
   }
 
+  // ─── Customer Email/Password Registration ────────────────────────────────
+
+  async registerCustomer(
+    dto: RegisterDto,
+  ): Promise<{ accessToken: string; refreshToken: string; user: Record<string, unknown> }> {
+    const email = dto.email.toLowerCase().trim();
+    const existing = await this.prisma.user.findUnique({
+      where: { email },
+      select: { id: true },
+    });
+    if (existing) {
+      throw new ConflictException('An account with this email already exists');
+    }
+
+    const passwordHash = await bcrypt.hash(dto.password, BCRYPT_ROUNDS);
+    const user = await this.prisma.user.create({
+      data: {
+        name: dto.name.trim(),
+        email,
+        passwordHash,
+        role: 'CUSTOMER', // Shoppers register as platform-level CUSTOMER
+        isVerified: false,
+      },
+      select: { id: true, name: true, email: true, role: true, avatar: true },
+    });
+
+    const { accessToken, refreshToken } = await this.generateTokens(user.id, user.role);
+    await this.storeRefreshToken(user.id, refreshToken);
+
+    this.logger.log(`New customer registered: ${user.email}`);
+    return { accessToken, refreshToken, user };
+  }
+
   // ─── OTP Auth ──────────────────────────────────────────────────────────────
 
   async sendOtp(dto: SendOtpDto): Promise<{ message: string }> {

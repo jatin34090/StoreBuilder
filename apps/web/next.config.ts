@@ -21,6 +21,13 @@ const nextConfig: NextConfig = {
     ],
     formats: ['image/avif', 'image/webp'],
   },
+  // Browser API calls go to the web origin (/api/v1/*) and are forwarded to the API.
+  // The store subdomain and the API then share one origin, so the httpOnly auth
+  // cookies set by the API are first-party on the storefront host.
+  async rewrites() {
+    const apiOrigin = new URL(process.env['API_URL'] ?? process.env['NEXT_PUBLIC_API_URL'] ?? 'http://localhost:3001/api/v1').origin;
+    return [{ source: '/api/v1/:path*', destination: `${apiOrigin}/api/v1/:path*` }];
+  },
   async headers() {
     return [
       {

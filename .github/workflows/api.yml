@@ -8,8 +8,6 @@ on:
       - 'prisma/**'
       - 'packages/**'
       - '.github/workflows/api.yml'
-  pull_request:
-    branches: [main]
   workflow_dispatch:
 
 env:

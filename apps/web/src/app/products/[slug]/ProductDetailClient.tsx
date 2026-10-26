@@ -30,6 +30,8 @@ export interface ProductDetail {
   name: string;
   slug: string;
   description: string;
+  metaTitle?: string | null;
+  metaDesc?: string | null;
   basePrice: number;
   discountPct: number;
   attributes: Record<string, string>;

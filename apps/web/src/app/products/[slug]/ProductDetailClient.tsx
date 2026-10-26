@@ -25,7 +25,7 @@ interface Variant {
   weight: number;
 }
 
-interface ProductDetail {
+export interface ProductDetail {
   id: string;
   name: string;
   slug: string;

@@ -71,6 +71,9 @@ jobs:
               ghcr.io/jatin34090/storebuilder-api:${{ github.sha }} \
               -c "node /app/node_modules/.pnpm/prisma@5.22.0/node_modules/prisma/build/index.js migrate deploy --schema=/app/prisma/schema.prisma"
 
+      - name: Checkout
+        uses: actions/checkout@v4
+
       - name: Copy compose file to VPS
         uses: appleboy/scp-action@v0.1.7
         with:

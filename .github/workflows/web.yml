@@ -59,6 +59,15 @@ jobs:
     if: github.ref == 'refs/heads/main' && github.event_name == 'push'
 
     steps:
+      - name: Copy compose file to VPS
+        uses: appleboy/scp-action@v0.1.7
+        with:
+          host: ${{ secrets.VPS_HOST }}
+          username: ${{ secrets.VPS_USER }}
+          key: ${{ secrets.VPS_SSH_KEY }}
+          source: docker-compose.prod.yml
+          target: jewellery
+
       - name: Deploy Web
         uses: appleboy/ssh-action@v1.0.3
         with:
@@ -68,7 +77,6 @@ jobs:
           script: |
             echo ${{ secrets.GITHUB_TOKEN }} | docker login ghcr.io -u jatin34090 --password-stdin
             cd ~/jewellery
-            git pull origin main
             docker compose -f docker-compose.prod.yml pull web
             docker compose -f docker-compose.prod.yml up -d --no-deps web
             docker image prune -f

@@ -71,6 +71,15 @@ jobs:
               ghcr.io/jatin34090/storebuilder-api:${{ github.sha }} \
               -c "node /app/node_modules/.pnpm/prisma@5.22.0/node_modules/prisma/build/index.js migrate deploy --schema=/app/prisma/schema.prisma"
 
+      - name: Copy compose file to VPS
+        uses: appleboy/scp-action@v0.1.7
+        with:
+          host: ${{ secrets.VPS_HOST }}
+          username: ${{ secrets.VPS_USER }}
+          key: ${{ secrets.VPS_SSH_KEY }}
+          source: docker-compose.prod.yml
+          target: jewellery
+
       - name: Deploy API
         uses: appleboy/ssh-action@v1.0.3
         with:
@@ -88,7 +97,6 @@ jobs:
             printf 'DATABASE_URL=%s\nDIRECT_URL=%s\n' "$DATABASE_URL_PRODUCTION" "$DIRECT_URL_PRODUCTION" >> "$tmp"
             mv "$tmp" .env.production
             chmod 600 .env.production
-            git pull origin main
             docker compose -f docker-compose.prod.yml pull api
             docker compose -f docker-compose.prod.yml up -d --no-deps --force-recreate api
             docker image prune -f
